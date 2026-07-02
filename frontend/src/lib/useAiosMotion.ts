@@ -26,8 +26,8 @@ export function useModuleTransition(scope: RefObject<HTMLElement>, dependency: u
       if (reduced || !scope.current) return;
       gsap.fromTo(
         scope.current,
-        { autoAlpha: 0, y: 10, filter: "blur(6px)" },
-        { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.28, ease: "power2.out" }
+        { autoAlpha: 0, y: 8 },
+        { autoAlpha: 1, y: 0, duration: 0.24, ease: "power2.out" }
       );
     },
     { dependencies: [dependency, reduced], scope }
@@ -42,8 +42,8 @@ export function useCardEntrance(scope: RefObject<HTMLElement>, dependency: unkno
       if (reduced || !scope.current) return;
       gsap.fromTo(
         selector,
-        { autoAlpha: 0, y: 12, scale: 0.98 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, ease: "power2.out", stagger: 0.035 }
+        { autoAlpha: 0, y: 8 },
+        { autoAlpha: 1, y: 0, duration: 0.24, ease: "power2.out", stagger: 0.025 }
       );
     },
     { dependencies: [dependency, reduced, selector], scope }
@@ -58,8 +58,8 @@ export function useDetailSwitch(scope: RefObject<HTMLElement>, dependency: unkno
       if (reduced || !scope.current) return;
       gsap.fromTo(
         scope.current,
-        { autoAlpha: 0, x: 12, clipPath: "inset(0 0 0 5%)" },
-        { autoAlpha: 1, x: 0, clipPath: "inset(0 0 0 0%)", duration: 0.24, ease: "power2.out" }
+        { autoAlpha: 0, x: 10 },
+        { autoAlpha: 1, x: 0, duration: 0.22, ease: "power2.out" }
       );
     },
     { dependencies: [dependency, reduced], scope }

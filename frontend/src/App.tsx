@@ -1,17 +1,18 @@
-import { Box, Chip, InputAdornment, Stack, TextField, Typography } from "@mui/material";
-import SearchRounded from "@mui/icons-material/SearchRounded";
+import { Box, Typography } from "@mui/material";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppShell } from "./components/AppShell";
-import { BaselineSummary } from "./components/BaselineSummary";
-import { McpInventoryPanel } from "./components/McpInventoryPanel";
-import { ModuleOverview } from "./components/ModuleOverview";
-import { ResourceDetail } from "./components/ResourceDetail";
-import { ResourceList } from "./components/ResourceList";
-import { ResourceTypeNav } from "./components/ResourceTypeNav";
-import { SafetyBoundaryPanel } from "./components/SafetyBoundaryPanel";
-import { SkillPressurePanel } from "./components/SkillPressurePanel";
+import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
+import { DashboardModule } from "./components/modules/DashboardModule";
+import { LegacyModule } from "./components/modules/LegacyModule";
+import { McpModule } from "./components/modules/McpModule";
+import { PoliciesModule } from "./components/modules/PoliciesModule";
+import { ProjectPacksModule } from "./components/modules/ProjectPacksModule";
+import { ReportsModule } from "./components/modules/ReportsModule";
+import { ScriptsModule } from "./components/modules/ScriptsModule";
+import { SkillsModule } from "./components/modules/SkillsModule";
+import { ValidatorsModule } from "./components/modules/ValidatorsModule";
+import type { AiosModuleProps } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
-import { filterResources, type ResourceView, VIEW_LABELS } from "./lib/filtering";
+import { filterResources, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
 import { useModuleTransition } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
@@ -22,8 +23,9 @@ export default function App() {
   const [activeView, setActiveView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const mainRef = useRef<HTMLDivElement>(null);
-  useModuleTransition(mainRef, activeView);
+  const [inspectorOpen, setInspectorOpen] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
+  const moduleRef = useRef<HTMLDivElement>(null);
+  useModuleTransition(moduleRef, `${activeView}:${query}`);
 
   useEffect(() => {
     loadInventory()
@@ -36,18 +38,25 @@ export default function App() {
 
   const filteredResources = useMemo(() => (inventory ? filterResources(inventory.resources, activeView, query) : []), [inventory, activeView, query]);
   const selectedResource = useMemo(
-    () => filteredResources.find((resource) => resource.id === selectedId) ?? filteredResources[0] ?? null,
-    [filteredResources, selectedId]
+    () => inventory?.resources.find((resource) => resource.id === selectedId) ?? filteredResources[0] ?? null,
+    [filteredResources, inventory?.resources, selectedId]
   );
 
   useEffect(() => {
-    if (selectedResource && selectedResource.id !== selectedId) {
-      setSelectedId(selectedResource.id);
+    if (!filteredResources.length) return;
+    if (!selectedResource || !filteredResources.some((resource) => resource.id === selectedResource.id)) {
+      setSelectedId(filteredResources[0].id);
     }
-  }, [selectedId, selectedResource]);
+  }, [filteredResources, selectedResource]);
+
+  function handleViewChange(view: ResourceView) {
+    setActiveView(view);
+    setSelectedId(null);
+  }
 
   function selectResource(resource: AiosResource) {
     setSelectedId(resource.id);
+    setInspectorOpen(true);
   }
 
   if (error) {
@@ -72,59 +81,56 @@ export default function App() {
     );
   }
 
-  const commandBar = (
-    <TextField
-      aria-label={zhCN.app.commandLabel}
-      fullWidth
-      placeholder={zhCN.app.commandPlaceholder}
-      type="search"
-      value={query}
-      onChange={(event) => setQuery(event.target.value)}
-      slotProps={{
-        input: {
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchRounded fontSize="small" />
-            </InputAdornment>
-          )
-        }
-      }}
-    />
-  );
+  const moduleProps: AiosModuleProps = {
+    allResources: inventory.resources,
+    baseline: inventory.baseline,
+    resources: filteredResources,
+    selectedId: selectedResource?.id ?? null,
+    onSelect: selectResource,
+    onViewChange: handleViewChange
+  };
 
-  const sidebar = <ResourceTypeNav activeView={activeView} onChange={setActiveView} resources={inventory.resources} />;
-
-  const main = (
-    <Box className="main-stack" ref={mainRef}>
-      <ModuleOverview resources={inventory.resources} activeView={activeView} onChange={setActiveView} />
-      <BaselineSummary baseline={inventory.baseline} />
-      <Box className="module-toolbar" component="section" aria-label="当前模块状态">
-        <Stack spacing={0.35} sx={{ minWidth: 0 }}>
-          <Typography component="h2" variant="h3">
-            {VIEW_LABELS[activeView]}
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            {zhCN.moduleSummaries[activeView]}
-          </Typography>
-        </Stack>
-        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, justifyContent: "flex-end" }}>
-          <Chip color="primary" label={`${filteredResources.length} ${zhCN.app.shown}`} variant="filled" />
-          <Chip label={`${inventory.resources.length} ${zhCN.app.total}`} variant="outlined" />
-          <Chip className="status-chip status-ok" label={zhCN.app.safetyState} />
-        </Stack>
+  return (
+    <AiosConsoleShell
+      activeView={activeView}
+      inspectorOpen={inspectorOpen}
+      inventory={inventory}
+      query={query}
+      selectedResource={selectedResource}
+      shownCount={filteredResources.length}
+      onCloseInspector={() => setInspectorOpen(false)}
+      onQueryChange={setQuery}
+      onToggleInspector={() => setInspectorOpen((open) => !open)}
+      onViewChange={handleViewChange}
+    >
+      <Box ref={moduleRef} className="module-transition-scope">
+        {renderModule(activeView, moduleProps)}
       </Box>
-      <ResourceList activeView={activeView} resources={filteredResources} selectedId={selectedResource?.id ?? null} onSelect={selectResource} />
-    </Box>
+    </AiosConsoleShell>
   );
+}
 
-  const detail = (
-    <Box className="inspector-stack">
-      <ResourceDetail resource={selectedResource} />
-      <SkillPressurePanel resources={inventory.resources} />
-      <McpInventoryPanel servers={inventory.mcpServers} />
-      <SafetyBoundaryPanel baseline={inventory.baseline} />
-    </Box>
-  );
-
-  return <AppShell commandBar={commandBar} detail={detail} inventory={inventory} main={main} sidebar={sidebar} />;
+function renderModule(activeView: ResourceView, moduleProps: AiosModuleProps) {
+  switch (activeView) {
+    case "dashboard":
+      return <DashboardModule {...moduleProps} />;
+    case "skills":
+      return <SkillsModule {...moduleProps} />;
+    case "mcp":
+      return <McpModule {...moduleProps} />;
+    case "scripts":
+      return <ScriptsModule {...moduleProps} />;
+    case "reports":
+      return <ReportsModule {...moduleProps} />;
+    case "project-packs":
+      return <ProjectPacksModule {...moduleProps} />;
+    case "policies":
+      return <PoliciesModule {...moduleProps} />;
+    case "validators":
+      return <ValidatorsModule {...moduleProps} />;
+    case "legacy":
+      return <LegacyModule {...moduleProps} />;
+    default:
+      return <DashboardModule {...moduleProps} />;
+  }
 }

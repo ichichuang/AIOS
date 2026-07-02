@@ -98,7 +98,14 @@ export const materialTheme = createTheme({
           "--aios-info": designTokens.color.info,
           "--aios-info-soft": designTokens.color.infoSoft,
           "--aios-shadow": designTokens.shadow.surface,
-          "--aios-shadow-lifted": designTokens.shadow.lifted
+          "--aios-shadow-lifted": designTokens.shadow.lifted,
+          "--aios-rail-width": `${designTokens.shell.railWidth}px`,
+          "--aios-rail-compact-width": `${designTokens.shell.railCompactWidth}px`,
+          "--aios-inspector-width": `${designTokens.shell.inspectorWidth}px`,
+          "--aios-shell-gap": `${designTokens.shell.gap}px`,
+          "--aios-shell-padding": `${designTokens.shell.viewportPadding}px`,
+          "--aios-module-header": `${designTokens.shell.moduleHeaderHeight}px`,
+          "--aios-summary-band": `${designTokens.shell.summaryBandHeight}px`
         },
         "*": {
           boxSizing: "border-box"

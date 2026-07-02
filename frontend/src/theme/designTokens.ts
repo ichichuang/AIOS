@@ -22,10 +22,27 @@ export const designTokens = {
     infoSoft: "#e0f2f1"
   },
   radius: {
-    sm: 12,
-    md: 18,
-    lg: 24,
+    xs: 8,
+    sm: 10,
+    md: 16,
+    lg: 22,
     xl: 28
+  },
+  shell: {
+    railWidth: 92,
+    railCompactWidth: 82,
+    inspectorWidth: 376,
+    inspectorMaxWidth: 392,
+    gap: 14,
+    viewportPadding: 14,
+    moduleHeaderHeight: 64,
+    summaryBandHeight: 96
+  },
+  density: {
+    panelPadding: 14,
+    cardPadding: 14,
+    compactGap: 8,
+    comfortableGap: 14
   },
   shadow: {
     surface: "0 1px 2px rgba(60, 64, 67, 0.14), 0 2px 6px rgba(60, 64, 67, 0.08)",

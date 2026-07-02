@@ -199,7 +199,7 @@ export const zhCN = {
   },
   validators: {
     title: "观察型验证器",
-    validateSkills: "validate-skills.mjs：仅当失败原因是已删除 Codex 自动化 TOML 扫描目标缺失时，按已知 WARN 处理。",
+    validateSkills: "validate-skills.mjs：仅当原因是已删除 Codex 自动化 TOML 扫描目标缺失时，按已知 WARN 处理。",
     doctor: "ai-local-doctor.mjs：本地 AIOS 体检，仅观察并报告状态。"
   },
   warnings: {
