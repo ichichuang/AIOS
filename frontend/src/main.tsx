@@ -1,15 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { CssBaseline, ThemeProvider } from "@mui/material";
 import App from "./App";
 import "./styles.css";
-import { materialTheme } from "./theme/materialTheme";
+import { AiosThemeProvider } from "./theme/AiosThemeProvider";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider theme={materialTheme}>
-      <CssBaseline />
+    <AiosThemeProvider>
       <App />
-    </ThemeProvider>
+    </AiosThemeProvider>
   </React.StrictMode>
 );

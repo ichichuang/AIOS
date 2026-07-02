@@ -1,8 +1,14 @@
-import { Box, ButtonBase, Tooltip, Typography } from "@mui/material";
+import { Box, ButtonBase, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import BrightnessAutoRounded from "@mui/icons-material/BrightnessAutoRounded";
+import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
+import LightModeRounded from "@mui/icons-material/LightModeRounded";
 import type { SvgIconComponent } from "@mui/icons-material";
-import { memo, useRef } from "react";
+import { memo, useRef, useState, type MouseEvent } from "react";
+import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import { useNavIndicatorMotion } from "../../lib/useAiosMotion";
+import type { AiosThemePreference } from "../../theme/designTokens";
+import { useAiosThemeMode } from "../../theme/AiosThemeProvider";
 import { consoleViews, moduleIcons } from "./moduleConfig";
 
 interface AiosNavigationRailProps {
@@ -27,6 +33,7 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
           return <AiosNavigationItem key={view} active={view === activeView} count={viewCounts[view]} icon={moduleIcons[view]} view={view} onChange={onChange} />;
         })}
       </Box>
+      <ThemeActionDock />
     </Box>
   );
 }
@@ -61,3 +68,62 @@ const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, ico
     </Tooltip>
   );
 });
+
+function ThemeActionDock() {
+  const { mode, modeLabel, setMode } = useAiosThemeMode();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const ModeIcon = themeModeOptions.find((option) => option.mode === mode)?.icon ?? BrightnessAutoRounded;
+  const open = Boolean(anchorEl);
+  const label = `${zhCN.theme.toggle}，当前${modeLabel}`;
+
+  function openMenu(event: MouseEvent<HTMLButtonElement>) {
+    setAnchorEl(event.currentTarget);
+  }
+
+  function closeMenu() {
+    setAnchorEl(null);
+  }
+
+  function chooseMode(nextMode: AiosThemePreference) {
+    setMode(nextMode);
+    closeMenu();
+  }
+
+  return (
+    <Box className="rail-action-dock" aria-label="外观操作">
+      <Tooltip title={`${zhCN.theme.toggle} · ${modeLabel}`} placement="right">
+        <IconButton
+          className={`theme-mode-button mode-${mode}`}
+          aria-controls={open ? "aios-theme-mode-menu" : undefined}
+          aria-expanded={open ? "true" : undefined}
+          aria-haspopup="menu"
+          aria-label={label}
+          size="small"
+          type="button"
+          onClick={openMenu}
+        >
+          <ModeIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu id="aios-theme-mode-menu" anchorEl={anchorEl} className="theme-mode-menu" open={open} onClose={closeMenu}>
+        {themeModeOptions.map((option) => {
+          const Icon = option.icon;
+          return (
+            <MenuItem key={option.mode} selected={mode === option.mode} onClick={() => chooseMode(option.mode)}>
+              <ListItemIcon>
+                <Icon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary={option.label} />
+            </MenuItem>
+          );
+        })}
+      </Menu>
+    </Box>
+  );
+}
+
+const themeModeOptions: Array<{ mode: AiosThemePreference; label: string; icon: SvgIconComponent }> = [
+  { mode: "light", label: zhCN.theme.light, icon: LightModeRounded },
+  { mode: "dark", label: zhCN.theme.dark, icon: DarkModeRounded },
+  { mode: "system", label: zhCN.theme.system, icon: BrightnessAutoRounded }
+];

@@ -4,6 +4,7 @@ import type { RowComponentProps } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
+import { getSkillSourceBadges } from "../../lib/skillDiscoveryMetadata";
 import type { AiosResource } from "../../types/inventory";
 
 export interface CompactSkillRowProps {
@@ -19,6 +20,8 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, resources, sel
   if (!resource) return null;
   const display = getResourceDisplay(resource);
   const skillCapability = showCapability ? skillCapabilityById.get(resource.id) : undefined;
+  const sourceBadges = getSkillSourceBadges(resource);
+  const visibleSourceBadges = sourceBadges.slice(0, 3);
   const selected = resource.id === selectedId;
   const handleSelect = useCallback(() => onSelect(resource), [onSelect, resource]);
   const handleKeyDown = useCallback(
@@ -63,6 +66,10 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, resources, sel
         </Box>
 
         <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end" }}>
+          {visibleSourceBadges.map((badge) => (
+            <Chip className={`source-chip source-${badge.key}`} key={badge.key} label={badge.label} variant="outlined" />
+          ))}
+          {sourceBadges.length > visibleSourceBadges.length && <Chip className="source-chip" label={`+${sourceBadges.length - visibleSourceBadges.length}`} variant="outlined" />}
           {skillCapability && <Chip className="capability-chip" label={skillCapability.primaryCategory.title} variant="outlined" />}
           <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
           <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />

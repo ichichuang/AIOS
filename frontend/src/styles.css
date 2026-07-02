@@ -21,7 +21,7 @@
 
 .aios-navigation-rail {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 8px;
   overflow: hidden;
   border-radius: 22px;
@@ -63,7 +63,7 @@
   top: 0;
   left: 0;
   z-index: 0;
-  border: 1px solid rgba(26, 115, 232, 0.18);
+  border: 1px solid var(--aios-selected-outline);
   border-radius: 15px;
   background: var(--aios-selected-surface);
   opacity: 0;
@@ -92,7 +92,7 @@
 }
 
 .rail-item:hover {
-  background: rgba(232, 240, 254, 0.55);
+  background: var(--aios-primary-soft);
   color: var(--aios-primary);
 }
 
@@ -119,6 +119,37 @@
   font-size: 10px;
   font-weight: 700;
   line-height: 1.05;
+}
+
+.rail-action-dock {
+  display: grid;
+  place-items: center;
+  border-top: 1px solid var(--aios-outline);
+  padding-top: 8px;
+}
+
+.theme-mode-button.MuiIconButton-root {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--aios-outline);
+  background: var(--aios-surface-muted);
+  color: var(--aios-muted);
+  transition:
+    background-color var(--aios-motion-fast) ease,
+    border-color var(--aios-motion-fast) ease,
+    color var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
+}
+
+.theme-mode-button.MuiIconButton-root:hover,
+.theme-mode-button.MuiIconButton-root:focus-visible {
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-primary-soft);
+  color: var(--aios-primary);
+}
+
+.theme-mode-button.MuiIconButton-root:active {
+  transform: translateY(1px);
 }
 
 .aios-console-main {
@@ -268,6 +299,54 @@
 }
 
 .module-scroll,
+.dashboard-scroll,
+.inspector-scroll,
+.rail-items,
+.compact-skill-window {
+  scrollbar-color: var(--aios-scrollbar-thumb) var(--aios-scrollbar-track);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.module-scroll::-webkit-scrollbar,
+.dashboard-scroll::-webkit-scrollbar,
+.inspector-scroll::-webkit-scrollbar,
+.rail-items::-webkit-scrollbar,
+.compact-skill-window::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.module-scroll::-webkit-scrollbar-track,
+.dashboard-scroll::-webkit-scrollbar-track,
+.inspector-scroll::-webkit-scrollbar-track,
+.rail-items::-webkit-scrollbar-track,
+.compact-skill-window::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: var(--aios-scrollbar-track);
+}
+
+.module-scroll::-webkit-scrollbar-thumb,
+.dashboard-scroll::-webkit-scrollbar-thumb,
+.inspector-scroll::-webkit-scrollbar-thumb,
+.rail-items::-webkit-scrollbar-thumb,
+.compact-skill-window::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--aios-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.module-scroll::-webkit-scrollbar-thumb:hover,
+.dashboard-scroll::-webkit-scrollbar-thumb:hover,
+.inspector-scroll::-webkit-scrollbar-thumb:hover,
+.rail-items::-webkit-scrollbar-thumb:hover,
+.compact-skill-window::-webkit-scrollbar-thumb:hover {
+  background: var(--aios-scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+.module-scroll,
 .dashboard-scroll {
   display: grid;
   align-content: start;
@@ -378,7 +457,7 @@
 }
 
 .quick-entry:hover {
-  border-color: rgba(26, 115, 232, 0.36);
+  border-color: var(--aios-selected-outline);
   background: var(--aios-primary-soft);
 }
 
@@ -485,7 +564,7 @@
 
 .skill-group-button:hover,
 .skill-group-button.active {
-  border-color: rgba(26, 115, 232, 0.32);
+  border-color: var(--aios-selected-outline);
   background: var(--aios-primary-soft);
 }
 
@@ -558,7 +637,7 @@
 
 .compact-skill-row-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(150px, 0.72fr) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(150px, 0.62fr) minmax(188px, auto);
   gap: 12px;
   align-items: center;
   height: 100%;
@@ -574,14 +653,14 @@
 }
 
 .compact-skill-row-inner:hover {
-  border-color: rgba(26, 115, 232, 0.34);
-  background: rgba(255, 255, 255, 0.98);
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-surface-hover);
 }
 
 .compact-skill-row-inner.selected,
 .compact-skill-row-inner.selected:hover {
-  border-color: rgba(26, 115, 232, 0.46);
-  background: rgba(232, 240, 254, 0.78);
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-selected-surface);
   box-shadow: inset 3px 0 0 var(--aios-primary);
 }
 
@@ -618,6 +697,44 @@
 
 .compact-skill-state {
   flex-wrap: wrap;
+  max-height: 78px;
+  overflow: hidden;
+}
+
+.source-chip.MuiChip-root {
+  max-width: 104px;
+  border-color: var(--aios-outline-strong);
+  background: var(--aios-surface-muted);
+  color: var(--aios-muted);
+  font-weight: 800;
+}
+
+.source-chip.source-active-entrypoint.MuiChip-root,
+.source-chip.source-skills-index.MuiChip-root {
+  background: var(--aios-primary-soft);
+  color: var(--aios-primary);
+}
+
+.source-chip.source-custom-registry.MuiChip-root,
+.source-chip.source-filesystem.MuiChip-root {
+  background: var(--aios-info-soft);
+  color: var(--aios-info);
+}
+
+.source-chip.source-distillation.MuiChip-root {
+  background: var(--aios-warning-soft);
+  color: var(--aios-warning);
+}
+
+.source-chip.source-archived.MuiChip-root,
+.source-chip.source-unindexed.MuiChip-root {
+  background: var(--aios-error-soft);
+  color: var(--aios-error);
+}
+
+.source-chip .MuiChip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .capability-chip.MuiChip-root {
@@ -651,15 +768,15 @@
 
 .resource-card:hover,
 .resource-card.selected {
-  border-color: rgba(26, 115, 232, 0.42) !important;
-  background: rgba(255, 255, 255, 0.98);
+  border-color: var(--aios-selected-outline) !important;
+  background: var(--aios-surface-hover);
   transform: translateY(-1px);
 }
 
 .resource-card.selected,
 .resource-card.selected:hover {
-  border-color: rgba(26, 115, 232, 0.48) !important;
-  background: rgba(232, 240, 254, 0.72);
+  border-color: var(--aios-selected-outline) !important;
+  background: var(--aios-selected-surface);
   box-shadow: inset 3px 0 0 var(--aios-primary);
 }
 
@@ -1042,6 +1159,7 @@
 
   .aios-navigation-rail {
     grid-row: 2;
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto;
     border-radius: 20px;
     padding: 8px;
@@ -1052,10 +1170,19 @@
   }
 
   .rail-items {
+    grid-column: 1;
     grid-auto-flow: column;
     grid-auto-columns: 62px;
     overflow-x: auto;
     overflow-y: hidden;
+  }
+
+  .rail-action-dock {
+    grid-column: 2;
+    align-self: stretch;
+    border-top: 0;
+    border-left: 1px solid var(--aios-outline);
+    padding: 0 0 0 8px;
   }
 
   .rail-item {

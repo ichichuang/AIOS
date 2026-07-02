@@ -42,6 +42,12 @@ export const zhCN = {
     copyCodexCall: "复制 Codex 调用",
     copyClaudeCall: "复制 Claude 调用"
   },
+  theme: {
+    light: "浅色模式",
+    dark: "深色模式",
+    system: "跟随系统",
+    toggle: "切换深浅色主题"
+  },
   views: {
     dashboard: "总览",
     skills: "技能",
@@ -55,7 +61,7 @@ export const zhCN = {
   },
   moduleSummaries: {
     dashboard: "汇总本地 AIOS 资源、基线守卫、只读边界与风险分布。",
-    skills: "查看 Codex、Agents、Claude 与共享技能入口，保持原始技能名不变。",
+    skills: "查看活跃入口、索引技能、Registry 技能与文件系统发现技能，保持原始技能名不变。",
     mcp: "按本地、远程、npx 拉取和凭据需求检查 MCP 元数据。",
     scripts: "仅展示脚本与验证器元数据；执行需要显式命令。",
     reports: "按时间线查看本地报告摘要，不写入全局状态。",
@@ -245,6 +251,7 @@ export const zhCN = {
     "gh-fix-ci": "GitHub CI 修复",
     "github-ops": "GitHub 操作",
     "huashu-nuwa": "华数女娲技能蒸馏",
+    "huashu-nvwa": "华数女娲技能蒸馏",
     "interface-design": "界面设计",
     "jupyter-notebook": "Jupyter Notebook",
     linear: "Linear",

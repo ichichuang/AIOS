@@ -47,3 +47,20 @@ assert.match(getSkillCapabilitySearchText(playwright), /浏览器测试与截图
 
 const agent = classifySkillCapability(makeSkillResource({ id: "skill:mcp", name: "aios-tool-router", description: "Route local AI agent MCP and Codex tool choices." }));
 assert.equal(agent.primaryCategory.key, "ai-agent-mcp");
+
+const discoveredOnly = classifySkillCapability(
+  makeSkillResource({
+    id: "skill:discovered",
+    name: "local-layout-helper",
+    description: "Filesystem-discovered metadata only.",
+    metadata: {
+      sourceKind: "filesystem",
+      discoveredOnly: true,
+      tags: ["frontend"],
+      aliases: ["react-ui"],
+      capabilities: ["browser-testing"]
+    }
+  })
+);
+assert.equal(discoveredOnly.primaryCategory.key, "frontend-ui");
+assert.match(getSkillCapabilitySearchText(discoveredOnly), /前端与界面/);

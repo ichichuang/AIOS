@@ -1,5 +1,6 @@
 import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
 import type { AiosResource } from "../types/inventory";
+import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
 
 export type SkillCapabilityCategoryKey =
   | "frontend-ui"
@@ -242,8 +243,8 @@ function getConfidence(score: number, evidenceCount: number): SkillCapabilityCon
 
 function buildCandidateText(resource: AiosResource, display: ResourceDisplay): CandidateText {
   return {
-    identity: normalizeText([resource.name, getPathSignal(resource.path), display.zhName, display.zhCategory, display.zhCapability].join(" ")),
-    description: normalizeText([resource.description, display.zhDescription].join(" ")),
+    identity: normalizeText([resource.name, getPathSignal(resource.path), display.zhName, display.zhCategory, display.zhCapability, getSkillMetadataSearchText(resource)].join(" ")),
+    description: normalizeText([resource.description, display.zhDescription, getSkillMetadataSearchText(resource)].join(" ")),
     type: normalizeText([resource.toolType, resource.capabilityType].join(" "))
   };
 }

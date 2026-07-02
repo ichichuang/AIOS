@@ -25,6 +25,7 @@ Use Material UI as the primary React UI framework for this repository. Build AIO
 ## Theme And Tokens
 
 - Use `frontend/src/theme/materialTheme.ts` and `frontend/src/theme/designTokens.ts` as the source of visual tokens.
+- AIOS Material Console must support global light and dark themes through centralized MUI tokens and AIOS CSS variables; do not leave mode-specific colors scattered in component files.
 - Keep shell, density, surface, inspector, semantic status, and motion values centralized in tokens and CSS variables.
 - Use MUI theme values for color, shape, typography, spacing, and component states.
 - Avoid scattered one-off CSS values unless they express fixed shell or internal-scroll constraints.

@@ -11,6 +11,7 @@ import { readOnlySafety } from "../domain/safety-policy.js";
 import { tokenPressureForText } from "../domain/token-estimator.js";
 import type { AiosResource, ToolType } from "../domain/types.js";
 import { directoryExists, listTopLevelDirectories, readJsonIfExists } from "../utils/fs-safe.js";
+import { dedupeSkillResources, discoverFilesystemSkillResources, expandRegistrySkillResources, expandSkillAliases, markSkillActiveEntrypoint, toManifestPath } from "./skill-discovery-scanner.js";
 
 interface SkillIndexEntry {
   name: string;
@@ -67,19 +68,32 @@ function createEntrypointResource(toolType: ToolType, skillName: string, baseDir
       "Do not copy project-local or archived skills into this global entrypoint."
     ]),
     tokenPressure: tokenPressureForText(description, "Entrypoint summary only."),
-    metadata: { entrypoint: true }
+    metadata: {
+      sourceKind: "active-entrypoint",
+      sourceKinds: ["active-entrypoint"],
+      entrypoint: true,
+      activeEntrypoint: true,
+      indexed: false,
+      registryListed: false,
+      discoveredOnly: false,
+      scanReason: `${toolType} top-level active skill entrypoint`
+    }
   });
 }
 
 export async function scanSkills(): Promise<AiosResource[]> {
-  const resources: AiosResource[] = [];
+  const skillResources: AiosResource[] = [];
+  const registryResources: AiosResource[] = [];
+  const entrypointResources: AiosResource[] = [];
+  const activeSkillNames = new Set<string>();
   const skillsIndex = await readJsonIfExists<SkillIndexEntry[]>(SKILLS_INDEX_PATH);
 
   if (Array.isArray(skillsIndex)) {
     for (const skill of skillsIndex) {
-      const paths = [skill.path, skill.physicalPath, skill.entry].filter((value): value is string => Boolean(value));
+      const manifestPath = toManifestPath(skill.physicalPath ?? skill.entry);
+      const paths = [skill.path, skill.physicalPath, skill.entry, manifestPath].filter((value): value is string => Boolean(value));
       const description = skill.description ?? `${skill.name} canonical shared skill.`;
-      resources.push(
+      skillResources.push(
         withPrompts({
           id: resourceId("aios-root", "skill", skill.name),
           name: skill.name,
@@ -96,10 +110,20 @@ export async function scanSkills(): Promise<AiosResource[]> {
           ]),
           tokenPressure: tokenPressureForText(`${skill.name} ${description} ${paths.join(" ")}`, "Canonical skill metadata."),
           metadata: {
+            sourceKind: "skills-index",
+            sourceKinds: ["skills-index"],
+            manifestPath,
+            indexed: true,
+            registryListed: false,
+            activeEntrypoint: false,
+            discoveredOnly: false,
+            archived: skill.enabled === false,
+            distillationRelated: isDistillationRelated(skill),
+            scanReason: "SKILLS_INDEX.json entry",
             category: skill.category,
             tags: skill.tags ?? [],
             capabilities: skill.capabilities ?? [],
-            aliases: skill.aliases ?? []
+            aliases: expandSkillAliases(skill.name, skill.aliases ?? [])
           }
         })
       );
@@ -109,7 +133,7 @@ export async function scanSkills(): Promise<AiosResource[]> {
   const registry = await readJsonIfExists<RegistryLike>(CUSTOM_SKILL_REGISTRY_PATH);
   if (registry) {
     const description = "Read-only custom skill registry used by router workflows and global baseline budget governance.";
-    resources.push(
+    registryResources.push(
       withPrompts({
         id: "aios-root:registry:custom-skill-registry",
         name: "custom-skill-registry.json",
@@ -123,6 +147,8 @@ export async function scanSkills(): Promise<AiosResource[]> {
         safetyProfile: readOnlySafety(["Registry is read as metadata only."]),
         tokenPressure: tokenPressureForText(description, "Registry summary only."),
         metadata: {
+          sourceKind: "custom-registry",
+          sourceKinds: ["custom-registry"],
           generatedAt: registry.generatedAt,
           registryVersion: registry.registryVersion,
           counts: registry.counts,
@@ -130,22 +156,39 @@ export async function scanSkills(): Promise<AiosResource[]> {
         }
       })
     );
+    skillResources.push(...expandRegistrySkillResources(registry));
   }
 
+  skillResources.push(...(await discoverFilesystemSkillResources()));
+
   for (const skillName of await listTopLevelDirectories(CODEX_SKILLS_DIR, new Set([".system"]))) {
-    resources.push(createEntrypointResource("codex", skillName, CODEX_SKILLS_DIR));
+    activeSkillNames.add(skillName);
+    entrypointResources.push(createEntrypointResource("codex", skillName, CODEX_SKILLS_DIR));
   }
 
   for (const skillName of await listTopLevelDirectories(AGENTS_SKILLS_DIR)) {
-    resources.push(createEntrypointResource("agents", skillName, AGENTS_SKILLS_DIR));
+    activeSkillNames.add(skillName);
+    entrypointResources.push(createEntrypointResource("agents", skillName, AGENTS_SKILLS_DIR));
   }
 
   if (await directoryExists(CLAUDE_SKILLS_DIR)) {
     for (const skillName of await listTopLevelDirectories(CLAUDE_SKILLS_DIR)) {
       if (skillName.startsWith(".")) continue;
-      resources.push(createEntrypointResource("claude", skillName, CLAUDE_SKILLS_DIR));
+      activeSkillNames.add(skillName);
+      entrypointResources.push(createEntrypointResource("claude", skillName, CLAUDE_SKILLS_DIR));
     }
   }
 
-  return resources;
+  const mergedSkillResources = dedupeSkillResources(skillResources).map((resource) => markSkillActiveEntrypoint(resource, activeSkillNames));
+  return [...mergedSkillResources, ...registryResources, ...entrypointResources];
+}
+
+function isDistillationRelated(skill: SkillIndexEntry): boolean {
+  return [skill.name, skill.description, skill.category, skill.path, skill.physicalPath, ...(skill.tags ?? []), ...(skill.aliases ?? []), ...(skill.capabilities ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .match(/huashu|nuwa|nvwa|distill|distillation|distilled|perspective|persona|蒸馏|女娲|人物/)
+    ? true
+    : false;
 }

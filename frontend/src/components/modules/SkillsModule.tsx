@@ -5,6 +5,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import { markAiosPerf } from "../../lib/perf";
 import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type SkillCapabilityCategoryKey } from "../../lib/skillCapabilityClassifier";
+import { getMetadataBoolean, getSkillSourceBadges } from "../../lib/skillDiscoveryMetadata";
 import type { AiosResource } from "../../types/inventory";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -28,11 +29,15 @@ interface SkillGroup {
   resources: AiosResource[];
 }
 
-const ROW_HEIGHT = 92;
+const ROW_HEIGHT = 104;
 const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
-  { key: "codex-entrypoints", title: "Codex 入口", summary: "Codex 活跃技能入口，仅显示元数据。", predicate: (resource) => resource.toolType === "codex" },
-  { key: "agents-entrypoints", title: "Agents 入口", summary: "Agents 兼容入口，仅显示元数据。", predicate: (resource) => resource.toolType === "agents" },
-  { key: "claude-entrypoints", title: "Claude 入口", summary: "Claude 技能视图，保留原始技能名。", predicate: (resource) => resource.toolType === "claude" },
+  { key: "active-entrypoints", title: "活跃入口", summary: "Codex、Agents、Claude 当前可见入口元数据。", predicate: (resource) => hasSourceBadge(resource, "active-entrypoint") },
+  { key: "distilled-skills", title: "蒸馏技能", summary: "女娲、persona 或 perspective 相关技能元数据。", predicate: (resource) => getMetadataBoolean(resource, "distillationRelated") },
+  { key: "archived-skills", title: "归档技能", summary: "路径或注册表标记为 archive、disabled、deprecated 的技能。", predicate: (resource) => getMetadataBoolean(resource, "archived") },
+  { key: "filesystem-skills", title: "文件系统发现", summary: "通过有界 SKILL.md 遍历发现，未执行技能正文。", predicate: (resource) => hasSourceBadge(resource, "filesystem") },
+  { key: "registry-skills", title: "Registry 技能", summary: "custom-skill-registry.json 中的单项技能记录。", predicate: (resource) => hasSourceBadge(resource, "custom-registry") },
+  { key: "indexed-skills", title: "索引技能", summary: "SKILLS_INDEX.json 中的规范共享技能。", predicate: (resource) => hasSourceBadge(resource, "skills-index") },
+  { key: "unindexed-skills", title: "未纳入索引", summary: "可发现但没有 SKILLS_INDEX 规范记录的技能。", predicate: (resource) => hasSourceBadge(resource, "unindexed") },
   { key: "project-local-packs", title: "项目本地包", summary: "项目本地技能包和仓库内资源入口。", predicate: (resource) => resource.toolType === "project-local" || resource.capabilityType === "project-pack" },
   { key: "registry-routing", title: "注册表与路由", summary: "自定义技能注册表、路由器和索引入口。", predicate: (resource) => resource.capabilityType === "registry" || resource.name.includes("router") },
   { key: "runtime-views", title: "运行时视图", summary: "运行时生成的入口视图和技能映射。", predicate: (resource) => resource.capabilityType === "runtime-view" }
@@ -43,6 +48,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
+  const normalizedQuery = query.trim();
   const capabilitySearchTextById = useMemo(() => buildSkillCapabilitySearchTextMap(skillCapabilityById), [skillCapabilityById]);
   const groups = useMemo(
     () => (groupingMode === "capability" ? groupSkillResourcesByCapability(resources, skillCapabilityById) : groupSkillResourcesBySource(resources)),
@@ -53,11 +59,12 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     [capabilitySearchTextById, displayById, groups, query]
   );
   const defaultGroupKey = groups[0]?.key ?? null;
-  const activeKey = getValidGroupKey(groups, activeGroupKey) ?? defaultGroupKey;
+  const queryActive = normalizedQuery.length > 0;
+  const firstMatchingGroupKey = queryActive ? groups.find((group) => (filteredResourcesByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null : null;
+  const activeKey = getValidGroupKey(groups, activeGroupKey) ?? firstMatchingGroupKey ?? defaultGroupKey;
   const renderedKey = getValidGroupKey(groups, renderedGroupKey) ?? activeKey;
   const activeGroup = groups.find((group) => group.key === renderedKey) ?? groups[0] ?? null;
   const visibleResources = useMemo(() => (activeGroup ? filteredResourcesByGroupKey.get(activeGroup.key) ?? [] : []), [activeGroup, filteredResourcesByGroupKey]);
-  const queryActive = query.trim().length > 0;
   const rowProps = useMemo<CompactSkillRowProps>(
     () => ({ resources: visibleResources, selectedId, skillCapabilityById, showCapability: groupingMode === "capability", onSelect }),
     [groupingMode, onSelect, selectedId, skillCapabilityById, visibleResources]
@@ -95,9 +102,15 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       mode: groupingMode,
       visible: visibleResources.length,
       total: resources.length,
-      query: query.trim() ? "filtered" : "empty"
+      query: normalizedQuery ? "filtered" : "empty"
     });
-  }, [groupingMode, query, renderedKey, resources.length, visibleResources.length]);
+  }, [groupingMode, normalizedQuery, renderedKey, resources.length, visibleResources.length]);
+
+  useEffect(() => {
+    if (!normalizedQuery) return;
+    setActiveGroupKey(null);
+    setRenderedGroupKey(null);
+  }, [normalizedQuery]);
 
   return (
     <Box className="module-surface skills-module" component="section" aria-label={moduleAriaLabel("skills")}>
@@ -239,4 +252,8 @@ function groupSkillResourcesByCapability(resources: AiosResource[], skillCapabil
 
 function getValidGroupKey(groups: SkillGroup[], key: string | null): string | null {
   return key && groups.some((group) => group.key === key) ? key : null;
+}
+
+function hasSourceBadge(resource: AiosResource, key: string): boolean {
+  return getSkillSourceBadges(resource).some((badge) => badge.key === key);
 }

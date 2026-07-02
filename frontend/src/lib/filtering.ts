@@ -1,6 +1,7 @@
 import type { AiosResource, CapabilityType } from "../types/inventory";
 import { zhCN } from "../i18n/zh-CN";
 import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
+import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
 
 export type ResourceView =
   | "dashboard"
@@ -26,7 +27,7 @@ export const VIEW_LABELS: Record<ResourceView, string> = {
 };
 
 const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
-  skills: ["skill", "runtime-view", "registry"],
+  skills: ["skill", "runtime-view", "registry", "project-pack"],
   mcp: ["mcp-server", "mcp-client"],
   scripts: ["script"],
   reports: ["report"],
@@ -66,6 +67,7 @@ export function filterResourceList(
       resource.path,
       ...resource.paths,
       resource.description,
+      getSkillMetadataSearchText(resource),
       display.zhName,
       display.zhDescription,
       display.zhCategory,

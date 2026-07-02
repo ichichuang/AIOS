@@ -41,6 +41,7 @@ Use this skill only inside `/Users/cc/.ai/AIOS`.
 - Rely on `useGSAP` cleanup through GSAP context.
 - Respect `prefers-reduced-motion`.
 - Animate only opacity and transform (`x`, `y`, `scale`). Do not use blur, filter, clip-path, layout animation, or broad stagger effects.
+- Do not use GSAP for theme switching, scrollbar styling, or color-mode transitions; those must stay CSS and theme-token driven.
 - Use explicit hooks named `usePrefersReducedMotion`, `useNavIndicatorMotion`, `useModuleSwapMotion`, `useVisibleCardRevealMotion`, `useInspectorMotion`, and `useCopyFeedbackMotion`.
 - Use `contextSafe` for event-triggered interactions such as copy feedback.
 - Use timelines with defaults around `0.18s` to `0.26s`, `power2.out` or `power3.out`, and `overwrite: "auto"` where repeated interactions can stack tweens.

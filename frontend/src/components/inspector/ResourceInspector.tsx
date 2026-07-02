@@ -3,6 +3,7 @@ import { memo } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
+import { getDiscoveryBooleanLabel, getMetadataString as getDiscoveryMetadataString, getSkillSourceBadges } from "../../lib/skillDiscoveryMetadata";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { ResourceMetaRow } from "../resources/ResourceMetaRow";
 
@@ -145,6 +146,21 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
   const root = getMetadataString(resource, "root");
   if (root) rows.push({ label: "资源根", value: root, code: true });
 
+  if (hasDiscoveryMetadata(resource)) {
+    const sourceBadges = getSkillSourceBadges(resource);
+    if (sourceBadges.length > 0) rows.push({ label: "发现来源", value: sourceBadges.map((badge) => badge.label).join(" / ") });
+    rows.push(
+      { label: "是否索引内", value: getDiscoveryBooleanLabel(resource, "indexed") },
+      { label: "是否活跃入口", value: getDiscoveryBooleanLabel(resource, "activeEntrypoint") },
+      { label: "是否 Registry 记录", value: getDiscoveryBooleanLabel(resource, "registryListed") },
+      { label: "是否蒸馏相关", value: getDiscoveryBooleanLabel(resource, "distillationRelated") }
+    );
+    const manifestPath = getDiscoveryMetadataString(resource, "manifestPath");
+    if (manifestPath) rows.push({ label: "manifest path", value: manifestPath, code: true });
+    const discoveryRoot = getDiscoveryMetadataString(resource, "discoveryRoot");
+    if (discoveryRoot) rows.push({ label: "发现根目录", value: discoveryRoot, code: true });
+  }
+
   if (resource.updatedAt) rows.push({ label: "更新时间", value: formatDate(resource.updatedAt) });
   return rows;
 }
@@ -160,6 +176,17 @@ function getMcpServer(resource: AiosResource): McpServerRecord | null {
 function getMetadataString(resource: AiosResource, key: string): string | null {
   const value = resource.metadata?.[key];
   return typeof value === "string" ? value : null;
+}
+
+function hasDiscoveryMetadata(resource: AiosResource): boolean {
+  return Boolean(
+    resource.metadata?.sourceKind ||
+      resource.metadata?.manifestPath ||
+      resource.metadata?.indexed !== undefined ||
+      resource.metadata?.registryListed !== undefined ||
+      resource.metadata?.activeEntrypoint !== undefined ||
+      resource.metadata?.distillationRelated !== undefined
+  );
 }
 
 function formatDate(value: string): string {

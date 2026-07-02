@@ -1,106 +1,122 @@
 import { alpha, createTheme } from "@mui/material/styles";
-import { designTokens } from "./designTokens";
+import { designTokens, type AiosResolvedColorMode, type AiosThemePalette } from "./designTokens";
 
-export const materialTheme = createTheme({
-  palette: {
-    mode: "light",
-    primary: {
-      main: designTokens.color.googleBlue,
-      dark: designTokens.color.googleBlueDark,
-      light: designTokens.color.googleBlueSoft,
-      contrastText: "#ffffff"
+export function createAiosMaterialTheme(resolvedMode: AiosResolvedColorMode) {
+  const palette = designTokens.palettes[resolvedMode];
+
+  return createTheme({
+    palette: {
+      mode: resolvedMode,
+      primary: {
+        main: palette.primary,
+        dark: palette.primaryDark,
+        light: palette.primarySoft,
+        contrastText: resolvedMode === "dark" ? "#101418" : "#ffffff"
+      },
+      secondary: {
+        main: palette.info,
+        light: palette.infoSoft,
+        contrastText: resolvedMode === "dark" ? "#101418" : "#ffffff"
+      },
+      background: {
+        default: palette.background,
+        paper: palette.surface
+      },
+      text: {
+        primary: palette.text,
+        secondary: palette.textMuted
+      },
+      success: {
+        main: palette.success,
+        light: palette.successSoft
+      },
+      warning: {
+        main: palette.warning,
+        light: palette.warningSoft
+      },
+      error: {
+        main: palette.error,
+        light: palette.errorSoft
+      },
+      divider: palette.outline
     },
-    secondary: {
-      main: designTokens.color.info,
-      light: designTokens.color.infoSoft,
-      contrastText: "#ffffff"
+    typography: {
+      fontFamily: designTokens.fontFamily,
+      allVariants: {
+        letterSpacing: 0
+      },
+      h1: {
+        fontSize: "1.75rem",
+        lineHeight: 1.15,
+        fontWeight: 700
+      },
+      h2: {
+        fontSize: "1.35rem",
+        lineHeight: 1.2,
+        fontWeight: 700
+      },
+      h3: {
+        fontSize: "1rem",
+        lineHeight: 1.3,
+        fontWeight: 700
+      },
+      body1: {
+        lineHeight: 1.55
+      },
+      body2: {
+        lineHeight: 1.5
+      },
+      button: {
+        letterSpacing: 0,
+        fontWeight: 700
+      }
     },
-    background: {
-      default: designTokens.color.background,
-      paper: designTokens.color.surface
+    shape: {
+      borderRadius: designTokens.radius.md
     },
-    text: {
-      primary: designTokens.color.text,
-      secondary: designTokens.color.textMuted
-    },
-    success: {
-      main: designTokens.color.success,
-      light: designTokens.color.successSoft
-    },
-    warning: {
-      main: designTokens.color.warning,
-      light: designTokens.color.warningSoft
-    },
-    error: {
-      main: designTokens.color.error,
-      light: designTokens.color.errorSoft
-    },
-    divider: designTokens.color.outline
-  },
-  typography: {
-    fontFamily: designTokens.fontFamily,
-    allVariants: {
-      letterSpacing: 0
-    },
-    h1: {
-      fontSize: "1.75rem",
-      lineHeight: 1.15,
-      fontWeight: 700
-    },
-    h2: {
-      fontSize: "1.35rem",
-      lineHeight: 1.2,
-      fontWeight: 700
-    },
-    h3: {
-      fontSize: "1rem",
-      lineHeight: 1.3,
-      fontWeight: 700
-    },
-    body1: {
-      lineHeight: 1.55
-    },
-    body2: {
-      lineHeight: 1.5
-    },
-    button: {
-      letterSpacing: 0,
-      fontWeight: 700
-    }
-  },
-  shape: {
-    borderRadius: designTokens.radius.md
-  },
-  spacing: 8,
-  components: {
+    spacing: 8,
+    components: createAiosComponentOverrides(resolvedMode, palette)
+  });
+}
+
+export const materialTheme = createAiosMaterialTheme("light");
+
+function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palette: AiosThemePalette) {
+  return {
     MuiCssBaseline: {
       styleOverrides: {
         ":root": {
-          colorScheme: "light",
-          "--aios-bg": designTokens.color.background,
-          "--aios-bg-alt": designTokens.color.backgroundAlt,
-          "--aios-surface": designTokens.color.surface,
-          "--aios-surface-raised": designTokens.surface.raised,
-          "--aios-surface-muted": designTokens.color.surfaceMuted,
-          "--aios-selected-surface": designTokens.color.selectedSurface,
-          "--aios-outline": designTokens.color.outline,
-          "--aios-outline-strong": designTokens.color.outlineStrong,
-          "--aios-text": designTokens.color.text,
-          "--aios-muted": designTokens.color.textMuted,
-          "--aios-subtle": designTokens.color.textSubtle,
-          "--aios-primary": designTokens.color.googleBlue,
-          "--aios-primary-dark": designTokens.color.googleBlueDark,
-          "--aios-primary-soft": designTokens.color.googleBlueSoft,
-          "--aios-success": designTokens.color.success,
-          "--aios-success-soft": designTokens.color.successSoft,
-          "--aios-warning": designTokens.color.warning,
-          "--aios-warning-soft": designTokens.color.warningSoft,
-          "--aios-error": designTokens.color.error,
-          "--aios-error-soft": designTokens.color.errorSoft,
-          "--aios-info": designTokens.color.info,
-          "--aios-info-soft": designTokens.color.infoSoft,
-          "--aios-shadow": designTokens.shadow.surface,
-          "--aios-shadow-lifted": designTokens.shadow.lifted,
+          colorScheme: resolvedMode,
+          "--aios-bg": palette.background,
+          "--aios-bg-alt": palette.backgroundAlt,
+          "--aios-surface": palette.surface,
+          "--aios-surface-raised": palette.surfaceRaised,
+          "--aios-surface-muted": palette.surfaceMuted,
+          "--aios-surface-hover": palette.surfaceHover,
+          "--aios-selected-surface": palette.selectedSurface,
+          "--aios-selected-outline": palette.selectedOutline,
+          "--aios-outline": palette.outline,
+          "--aios-outline-strong": palette.outlineStrong,
+          "--aios-text": palette.text,
+          "--aios-muted": palette.textMuted,
+          "--aios-subtle": palette.textSubtle,
+          "--aios-primary": palette.primary,
+          "--aios-primary-dark": palette.primaryDark,
+          "--aios-primary-soft": palette.primarySoft,
+          "--aios-success": palette.success,
+          "--aios-success-soft": palette.successSoft,
+          "--aios-warning": palette.warning,
+          "--aios-warning-soft": palette.warningSoft,
+          "--aios-error": palette.error,
+          "--aios-error-soft": palette.errorSoft,
+          "--aios-info": palette.info,
+          "--aios-info-soft": palette.infoSoft,
+          "--aios-shadow": palette.shadowSurface,
+          "--aios-shadow-lifted": palette.shadowLifted,
+          "--aios-scrollbar-track": palette.scrollbarTrack,
+          "--aios-scrollbar-thumb": palette.scrollbarThumb,
+          "--aios-scrollbar-thumb-hover": palette.scrollbarThumbHover,
+          "--aios-body-bg": palette.bodyBackground,
           "--aios-rail-width": `${designTokens.shell.railWidth}px`,
           "--aios-rail-compact-width": `${designTokens.shell.railCompactWidth}px`,
           "--aios-topbar-height": `${designTokens.shell.topbarHeight}px`,
@@ -125,8 +141,8 @@ export const materialTheme = createTheme({
         body: {
           margin: 0,
           minWidth: 320,
-          color: designTokens.color.text,
-          background: `linear-gradient(135deg, ${designTokens.color.background} 0%, ${designTokens.color.backgroundAlt} 100%)`
+          color: palette.text,
+          background: palette.bodyBackground
         },
         "button, input": {
           font: "inherit"
@@ -146,42 +162,54 @@ export const materialTheme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          background: alpha(designTokens.color.surface, 0.92),
-          border: `1px solid ${designTokens.color.outline}`,
+          background: alpha(palette.surface, resolvedMode === "dark" ? 0.96 : 0.92),
+          border: `1px solid ${palette.outline}`,
           borderRadius: designTokens.radius.lg,
-          color: designTokens.color.text,
-          boxShadow: designTokens.shadow.surface
+          color: palette.text,
+          boxShadow: palette.shadowSurface
         }
       }
     },
     MuiCard: {
       defaultProps: {
-        variant: "outlined"
+        variant: "outlined" as const
       },
       styleOverrides: {
         root: {
-          borderColor: designTokens.color.outline,
+          borderColor: palette.outline,
           borderRadius: designTokens.radius.lg,
-          boxShadow: "none"
+          backgroundImage: "none",
+          boxShadow: "none",
+          color: palette.text
         }
       }
     },
     MuiPaper: {
       styleOverrides: {
         root: {
-          backgroundImage: "none"
+          backgroundColor: palette.surface,
+          backgroundImage: "none",
+          color: palette.text
         }
       }
     },
     MuiChip: {
       defaultProps: {
-        size: "small"
+        size: "small" as const
       },
       styleOverrides: {
         root: {
           borderRadius: 999,
           fontWeight: 700,
           letterSpacing: 0
+        },
+        outlined: {
+          borderColor: palette.outlineStrong,
+          color: palette.textMuted
+        },
+        filled: {
+          backgroundColor: palette.primarySoft,
+          color: palette.primary
         }
       }
     },
@@ -194,19 +222,57 @@ export const materialTheme = createTheme({
           borderRadius: 999,
           minHeight: 34,
           textTransform: "none"
+        },
+        outlined: {
+          borderColor: palette.outlineStrong,
+          color: palette.primary,
+          "&:hover": {
+            borderColor: palette.selectedOutline,
+            backgroundColor: palette.primarySoft
+          }
+        },
+        contained: {
+          color: resolvedMode === "dark" ? "#101418" : "#ffffff"
+        }
+      }
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          color: palette.textMuted,
+          "&:hover": {
+            backgroundColor: palette.primarySoft,
+            color: palette.primary
+          }
         }
       }
     },
     MuiTextField: {
       defaultProps: {
-        size: "small"
+        size: "small" as const
       }
     },
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
           borderRadius: 999,
-          backgroundColor: designTokens.color.surface
+          backgroundColor: palette.surface,
+          color: palette.text,
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: palette.outline
+          },
+          "&:hover .MuiOutlinedInput-notchedOutline": {
+            borderColor: palette.selectedOutline
+          },
+          "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+            borderColor: palette.primary
+          }
+        },
+        input: {
+          "&::placeholder": {
+            color: palette.textSubtle,
+            opacity: 1
+          }
         }
       }
     },
@@ -221,8 +287,21 @@ export const materialTheme = createTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
+          border: `1px solid ${palette.outline}`,
           borderRadius: designTokens.radius.sm,
+          backgroundColor: resolvedMode === "dark" ? "#edf2f7" : "#2f3136",
+          color: resolvedMode === "dark" ? "#101418" : "#ffffff",
           fontSize: 12
+        }
+      }
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          borderColor: palette.outline,
+          backgroundColor: palette.surfaceRaised,
+          backgroundImage: "none",
+          color: palette.text
         }
       }
     },
@@ -231,12 +310,12 @@ export const materialTheme = createTheme({
         root: {
           height: 10,
           borderRadius: 999,
-          backgroundColor: designTokens.color.googleBlueSoft
+          backgroundColor: palette.primarySoft
         },
         bar: {
           borderRadius: 999
         }
       }
     }
-  }
-});
+  };
+}

@@ -52,6 +52,25 @@ export interface UsagePrompt {
   prompt: string;
 }
 
+export interface SkillDiscoveryMetadata {
+  sourceKind?: string;
+  sourceKinds?: string[];
+  discoveryRoot?: string;
+  manifestPath?: string;
+  indexed?: boolean;
+  registryListed?: boolean;
+  activeEntrypoint?: boolean;
+  discoveredOnly?: boolean;
+  archived?: boolean;
+  distillationRelated?: boolean;
+  scanReason?: string;
+  category?: string;
+  tags?: string[];
+  aliases?: string[];
+  capabilities?: string[];
+  sourceTypes?: string[];
+}
+
 export interface AiosResource {
   id: string;
   name: string;
@@ -74,7 +93,7 @@ export interface AiosResource {
   safetyProfile: SafetyProfile;
   tokenPressure: TokenPressure;
   prompts: UsagePrompt[];
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & Partial<SkillDiscoveryMetadata>;
   updatedAt?: string;
 }
 

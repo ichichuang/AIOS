@@ -82,6 +82,12 @@ export function getResourceDescription(resource: AiosResource): string {
   if (description.includes("canonical skill metadata")) {
     return "来自 SKILLS_INDEX.json 的规范技能元数据。";
   }
+  if (description.includes("registry skill metadata")) {
+    return "来自 custom-skill-registry.json skills[] 的单项技能元数据。";
+  }
+  if (description.includes("filesystem-discovered skill metadata")) {
+    return "通过有界 SKILL.md 文件系统发现得到的技能元数据。";
+  }
   if (description.includes("policy") && description.includes("guard")) {
     return "策略文件哈希作为守卫记录，应用不得修改策略内容。";
   }
