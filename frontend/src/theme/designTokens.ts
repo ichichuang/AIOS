@@ -30,15 +30,15 @@ export const designTokens = {
     xl: 28
   },
   shell: {
-    railWidth: 92,
-    railCompactWidth: 82,
-    topbarHeight: 64,
+    railWidth: 80,
+    railCompactWidth: 76,
+    topbarHeight: 60,
     inspectorWidth: 376,
     inspectorMaxWidth: 392,
-    gap: 14,
-    viewportPadding: 14,
-    moduleHeaderHeight: 64,
-    summaryBandHeight: 96
+    gap: 12,
+    viewportPadding: 12,
+    moduleHeaderHeight: 58,
+    summaryBandHeight: 72
   },
   density: {
     panelPadding: 14,
@@ -65,8 +65,8 @@ export const designTokens = {
     drawerHeight: "76dvh"
   },
   shadow: {
-    surface: "0 1px 2px rgba(60, 64, 67, 0.14), 0 2px 6px rgba(60, 64, 67, 0.08)",
-    lifted: "0 12px 30px rgba(60, 64, 67, 0.12)"
+    surface: "0 1px 2px rgba(60, 64, 67, 0.10), 0 2px 4px rgba(60, 64, 67, 0.06)",
+    lifted: "0 6px 16px rgba(60, 64, 67, 0.10)"
   },
   fontFamily:
     'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif',

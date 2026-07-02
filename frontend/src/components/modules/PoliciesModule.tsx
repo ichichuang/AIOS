@@ -1,4 +1,5 @@
 import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+import { useMemo } from "react";
 import { shortHash, zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -7,7 +8,7 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
 export function PoliciesModule({ baseline, resources, selectedId, onSelect }: AiosModuleProps) {
-  const groups = [{ title: "策略守卫", summary: "策略资源仅展示哈希、路径和边界说明，不读取或修改策略内容。", resources }];
+  const groups = useMemo(() => [{ title: "策略守卫", summary: "策略资源仅展示哈希、路径和边界说明，不读取或修改策略内容。", resources }], [resources]);
 
   return (
     <Box className="module-surface" component="section" aria-label={moduleAriaLabel("policies")}>

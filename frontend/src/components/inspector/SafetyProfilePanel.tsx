@@ -1,4 +1,5 @@
 import { Box, Typography } from "@mui/material";
+import { memo } from "react";
 import { translateSafetyNote } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource } from "../../types/inventory";
@@ -8,7 +9,7 @@ interface SafetyProfilePanelProps {
   resource: AiosResource;
 }
 
-export function SafetyProfilePanel({ resource }: SafetyProfilePanelProps) {
+export const SafetyProfilePanel = memo(function SafetyProfilePanel({ resource }: SafetyProfilePanelProps) {
   return (
     <Box className="inspector-panel">
       <Typography component="h3" variant="h3">
@@ -27,4 +28,4 @@ export function SafetyProfilePanel({ resource }: SafetyProfilePanelProps) {
       </Box>
     </Box>
   );
-}
+});

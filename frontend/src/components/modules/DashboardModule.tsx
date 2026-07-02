@@ -1,11 +1,12 @@
-import { Box, ButtonBase, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
-import { formatAutomationState, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
+import { Box, ButtonBase, Chip, Stack, Typography } from "@mui/material";
+import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { countByView, type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
 import type { AiosModuleProps } from "./moduleUtils";
 import { riskCounts, sortByUpdatedAt } from "./moduleUtils";
+import { ModuleHeader } from "./ModuleHeader";
 
 const quickViews: ResourceView[] = ["skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
@@ -15,33 +16,19 @@ export function DashboardModule({ allResources, baseline, selectedId, onSelect, 
 
   return (
     <Box className="module-surface dashboard-module" component="section" aria-label="总览模块">
-      <Box className="dashboard-hero">
-        <Stack spacing={1.1}>
-          <Typography className="eyebrow" component="p">
-            本地只读能力命令中心
-          </Typography>
-          <Typography component="h2" variant="h2">
-            资源浏览从这里开始，但不占用工作区
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            仅读取本地快照，搜索和模块切换不会执行命令、连接 MCP 或写入全局入口。
-          </Typography>
-        </Stack>
-        <Stack className="dashboard-hero-chips" direction="row" sx={{ flexWrap: "wrap", gap: 1, justifyContent: "flex-end" }}>
-          <Chip className="status-chip status-ok" label={zhCN.app.readOnly} />
-          <Chip className="risk-chip risk-low" label={zhCN.app.safetyState} />
-          <Chip label={`${allResources.length} 项资源`} variant="outlined" />
-        </Stack>
-      </Box>
-
-      <Box className="dashboard-metrics">
-        <DashboardMetric label={zhCN.app.generatedAt} value={formatSnapshotDate(baseline.generatedAt)} />
-        <DashboardMetric label={zhCN.dashboardMetrics.policyHash} value={shortHash(baseline.policyHash)} code />
-        <DashboardMetric label={zhCN.dashboardMetrics.router} value={baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用"} />
-        <DashboardMetric label={zhCN.dashboardMetrics.codexAutomations} value={formatAutomationState(baseline.codexAutomationDirectoryState)} />
-      </Box>
+      <ModuleHeader view="dashboard" summary="只读快照、风险分布和模块入口。" count={allResources.length}>
+        <Chip className="status-chip status-ok" label="本地只读" />
+        <Chip label={formatSnapshotDate(baseline.generatedAt)} variant="outlined" />
+      </ModuleHeader>
 
       <Box className="dashboard-scroll">
+        <Box className="dashboard-summary">
+          <SummaryItem label={zhCN.app.total} value={`${formatCount(allResources.length)} 项`} />
+          <SummaryItem label={zhCN.dashboardMetrics.policyHash} value={shortHash(baseline.policyHash)} code />
+          <SummaryItem label={zhCN.dashboardMetrics.router} value={baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用"} />
+          <SummaryItem label={zhCN.dashboardMetrics.codexAutomations} value={formatAutomationState(baseline.codexAutomationDirectoryState)} />
+        </Box>
+
         <Box className="dashboard-section risk-band">
           <Typography component="h3" variant="h3">
             风险分布
@@ -98,27 +85,25 @@ export function DashboardModule({ allResources, baseline, selectedId, onSelect, 
   );
 }
 
-interface DashboardMetricProps {
+interface SummaryItemProps {
   label: string;
   value: string;
   code?: boolean;
 }
 
-function DashboardMetric({ label, value, code }: DashboardMetricProps) {
+function SummaryItem({ label, value, code }: SummaryItemProps) {
   return (
-    <Card className="dashboard-metric material-card">
-      <CardContent>
-        <Typography className="caption" component="p">
-          {label}
-        </Typography>
-        {code ? (
-          <Box className="code-pill" component="code">
-            {value}
-          </Box>
-        ) : (
-          <Typography component="strong">{value}</Typography>
-        )}
-      </CardContent>
-    </Card>
+    <Box className="dashboard-summary-item">
+      <Typography className="caption" component="p">
+        {label}
+      </Typography>
+      {code ? (
+        <Box className="code-pill" component="code">
+          {value}
+        </Box>
+      ) : (
+        <Typography component="strong">{value}</Typography>
+      )}
+    </Box>
   );
 }

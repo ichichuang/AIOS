@@ -1,4 +1,5 @@
 import { Box, Chip } from "@mui/material";
+import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -7,8 +8,7 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
 export function ReportsModule({ resources, selectedId, onSelect }: AiosModuleProps) {
-  const sorted = sortByUpdatedAt(resources);
-  const groups = [{ title: "报告时间线", summary: "按更新时间展示本地报告摘要，避免原始密集文件列表。", resources: sorted }];
+  const groups = useMemo(() => [{ title: "报告时间线", summary: "按更新时间展示本地报告摘要，避免原始密集文件列表。", resources: sortByUpdatedAt(resources) }], [resources]);
 
   return (
     <Box className="module-surface" component="section" aria-label={moduleAriaLabel("reports")}>

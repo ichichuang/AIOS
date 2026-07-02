@@ -1,4 +1,5 @@
 import { Box, Chip } from "@mui/material";
+import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -7,13 +8,17 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
 export function LegacyModule({ resources, selectedId, onSelect }: AiosModuleProps) {
-  const groups = makeGroups(
-    resources,
-    [
-      { title: "旧入口提示", summary: "保留旧提示和兼容资源的可见性，不作为主工作流。", predicate: (resource) => resource.capabilityType === "usage-prompt" },
-      { title: "兼容视图", summary: "旧入口仅用于识别迁移边界。", predicate: (resource) => resource.toolType === "legacy" }
-    ],
-    { title: "其他兼容资源", summary: "仅展示元数据，不恢复旧基线。" }
+  const groups = useMemo(
+    () =>
+      makeGroups(
+        resources,
+        [
+          { title: "旧入口提示", summary: "保留旧提示和兼容资源的可见性，不作为主工作流。", predicate: (resource) => resource.capabilityType === "usage-prompt" },
+          { title: "兼容视图", summary: "旧入口仅用于识别迁移边界。", predicate: (resource) => resource.toolType === "legacy" }
+        ],
+        { title: "其他兼容资源", summary: "仅展示元数据，不恢复旧基线。" }
+      ),
+    [resources]
   );
 
   return (

@@ -1,4 +1,5 @@
 import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { useMemo } from "react";
 import { translateKnownWarning, translateValidatorSummary } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
@@ -8,7 +9,7 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
 export function ValidatorsModule({ baseline, resources, selectedId, onSelect }: AiosModuleProps) {
-  const groups = [{ title: "观察型验证器", summary: "验证器能力仅展示状态和用途；运行需要用户显式命令。", resources }];
+  const groups = useMemo(() => [{ title: "观察型验证器", summary: "验证器能力仅展示状态和用途；运行需要用户显式命令。", resources }], [resources]);
 
   return (
     <Box className="module-surface" component="section" aria-label={moduleAriaLabel("validators")}>

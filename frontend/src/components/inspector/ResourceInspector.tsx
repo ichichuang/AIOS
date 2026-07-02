@@ -1,4 +1,5 @@
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import { memo } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
@@ -8,7 +9,7 @@ interface ResourceInspectorProps {
   resource: AiosResource | null;
 }
 
-export function ResourceInspector({ resource }: ResourceInspectorProps) {
+export const ResourceInspector = memo(function ResourceInspector({ resource }: ResourceInspectorProps) {
   if (!resource) {
     return (
       <Box className="inspector-panel">
@@ -71,7 +72,7 @@ export function ResourceInspector({ resource }: ResourceInspectorProps) {
       </Box>
     </Box>
   );
-}
+});
 
 interface MetadataRow {
   label: string;

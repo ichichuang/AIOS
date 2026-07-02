@@ -22,11 +22,6 @@ interface AiosTopCommandBarProps {
 }
 
 export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query, shownCount, onQueryChange, onToggleInspector, onViewChange }: AiosTopCommandBarProps) {
-  const normalized = query.trim().toLowerCase();
-  const matchingViews = normalized
-    ? consoleViews.filter((view) => `${VIEW_LABELS[view]} ${view}`.toLowerCase().includes(normalized)).slice(0, 4)
-    : consoleViews.filter((view) => view !== activeView).slice(0, 4);
-
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter") return;
     const target = event.target as HTMLInputElement;
@@ -37,13 +32,11 @@ export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query,
 
   return (
     <Box className="aios-top-command-bar">
-      <Stack className="command-title" spacing={0.35}>
-        <Typography className="eyebrow" component="p">
-          本地只读 · Material Console V2
-        </Typography>
+      <Stack className="command-title" direction="row" spacing={1} sx={{ alignItems: "center" }}>
         <Typography component="h1" variant="h2">
           AIOS 控制中心
         </Typography>
+        <Chip className="status-chip status-ok" label="本地只读" />
       </Stack>
 
       <Box className="command-search-wrap">
@@ -73,11 +66,6 @@ export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query,
             }
           }}
         />
-        <Stack className="command-suggestions" direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-          {matchingViews.map((view) => (
-            <Chip key={view} label={VIEW_LABELS[view]} variant={view === activeView ? "filled" : "outlined"} onClick={() => onViewChange(view)} />
-          ))}
-        </Stack>
       </Box>
 
       <Stack className="command-status" direction="row" sx={{ alignItems: "center", gap: 1, justifyContent: "flex-end" }}>
@@ -89,7 +77,7 @@ export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query,
         </Box>
         <Box className="command-meta compact">
           <Typography className="caption" component="p">
-            当前视图
+            {VIEW_LABELS[activeView]}
           </Typography>
           <Typography component="strong">
             {shownCount} / {inventory.resources.length}

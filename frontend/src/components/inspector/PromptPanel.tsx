@@ -1,4 +1,5 @@
 import { Box, Stack, Typography } from "@mui/material";
+import { memo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource } from "../../types/inventory";
 import { PromptCopyButton } from "../PromptCopyButton";
@@ -7,7 +8,7 @@ interface PromptPanelProps {
   resource: AiosResource;
 }
 
-export function PromptPanel({ resource }: PromptPanelProps) {
+export const PromptPanel = memo(function PromptPanel({ resource }: PromptPanelProps) {
   const codexPrompt = resource.prompts.find((prompt) => prompt.target === "codex");
   const claudePrompt = resource.prompts.find((prompt) => prompt.target === "claude");
 
@@ -25,4 +26,4 @@ export function PromptPanel({ resource }: PromptPanelProps) {
       </Typography>
     </Box>
   );
-}
+});

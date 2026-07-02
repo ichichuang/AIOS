@@ -24,9 +24,10 @@ export function useModuleSwapMotion(scope: RefObject<HTMLElement>, dependency: u
   useGSAP(
     () => {
       if (reduced || !scope.current) return;
+      scope.current.style.willChange = "opacity, transform";
       gsap
-        .timeline({ defaults: { duration: 0.22, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(scope.current, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0 });
+        .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
+        .fromTo(scope.current, { autoAlpha: 0, y: 6, force3D: true }, { autoAlpha: 1, y: 0, force3D: true, onComplete: () => scope.current && (scope.current.style.willChange = "") });
     },
     { dependencies: [dependency, reduced], scope }
   );
@@ -63,21 +64,22 @@ export function useNavIndicatorMotion(scope: RefObject<HTMLElement>, dependency:
       const activeRect = active.getBoundingClientRect();
       const x = activeRect.left - trackRect.left + track.scrollLeft;
       const y = activeRect.top - trackRect.top + track.scrollTop;
-      const width = activeRect.width;
-      const height = activeRect.height;
+      indicator.style.width = `${activeRect.width}px`;
+      indicator.style.height = `${activeRect.height}px`;
 
       if (reduced) {
-        gsap.set(indicator, { autoAlpha: 1, height, width, x, y });
+        gsap.set(indicator, { autoAlpha: 1, x, y });
         return;
       }
 
+      indicator.style.willChange = "opacity, transform";
       gsap.to(indicator, {
         autoAlpha: 1,
-        duration: 0.22,
+        duration: 0.18,
         ease: "power3.out",
-        height,
+        force3D: true,
+        onComplete: () => (indicator.style.willChange = ""),
         overwrite: "auto",
-        width,
         x,
         y
       });
@@ -86,17 +88,18 @@ export function useNavIndicatorMotion(scope: RefObject<HTMLElement>, dependency:
   );
 }
 
-export function useCardRevealMotion(scope: RefObject<HTMLElement>, dependency: unknown, selector = "[data-motion='resource-card']"): void {
+export function useVisibleCardRevealMotion(scope: RefObject<HTMLElement>, dependency: unknown, selector = "[data-motion='resource-card']"): void {
   const reduced = usePrefersReducedMotion();
 
   useGSAP(
     () => {
       if (reduced || !scope.current) return;
-      const cards = gsap.utils.toArray<HTMLElement>(selector, scope.current).slice(0, 24);
+      const cards = gsap.utils.toArray<HTMLElement>(selector, scope.current).slice(0, 12);
       if (!cards.length) return;
+      cards.forEach((card) => (card.style.willChange = "opacity, transform"));
       gsap
-        .timeline({ defaults: { duration: 0.2, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(cards, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, stagger: 0.018, y: 0 });
+        .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
+        .fromTo(cards, { autoAlpha: 0, y: 6, force3D: true }, { autoAlpha: 1, force3D: true, stagger: 0.012, y: 0, onComplete: () => cards.forEach((card) => (card.style.willChange = "")) });
     },
     { dependencies: [dependency, reduced, selector], scope }
   );
@@ -108,24 +111,24 @@ export function useInspectorMotion(scope: RefObject<HTMLElement>, dependency: un
   useGSAP(
     () => {
       if (reduced || !scope.current) return;
+      scope.current.style.willChange = "opacity, transform";
       gsap
-        .timeline({ defaults: { duration: 0.22, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(scope.current, { autoAlpha: 0, x: 10 }, { autoAlpha: 1, x: 0 });
+        .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
+        .fromTo(scope.current, { autoAlpha: 0, x: 8, force3D: true }, { autoAlpha: 1, force3D: true, x: 0, onComplete: () => scope.current && (scope.current.style.willChange = "") });
     },
     { dependencies: [dependency, reduced], scope }
   );
 }
 
-export function useCopyFeedbackMotion(scope: RefObject<HTMLElement>, active: boolean): void {
+export function useCopyFeedbackMotion(scope: RefObject<HTMLElement>): () => void {
   const reduced = usePrefersReducedMotion();
+  const { contextSafe } = useGSAP({ scope });
 
-  useGSAP(
-    () => {
-      if (reduced || !scope.current || !active) return;
-      gsap
-        .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(scope.current, { scale: 0.98 }, { scale: 1 });
-    },
-    { dependencies: [active, reduced], scope }
-  );
+  return contextSafe(() => {
+    if (reduced || !scope.current) return;
+    scope.current.style.willChange = "transform";
+    gsap
+      .timeline({ defaults: { duration: 0.16, ease: "power2.out", overwrite: "auto" } })
+      .fromTo(scope.current, { scale: 0.98, force3D: true }, { force3D: true, scale: 1, onComplete: () => scope.current && (scope.current.style.willChange = "") });
+  });
 }

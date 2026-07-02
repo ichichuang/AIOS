@@ -16,7 +16,7 @@ export function PromptCopyButton({ prompt, target, compact }: PromptCopyButtonPr
   const buttonRef = useRef<HTMLButtonElement>(null);
   const copyTarget = prompt?.target ?? target ?? "codex";
   const label = copyTarget === "codex" ? zhCN.app.copyCodexCall : zhCN.app.copyClaudeCall;
-  useCopyFeedbackMotion(buttonRef, copied);
+  const playCopyFeedback = useCopyFeedbackMotion(buttonRef);
 
   async function copyPrompt() {
     if (!prompt) return;
@@ -26,6 +26,7 @@ export function PromptCopyButton({ prompt, target, compact }: PromptCopyButtonPr
       fallbackCopy(prompt.prompt);
     }
     setCopied(true);
+    playCopyFeedback();
     window.setTimeout(() => setCopied(false), 1400);
   }
 

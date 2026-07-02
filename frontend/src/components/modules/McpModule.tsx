@@ -1,4 +1,5 @@
 import { Box, Chip } from "@mui/material";
+import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -7,7 +8,7 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
 export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) {
-  const groups = getMcpGroups(resources);
+  const groups = useMemo(() => getMcpGroups(resources), [resources]);
 
   return (
     <Box className="module-surface" component="section" aria-label={moduleAriaLabel("mcp")}>

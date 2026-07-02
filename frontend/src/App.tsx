@@ -1,5 +1,5 @@
 import { Box, Typography } from "@mui/material";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
 import { DashboardModule } from "./components/modules/DashboardModule";
 import { LegacyModule } from "./components/modules/LegacyModule";
@@ -23,7 +23,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(() => window.matchMedia("(min-width: 1321px)").matches);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const moduleRef = useRef<HTMLDivElement>(null);
   useModuleSwapMotion(moduleRef, activeView);
 
@@ -31,33 +31,28 @@ export default function App() {
     loadInventory()
       .then((snapshot) => {
         setInventory(snapshot);
-        setSelectedId(snapshot.resources[0]?.id ?? null);
       })
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
   }, []);
 
   const filteredResources = useMemo(() => (inventory ? filterResources(inventory.resources, activeView, query) : []), [inventory, activeView, query]);
-  const selectedResource = useMemo(
-    () => inventory?.resources.find((resource) => resource.id === selectedId) ?? filteredResources[0] ?? null,
-    [filteredResources, inventory?.resources, selectedId]
-  );
+  const selectedResource = useMemo(() => (selectedId ? filteredResources.find((resource) => resource.id === selectedId) ?? null : null), [filteredResources, selectedId]);
 
-  useEffect(() => {
-    if (!filteredResources.length) return;
-    if (!selectedResource || !filteredResources.some((resource) => resource.id === selectedResource.id)) {
-      setSelectedId(filteredResources[0].id);
-    }
-  }, [filteredResources, selectedResource]);
-
-  function handleViewChange(view: ResourceView) {
+  const handleViewChange = useCallback((view: ResourceView) => {
+    const nextResources = inventory ? filterResources(inventory.resources, view, query) : [];
     setActiveView(view);
-    setSelectedId(null);
-  }
+    setSelectedId(view === "dashboard" ? null : nextResources[0]?.id ?? null);
+    setInspectorOpen(false);
+  }, [inventory, query]);
 
-  function selectResource(resource: AiosResource) {
+  const selectResource = useCallback((resource: AiosResource) => {
     setSelectedId(resource.id);
     setInspectorOpen(true);
-  }
+  }, []);
+
+  const closeInspector = useCallback(() => setInspectorOpen(false), []);
+  const toggleInspector = useCallback(() => setInspectorOpen((open) => !open), []);
+  const handleQueryChange = useCallback((value: string) => setQuery(value), []);
 
   if (error) {
     return (
@@ -98,9 +93,9 @@ export default function App() {
       query={query}
       selectedResource={selectedResource}
       shownCount={filteredResources.length}
-      onCloseInspector={() => setInspectorOpen(false)}
-      onQueryChange={setQuery}
-      onToggleInspector={() => setInspectorOpen((open) => !open)}
+      onCloseInspector={closeInspector}
+      onQueryChange={handleQueryChange}
+      onToggleInspector={toggleInspector}
       onViewChange={handleViewChange}
     >
       <Box ref={moduleRef} className="module-transition-scope">

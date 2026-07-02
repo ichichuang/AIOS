@@ -1,4 +1,5 @@
 import { Box, LinearProgress, Typography } from "@mui/material";
+import { memo } from "react";
 import { translateTokenReason } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource } from "../../types/inventory";
@@ -8,7 +9,7 @@ interface TokenPressurePanelProps {
   resource: AiosResource;
 }
 
-export function TokenPressurePanel({ resource }: TokenPressurePanelProps) {
+export const TokenPressurePanel = memo(function TokenPressurePanel({ resource }: TokenPressurePanelProps) {
   const level = resource.tokenPressure.level;
   const value = level === "high" ? 92 : level === "medium" ? 58 : 24;
 
@@ -27,4 +28,4 @@ export function TokenPressurePanel({ resource }: TokenPressurePanelProps) {
       </Typography>
     </Box>
   );
-}
+});

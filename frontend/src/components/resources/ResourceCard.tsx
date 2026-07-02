@@ -1,5 +1,6 @@
 import { Box, Button, Card, CardActionArea, CardActions, CardContent, Stack, Typography } from "@mui/material";
 import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
+import { memo } from "react";
 import { getMcpRiskLabels, getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
@@ -16,7 +17,7 @@ interface ResourceCardProps {
   onSelect: (resource: AiosResource) => void;
 }
 
-export function ResourceCard({ resource, selected, variant = "default", onSelect }: ResourceCardProps) {
+export const ResourceCard = memo(function ResourceCard({ resource, selected, variant = "default", onSelect }: ResourceCardProps) {
   const display = getResourceDisplay(resource);
   const server = getMcpServer(resource);
   const codexPrompt = resource.prompts.find((prompt) => prompt.target === "codex");
@@ -92,7 +93,7 @@ export function ResourceCard({ resource, selected, variant = "default", onSelect
       </CardActions>
     </Card>
   );
-}
+});
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
   if (variant === "mcp" && server) return getMcpRiskLabels(server);
