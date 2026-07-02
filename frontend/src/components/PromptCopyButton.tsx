@@ -1,19 +1,25 @@
-import { Button, Text } from "@radix-ui/themes";
+import { Button, Tooltip } from "@mui/material";
+import ContentCopyRounded from "@mui/icons-material/ContentCopyRounded";
 import { useRef, useState } from "react";
 import { zhCN } from "../i18n/zh-CN";
 import { useCopyFeedback } from "../lib/useAiosMotion";
-import type { UsagePrompt } from "../types/inventory";
+import type { PromptTarget, UsagePrompt } from "../types/inventory";
 
 interface PromptCopyButtonProps {
-  prompt: UsagePrompt;
+  prompt?: UsagePrompt;
+  target?: PromptTarget;
+  compact?: boolean;
 }
 
-export function PromptCopyButton({ prompt }: PromptCopyButtonProps) {
+export function PromptCopyButton({ prompt, target, compact }: PromptCopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const copyTarget = prompt?.target ?? target ?? "codex";
+  const label = copyTarget === "codex" ? zhCN.app.copyCodexCall : zhCN.app.copyClaudeCall;
   useCopyFeedback(buttonRef, copied);
 
   async function copyPrompt() {
+    if (!prompt) return;
     try {
       await navigator.clipboard.writeText(prompt.prompt);
     } catch {
@@ -24,10 +30,22 @@ export function PromptCopyButton({ prompt }: PromptCopyButtonProps) {
   }
 
   return (
-    <Button ref={buttonRef} className="copy-button" type="button" variant={copied ? "solid" : "soft"} onClick={copyPrompt}>
-      <Text as="span">{prompt.target === "codex" ? "Codex" : "Claude"}</Text>
-      <strong>{copied ? zhCN.app.copied : zhCN.app.copy}</strong>
-    </Button>
+    <Tooltip title={prompt ? `${label}：${prompt.title}` : zhCN.app.notAvailable}>
+      <span className="copy-tooltip-wrap">
+        <Button
+          ref={buttonRef}
+          className="copy-button"
+          disabled={!prompt}
+          size={compact ? "small" : "medium"}
+          startIcon={<ContentCopyRounded fontSize="small" />}
+          type="button"
+          variant={copied ? "contained" : "outlined"}
+          onClick={copyPrompt}
+        >
+          {copied ? zhCN.app.copied : label}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }
 

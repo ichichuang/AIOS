@@ -1,14 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Theme } from "@radix-ui/themes";
-import "@radix-ui/themes/styles.css";
+import { CssBaseline, ThemeProvider } from "@mui/material";
 import App from "./App";
 import "./styles.css";
+import { materialTheme } from "./theme/materialTheme";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <Theme appearance="light" accentColor="indigo" grayColor="slate" panelBackground="translucent" radius="medium" scaling="95%">
+    <ThemeProvider theme={materialTheme}>
+      <CssBaseline />
       <App />
-    </Theme>
+    </ThemeProvider>
   </React.StrictMode>
 );

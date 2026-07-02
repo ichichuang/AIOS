@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Badge, Card, Code, Flex, Text } from "@radix-ui/themes";
+import { AppBar, Box, Chip, Paper, Stack, Toolbar, Typography } from "@mui/material";
 import { formatSnapshotDate, zhCN } from "../i18n/zh-CN";
 import type { AiosInventory } from "../types/inventory";
 
@@ -8,59 +8,83 @@ interface AppShellProps {
   sidebar: ReactNode;
   main: ReactNode;
   detail: ReactNode;
+  commandBar: ReactNode;
 }
 
-export function AppShell({ inventory, sidebar, main, detail }: AppShellProps) {
+export function AppShell({ inventory, sidebar, main, detail, commandBar }: AppShellProps) {
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div>
-            <Text as="p" className="eyebrow">
+    <Box className="app-shell">
+      <Paper component="aside" className="sidebar" elevation={0}>
+        <Stack className="brand" spacing={1.5}>
+          <Box>
+            <Typography className="eyebrow" component="p">
               {zhCN.app.localOnly}
-            </Text>
-            <h1>{zhCN.app.title}</h1>
-            <p>{zhCN.app.subtitle}</p>
-          </div>
-          <Badge className="status-chip status-ok" variant="soft">
-            {zhCN.app.readOnly}
-          </Badge>
-        </div>
+            </Typography>
+            <Typography component="h1" variant="h1">
+              {zhCN.app.title}
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              {zhCN.app.subtitle}
+            </Typography>
+          </Box>
+          <Chip className="status-chip status-ok" label={zhCN.app.readOnly} />
+        </Stack>
         {sidebar}
-      </aside>
-      <main className="workspace">
-        <header className="topbar">
-          <div className="topbar-title">
-            <Text as="p" className="eyebrow">
-              {zhCN.app.sourceSnapshot}
-            </Text>
-            <h2>{zhCN.app.title}</h2>
-            <p>{zhCN.moduleSummaries.dashboard}</p>
-          </div>
-          <Flex className="topbar-metrics" gap="3" align="stretch">
-            <Card className="topbar-card" size="2">
-              <Text as="p" className="caption">
-                {zhCN.app.generatedAt}
-              </Text>
-              <strong>{formatSnapshotDate(inventory.generatedAt)}</strong>
-            </Card>
-            <Card className="topbar-card path-card" size="2">
-              <Text as="p" className="caption">
-                {zhCN.app.aiosRoot}
-              </Text>
-              <Code>{inventory.roots.aiosRoot}</Code>
-            </Card>
-            <Card className="topbar-card path-card" size="2">
-              <Text as="p" className="caption">
-                {zhCN.app.appSource}
-              </Text>
-              <Code>{inventory.roots.appSourcePath}</Code>
-            </Card>
-          </Flex>
-        </header>
-        <div className="workspace-body">{main}</div>
-      </main>
-      <aside className="inspector">{detail}</aside>
-    </div>
+      </Paper>
+
+      <Box component="main" className="workspace">
+        <AppBar className="topbar" color="transparent" elevation={0} position="static">
+          <Toolbar className="topbar-toolbar" disableGutters>
+            <Stack className="topbar-title" spacing={0.75}>
+              <Typography className="eyebrow" component="p">
+                {zhCN.app.sourceSnapshot}
+              </Typography>
+              <Typography component="h2" variant="h2">
+                {zhCN.app.title}
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                {zhCN.moduleSummaries.dashboard}
+              </Typography>
+            </Stack>
+
+            <Box className="topbar-command">{commandBar}</Box>
+
+            <Stack className="topbar-metrics" direction="row" spacing={1}>
+              <Metric label={zhCN.app.generatedAt} value={formatSnapshotDate(inventory.generatedAt)} />
+              <Metric label={zhCN.app.aiosRoot} value={inventory.roots.aiosRoot} code />
+              <Metric label={zhCN.app.appSource} value={inventory.roots.appSourcePath} code />
+            </Stack>
+          </Toolbar>
+        </AppBar>
+        <Box className="workspace-body">{main}</Box>
+      </Box>
+
+      <Paper component="aside" className="inspector" elevation={0}>
+        {detail}
+      </Paper>
+    </Box>
+  );
+}
+
+interface MetricProps {
+  label: string;
+  value: string;
+  code?: boolean;
+}
+
+function Metric({ label, value, code }: MetricProps) {
+  return (
+    <Box className="topbar-card">
+      <Typography className="caption" component="p">
+        {label}
+      </Typography>
+      {code ? (
+        <Box className="code-pill topbar-code" component="code">
+          {value}
+        </Box>
+      ) : (
+        <Typography component="strong">{value}</Typography>
+      )}
+    </Box>
   );
 }

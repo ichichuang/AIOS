@@ -1,4 +1,5 @@
-import { Badge, TextField } from "@radix-ui/themes";
+import { Box, Chip, InputAdornment, Stack, TextField, Typography } from "@mui/material";
+import SearchRounded from "@mui/icons-material/SearchRounded";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { BaselineSummary } from "./components/BaselineSummary";
@@ -51,57 +52,79 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="center-state">
-        <h1>{zhCN.app.errorTitle}</h1>
-        <p>{error}</p>
-      </div>
+      <Box className="center-state">
+        <Typography component="h1" variant="h1">
+          {zhCN.app.errorTitle}
+        </Typography>
+        <Typography>{error}</Typography>
+      </Box>
     );
   }
 
   if (!inventory) {
     return (
-      <div className="center-state">
-        <h1>{zhCN.app.loadingTitle}</h1>
-        <p>{zhCN.app.loadingBody}</p>
-      </div>
+      <Box className="center-state">
+        <Typography component="h1" variant="h1">
+          {zhCN.app.loadingTitle}
+        </Typography>
+        <Typography>{zhCN.app.loadingBody}</Typography>
+      </Box>
     );
   }
+
+  const commandBar = (
+    <TextField
+      aria-label={zhCN.app.commandLabel}
+      fullWidth
+      placeholder={zhCN.app.commandPlaceholder}
+      type="search"
+      value={query}
+      onChange={(event) => setQuery(event.target.value)}
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchRounded fontSize="small" />
+            </InputAdornment>
+          )
+        }
+      }}
+    />
+  );
 
   const sidebar = <ResourceTypeNav activeView={activeView} onChange={setActiveView} resources={inventory.resources} />;
 
   const main = (
-    <div className="main-stack" ref={mainRef}>
+    <Box className="main-stack" ref={mainRef}>
       <ModuleOverview resources={inventory.resources} activeView={activeView} onChange={setActiveView} />
       <BaselineSummary baseline={inventory.baseline} />
-      <section className="toolbar" aria-label="资源过滤">
-        <div className="toolbar-copy">
-          <h2>{zhCN.app.activeModule}</h2>
-          <p>{zhCN.moduleSummaries[activeView]}</p>
-        </div>
-        <TextField.Root
-          aria-label={zhCN.app.commandLabel}
-          className="command-search"
-          placeholder={zhCN.app.commandPlaceholder}
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <Badge variant="soft">
-          {VIEW_LABELS[activeView]} / {filteredResources.length} {zhCN.app.countUnit}
-        </Badge>
-      </section>
+      <Box className="module-toolbar" component="section" aria-label="当前模块状态">
+        <Stack spacing={0.35} sx={{ minWidth: 0 }}>
+          <Typography component="h2" variant="h3">
+            {VIEW_LABELS[activeView]}
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            {zhCN.moduleSummaries[activeView]}
+          </Typography>
+        </Stack>
+        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, justifyContent: "flex-end" }}>
+          <Chip color="primary" label={`${filteredResources.length} ${zhCN.app.shown}`} variant="filled" />
+          <Chip label={`${inventory.resources.length} ${zhCN.app.total}`} variant="outlined" />
+          <Chip className="status-chip status-ok" label={zhCN.app.safetyState} />
+        </Stack>
+      </Box>
       <ResourceList activeView={activeView} resources={filteredResources} selectedId={selectedResource?.id ?? null} onSelect={selectResource} />
-    </div>
+    </Box>
   );
 
   const detail = (
-    <div className="inspector-stack">
+    <Box className="inspector-stack">
       <ResourceDetail resource={selectedResource} />
       <SkillPressurePanel resources={inventory.resources} />
       <McpInventoryPanel servers={inventory.mcpServers} />
       <SafetyBoundaryPanel baseline={inventory.baseline} />
-    </div>
+    </Box>
   );
 
-  return <AppShell detail={detail} inventory={inventory} main={main} sidebar={sidebar} />;
+  return <AppShell commandBar={commandBar} detail={detail} inventory={inventory} main={main} sidebar={sidebar} />;
 }

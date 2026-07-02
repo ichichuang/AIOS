@@ -1,4 +1,4 @@
-import { Badge, Card, Text } from "@radix-ui/themes";
+import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import { translateKnownWarning, translateValidatorSummary } from "../i18n/resourceText";
 import { zhCN } from "../i18n/zh-CN";
 import type { BaselineSummary } from "../types/inventory";
@@ -9,33 +9,43 @@ interface SafetyBoundaryPanelProps {
 
 export function SafetyBoundaryPanel({ baseline }: SafetyBoundaryPanelProps) {
   return (
-    <section className="side-panel">
-      <h2>{zhCN.safetyBoundaries.title}</h2>
-      <ul className="note-list">
+    <Box className="side-panel" component="section">
+      <Typography component="h2" variant="h3">
+        {zhCN.safetyBoundaries.title}
+      </Typography>
+      <Box className="note-list" component="ul">
         {zhCN.safetyBoundaries.items.map((boundary) => (
           <li key={boundary}>{boundary}</li>
         ))}
-      </ul>
-      <div className="known-warnings">
-        <h3>{zhCN.validators.title}</h3>
+      </Box>
+      <Box className="known-warnings">
+        <Typography component="h3" variant="h3">
+          {zhCN.validators.title}
+        </Typography>
         {baseline.validators.map((validator) => (
-          <Card className="validator-card" key={validator.name} size="1">
-            <Text as="div" weight="bold">
-              {validator.name}
-            </Text>
-            <Badge className={`status-chip status-${validator.status}`} variant="soft">
-              {zhCN.statuses[validator.status]}
-            </Badge>
-            <p>{translateValidatorSummary(validator)}</p>
+          <Card className="validator-card" key={validator.name}>
+            <CardContent>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Typography component="strong">{validator.name}</Typography>
+                <Chip className={`status-chip status-${validator.status}`} label={zhCN.statuses[validator.status]} />
+              </Stack>
+              <Typography color="text.secondary" variant="body2">
+                {translateValidatorSummary(validator)}
+              </Typography>
+            </CardContent>
           </Card>
         ))}
-      </div>
-      <div className="known-warnings">
-        <h3>{zhCN.safetyBoundaries.knownWarnings}</h3>
+      </Box>
+      <Box className="known-warnings">
+        <Typography component="h3" variant="h3">
+          {zhCN.safetyBoundaries.knownWarnings}
+        </Typography>
         {baseline.knownWarnings.map((warning) => (
-          <p key={warning}>{translateKnownWarning(warning)}</p>
+          <Typography color="text.secondary" key={warning} variant="body2">
+            {translateKnownWarning(warning)}
+          </Typography>
         ))}
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }

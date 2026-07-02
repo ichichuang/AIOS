@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T04:02:02.815Z",
+  "generatedAt": "2026-07-02T05:49:02.726Z",
   "roots": {
     "aiosRoot": "/Users/cc/.ai",
     "appSourcePath": "/Users/cc/.ai/AIOS"
@@ -8,7 +8,7 @@
   "baseline": {
     "aiosRoot": "/Users/cc/.ai",
     "appSourcePath": "/Users/cc/.ai/AIOS",
-    "generatedAt": "2026-07-02T04:02:02.815Z",
+    "generatedAt": "2026-07-02T05:49:02.726Z",
     "policyHash": "742abe0a9a9d5c920716aa1a25fd6e99886973039dff3ccfcc51407067fb09d6",
     "canonicalSkillCount": 69,
     "codexTopLevelCount": 20,
@@ -9480,6 +9480,49 @@
           "risk": "medium",
           "sourcePath": "/Users/cc/.codex/config.toml"
         }
+      }
+    },
+    {
+      "id": "project-local:pack:-users-cc-ai-aios-agents-skills-aios-google-material-style-skill-md",
+      "name": "aios-google-material-style",
+      "toolType": "project-local",
+      "capabilityType": "project-pack",
+      "status": "available",
+      "risk": "medium",
+      "path": "/Users/cc/.ai/AIOS/.agents/skills/aios-google-material-style/SKILL.md",
+      "paths": [
+        "/Users/cc/.ai/AIOS/.agents/skills/aios-google-material-style/SKILL.md"
+      ],
+      "description": "Project-local skill pack detected under /Users/cc/.ai/AIOS. Use only in the owning project; do not promote to global AIOS entrypoints.",
+      "safetyProfile": {
+        "readOnly": true,
+        "writesGlobalState": false,
+        "secretExposureRisk": "low",
+        "executionRisk": "low",
+        "notes": [
+          "Project-local pack detection is bounded.",
+          "The scanner does not modify or copy this skill pack."
+        ]
+      },
+      "tokenPressure": {
+        "estimatedTokens": 34,
+        "level": "low",
+        "reason": "Project-local pack metadata only."
+      },
+      "prompts": [
+        {
+          "target": "codex",
+          "title": "Codex project-local skill prompt",
+          "prompt": "Use this project-local skill pack only for the target project. Read the SKILL.md for this task, do not copy it into global skill entrypoints, and inspect git state before any project write. Relevant local path(s): /Users/cc/.ai/AIOS/.agents/skills/aios-google-material-style/SKILL.md"
+        },
+        {
+          "target": "claude",
+          "title": "Claude project-local skill prompt",
+          "prompt": "Use this project-local skill pack only in its owning project. Do not promote it to global skills and do not modify shared AIOS skill sources. Relevant local path(s): /Users/cc/.ai/AIOS/.agents/skills/aios-google-material-style/SKILL.md"
+        }
+      ],
+      "metadata": {
+        "root": "/Users/cc/.ai/AIOS"
       }
     },
     {

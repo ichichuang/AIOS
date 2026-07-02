@@ -1,4 +1,5 @@
-import { Badge, Card, Code, Flex, Separator, Text } from "@radix-ui/themes";
+import { Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
+import type { ReactNode } from "react";
 import { useRef } from "react";
 import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../i18n/resourceText";
 import { zhCN } from "../i18n/zh-CN";
@@ -16,11 +17,13 @@ export function ResourceDetail({ resource }: ResourceDetailProps) {
 
   if (!resource) {
     return (
-      <Card asChild className="detail-panel" size="3">
-        <section ref={detailRef}>
-          <h2>{zhCN.app.detailPanel}</h2>
-          <p className="muted">{zhCN.app.inspectorEmpty}</p>
-        </section>
+      <Card className="detail-panel" component="section" ref={detailRef}>
+        <CardContent>
+          <Typography component="h2" variant="h3">
+            {zhCN.app.detailPanel}
+          </Typography>
+          <Typography color="text.secondary">{zhCN.app.inspectorEmpty}</Typography>
+        </CardContent>
       </Card>
     );
   }
@@ -28,77 +31,102 @@ export function ResourceDetail({ resource }: ResourceDetailProps) {
   const display = getResourceDisplay(resource);
 
   return (
-    <Card asChild className="detail-panel" size="3">
-    <section ref={detailRef}>
-      <div className="detail-title">
-        <div>
-          <p className="caption">{display.zhCategory}</p>
-          <h2>{display.zhName}</h2>
-          <Code>{display.technicalName}</Code>
-        </div>
-        <Badge className={`risk-chip risk-${resource.risk}`} variant="soft">
-          {display.zhRisk}
-        </Badge>
-      </div>
+    <Card className="detail-panel" component="section" ref={detailRef}>
+      <CardContent>
+        <Stack className="detail-title" direction="row" spacing={1.5} sx={{ justifyContent: "space-between" }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography className="caption" component="p">
+              {display.zhCategory}
+            </Typography>
+            <Typography component="h2" variant="h2">
+              {display.zhName}
+            </Typography>
+            <Box className="code-pill" component="code">
+              {display.technicalName}
+            </Box>
+          </Box>
+          <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
+        </Stack>
 
-      <p className="detail-description">{display.zhDescription}</p>
-      <p className="muted">{display.zhRiskDescription}</p>
+        <Typography className="detail-description" color="text.secondary">
+          {display.zhDescription}
+        </Typography>
+        <Typography color="text.secondary" variant="body2">
+          {display.zhRiskDescription}
+        </Typography>
 
-      <Separator size="4" />
+        <Divider />
 
-      <div className="detail-block">
-        <h3>{zhCN.app.pathPreview}</h3>
-        {resource.paths.length > 0 ? (
-          resource.paths.map((item) => <Code key={item}>{item}</Code>)
-        ) : (
-          <span className="muted">{zhCN.app.noPath}</span>
-        )}
-      </div>
-
-      <div className="detail-block">
-        <h3>{zhCN.safetyFields.notes}</h3>
-        <dl className="detail-grid">
-          <dt>{zhCN.safetyFields.readOnly}</dt>
-          <dd>{resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no}</dd>
-          <dt>{zhCN.safetyFields.writesGlobalState}</dt>
-          <dd>{resource.safetyProfile.writesGlobalState ? zhCN.booleans.yes : zhCN.booleans.no}</dd>
-          <dt>{zhCN.safetyFields.secretExposureRisk}</dt>
-          <dd>{zhCN.risks[resource.safetyProfile.secretExposureRisk]}</dd>
-          <dt>{zhCN.safetyFields.executionRisk}</dt>
-          <dd>{zhCN.risks[resource.safetyProfile.executionRisk]}</dd>
-        </dl>
-        <ul className="note-list">
-          {resource.safetyProfile.notes.map((note) => (
-            <li key={note}>{translateSafetyNote(note)}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="detail-block">
-        <h3>{zhCN.tokenFields.title}</h3>
-        <dl className="detail-grid">
-          <dt>{zhCN.tokenFields.level}</dt>
-          <dd>{zhCN.risks[resource.tokenPressure.level]}</dd>
-          <dt>{zhCN.tokenFields.estimatedTokens}</dt>
-          <dd>{resource.tokenPressure.estimatedTokens}</dd>
-        </dl>
-        <span className="muted">{translateTokenReason(resource.tokenPressure.reason)}</span>
-      </div>
-
-      <div className="detail-block">
-        <h3>{zhCN.app.copyPrompt}</h3>
-        <div className="prompt-list">
-          {resource.prompts.length > 0 ? (
-            resource.prompts.map((prompt) => <PromptCopyButton key={`${resource.id}-${prompt.target}-${prompt.title}`} prompt={prompt} />)
+        <DetailBlock title={zhCN.app.pathPreview}>
+          {resource.paths.length > 0 ? (
+            resource.paths.map((item) => (
+              <Box className="code-pill path-detail" component="code" key={item}>
+                {item}
+              </Box>
+            ))
           ) : (
-            <Text className="muted" size="2">
-              {zhCN.app.notAvailable}
-            </Text>
+            <Typography color="text.secondary">{zhCN.app.noPath}</Typography>
           )}
-        </div>
-        {resource.prompts.length > 0 && <p className="muted">{zhCN.app.promptBodyEnglish}</p>}
-      </div>
-    </section>
+        </DetailBlock>
+
+        <DetailBlock title={zhCN.safetyFields.notes}>
+          <Box className="detail-grid" component="dl">
+            <Typography component="dt">{zhCN.safetyFields.readOnly}</Typography>
+            <Typography component="dd">{resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no}</Typography>
+            <Typography component="dt">{zhCN.safetyFields.writesGlobalState}</Typography>
+            <Typography component="dd">{resource.safetyProfile.writesGlobalState ? zhCN.booleans.yes : zhCN.booleans.no}</Typography>
+            <Typography component="dt">{zhCN.safetyFields.secretExposureRisk}</Typography>
+            <Typography component="dd">{zhCN.risks[resource.safetyProfile.secretExposureRisk]}</Typography>
+            <Typography component="dt">{zhCN.safetyFields.executionRisk}</Typography>
+            <Typography component="dd">{zhCN.risks[resource.safetyProfile.executionRisk]}</Typography>
+          </Box>
+          <Box className="note-list" component="ul">
+            {resource.safetyProfile.notes.map((note) => (
+              <li key={note}>{translateSafetyNote(note)}</li>
+            ))}
+          </Box>
+        </DetailBlock>
+
+        <DetailBlock title={zhCN.tokenFields.title}>
+          <Box className="detail-grid" component="dl">
+            <Typography component="dt">{zhCN.tokenFields.level}</Typography>
+            <Typography component="dd">{zhCN.risks[resource.tokenPressure.level]}</Typography>
+            <Typography component="dt">{zhCN.tokenFields.estimatedTokens}</Typography>
+            <Typography component="dd">{resource.tokenPressure.estimatedTokens}</Typography>
+          </Box>
+          <Typography color="text.secondary" variant="body2">
+            {translateTokenReason(resource.tokenPressure.reason)}
+          </Typography>
+        </DetailBlock>
+
+        <DetailBlock title={zhCN.app.copyPrompt}>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+            <PromptCopyButton prompt={resource.prompts.find((prompt) => prompt.target === "codex")} target="codex" />
+            <PromptCopyButton prompt={resource.prompts.find((prompt) => prompt.target === "claude")} target="claude" />
+          </Stack>
+          {resource.prompts.length > 0 && (
+            <Typography color="text.secondary" variant="body2">
+              {zhCN.app.promptBodyEnglish}
+            </Typography>
+          )}
+        </DetailBlock>
+      </CardContent>
     </Card>
+  );
+}
+
+interface DetailBlockProps {
+  title: string;
+  children: ReactNode;
+}
+
+function DetailBlock({ title, children }: DetailBlockProps) {
+  return (
+    <Box className="detail-block">
+      <Typography component="h3" variant="h3">
+        {title}
+      </Typography>
+      {children}
+    </Box>
   );
 }

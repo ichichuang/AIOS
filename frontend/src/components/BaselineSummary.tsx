@@ -1,4 +1,4 @@
-import { Badge, Card, Code, Text } from "@radix-ui/themes";
+import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import { formatAutomationState, shortHash, zhCN } from "../i18n/zh-CN";
 import type { BaselineSummary as BaselineSummaryType } from "../types/inventory";
 
@@ -10,58 +10,47 @@ export function BaselineSummary({ baseline }: BaselineSummaryProps) {
   const routerStatus = baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用";
 
   return (
-    <section className="summary-grid" aria-label="基线摘要">
-      <Card className="metric-panel wide" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.policyHash}
-        </Text>
-        <strong>{shortHash(baseline.policyHash)}</strong>
-        <span>{baseline.policyHash ? zhCN.dashboardMetrics.guardTarget : zhCN.dashboardMetrics.policyMissing}</span>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.canonicalSkills}
-        </Text>
-        <strong>{baseline.canonicalSkillCount}</strong>
-        <Code>/Users/cc/.ai</Code>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.codexActive}
-        </Text>
-        <strong>{baseline.codexActiveUserSkillCount}</strong>
-        <span>
-          {baseline.codexTopLevelCount} {zhCN.dashboardMetrics.topLevelReserved}
-        </span>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.agentsActive}
-        </Text>
-        <strong>{baseline.agentsActiveUserSkillCount}</strong>
-        <span>{zhCN.dashboardMetrics.globalEntrypoints}</span>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.claudeSkills}
-        </Text>
-        <strong>{baseline.claudeSkillCount ?? zhCN.app.notAvailable}</strong>
-        <span>{zhCN.dashboardMetrics.safeEntrypointMetadata}</span>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.router}
-        </Text>
-        <strong>{routerStatus}</strong>
-        <Badge variant="soft">{zhCN.dashboardMetrics.customSkillRouter}</Badge>
-      </Card>
-      <Card className="metric-panel" size="2">
-        <Text as="p" className="caption">
-          {zhCN.dashboardMetrics.codexAutomations}
-        </Text>
-        <strong>{formatAutomationState(baseline.codexAutomationDirectoryState)}</strong>
-        <span>{zhCN.dashboardMetrics.mustNotRecreate}</span>
-      </Card>
-    </section>
+    <Box className="summary-grid" component="section" aria-label="基线摘要">
+      <MetricCard label={zhCN.dashboardMetrics.policyHash} value={shortHash(baseline.policyHash)} note={baseline.policyHash ? zhCN.dashboardMetrics.guardTarget : zhCN.dashboardMetrics.policyMissing} wide />
+      <MetricCard label={zhCN.dashboardMetrics.canonicalSkills} value={String(baseline.canonicalSkillCount)} note="/Users/cc/.ai" codeNote />
+      <MetricCard label={zhCN.dashboardMetrics.codexActive} value={String(baseline.codexActiveUserSkillCount)} note={`${baseline.codexTopLevelCount} ${zhCN.dashboardMetrics.topLevelReserved}`} />
+      <MetricCard label={zhCN.dashboardMetrics.agentsActive} value={String(baseline.agentsActiveUserSkillCount)} note={zhCN.dashboardMetrics.globalEntrypoints} />
+      <MetricCard label={zhCN.dashboardMetrics.claudeSkills} value={String(baseline.claudeSkillCount ?? zhCN.app.notAvailable)} note={zhCN.dashboardMetrics.safeEntrypointMetadata} />
+      <MetricCard label={zhCN.dashboardMetrics.router} value={routerStatus} note={zhCN.dashboardMetrics.customSkillRouter} chipNote />
+      <MetricCard label={zhCN.dashboardMetrics.codexAutomations} value={formatAutomationState(baseline.codexAutomationDirectoryState)} note={zhCN.dashboardMetrics.mustNotRecreate} />
+    </Box>
+  );
+}
+
+interface MetricCardProps {
+  label: string;
+  value: string;
+  note: string;
+  wide?: boolean;
+  chipNote?: boolean;
+  codeNote?: boolean;
+}
+
+function MetricCard({ label, value, note, wide, chipNote, codeNote }: MetricCardProps) {
+  return (
+    <Card className={wide ? "metric-panel wide" : "metric-panel"}>
+      <CardContent>
+        <Typography className="caption" component="p">
+          {label}
+        </Typography>
+        <Typography component="strong">{value}</Typography>
+        {chipNote ? (
+          <Chip label={note} variant="outlined" />
+        ) : codeNote ? (
+          <Box className="code-pill" component="code">
+            {note}
+          </Box>
+        ) : (
+          <Typography color="text.secondary" component="span">
+            {note}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
   );
 }
