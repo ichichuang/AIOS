@@ -1,3 +1,8 @@
+import { Badge, Card, Code, Flex, Separator, Text } from "@radix-ui/themes";
+import { useRef } from "react";
+import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../i18n/resourceText";
+import { zhCN } from "../i18n/zh-CN";
+import { useDetailSwitch } from "../lib/useAiosMotion";
 import { PromptCopyButton } from "./PromptCopyButton";
 import type { AiosResource } from "../types/inventory";
 
@@ -6,71 +11,94 @@ interface ResourceDetailProps {
 }
 
 export function ResourceDetail({ resource }: ResourceDetailProps) {
+  const detailRef = useRef<HTMLElement>(null);
+  useDetailSwitch(detailRef, resource?.id ?? "empty");
+
   if (!resource) {
     return (
-      <section className="detail-panel">
-        <h2>Resource detail</h2>
-        <p className="muted">No resource selected.</p>
-      </section>
+      <Card asChild className="detail-panel" size="3">
+        <section ref={detailRef}>
+          <h2>{zhCN.app.detailPanel}</h2>
+          <p className="muted">{zhCN.app.inspectorEmpty}</p>
+        </section>
+      </Card>
     );
   }
 
+  const display = getResourceDisplay(resource);
+
   return (
-    <section className="detail-panel">
+    <Card asChild className="detail-panel" size="3">
+    <section ref={detailRef}>
       <div className="detail-title">
         <div>
-          <p className="caption">{resource.toolType} / {resource.capabilityType}</p>
-          <h2>{resource.name}</h2>
+          <p className="caption">{display.zhCategory}</p>
+          <h2>{display.zhName}</h2>
+          <Code>{display.technicalName}</Code>
         </div>
-        <span className={`risk-chip risk-${resource.risk}`}>{resource.risk}</span>
+        <Badge className={`risk-chip risk-${resource.risk}`} variant="soft">
+          {display.zhRisk}
+        </Badge>
       </div>
 
-      <p className="detail-description">{resource.description}</p>
+      <p className="detail-description">{display.zhDescription}</p>
+      <p className="muted">{display.zhRiskDescription}</p>
+
+      <Separator size="4" />
 
       <div className="detail-block">
-        <h3>Paths</h3>
+        <h3>{zhCN.app.pathPreview}</h3>
         {resource.paths.length > 0 ? (
-          resource.paths.map((item) => <code key={item}>{item}</code>)
+          resource.paths.map((item) => <Code key={item}>{item}</Code>)
         ) : (
-          <span className="muted">No path</span>
+          <span className="muted">{zhCN.app.noPath}</span>
         )}
       </div>
 
       <div className="detail-block">
-        <h3>Safety profile</h3>
+        <h3>{zhCN.safetyFields.notes}</h3>
         <dl className="detail-grid">
-          <dt>Read only</dt>
-          <dd>{resource.safetyProfile.readOnly ? "yes" : "no"}</dd>
-          <dt>Global writes</dt>
-          <dd>{resource.safetyProfile.writesGlobalState ? "yes" : "no"}</dd>
-          <dt>Secret risk</dt>
-          <dd>{resource.safetyProfile.secretExposureRisk}</dd>
-          <dt>Execution risk</dt>
-          <dd>{resource.safetyProfile.executionRisk}</dd>
+          <dt>{zhCN.safetyFields.readOnly}</dt>
+          <dd>{resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no}</dd>
+          <dt>{zhCN.safetyFields.writesGlobalState}</dt>
+          <dd>{resource.safetyProfile.writesGlobalState ? zhCN.booleans.yes : zhCN.booleans.no}</dd>
+          <dt>{zhCN.safetyFields.secretExposureRisk}</dt>
+          <dd>{zhCN.risks[resource.safetyProfile.secretExposureRisk]}</dd>
+          <dt>{zhCN.safetyFields.executionRisk}</dt>
+          <dd>{zhCN.risks[resource.safetyProfile.executionRisk]}</dd>
         </dl>
         <ul className="note-list">
           {resource.safetyProfile.notes.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={note}>{translateSafetyNote(note)}</li>
           ))}
         </ul>
       </div>
 
       <div className="detail-block">
-        <h3>Token pressure</h3>
-        <p>
-          <strong>{resource.tokenPressure.level}</strong> / approx. {resource.tokenPressure.estimatedTokens} tokens
-        </p>
-        <span className="muted">{resource.tokenPressure.reason}</span>
+        <h3>{zhCN.tokenFields.title}</h3>
+        <dl className="detail-grid">
+          <dt>{zhCN.tokenFields.level}</dt>
+          <dd>{zhCN.risks[resource.tokenPressure.level]}</dd>
+          <dt>{zhCN.tokenFields.estimatedTokens}</dt>
+          <dd>{resource.tokenPressure.estimatedTokens}</dd>
+        </dl>
+        <span className="muted">{translateTokenReason(resource.tokenPressure.reason)}</span>
       </div>
 
       <div className="detail-block">
-        <h3>Usage prompts</h3>
+        <h3>{zhCN.app.copyPrompt}</h3>
         <div className="prompt-list">
-          {resource.prompts.map((prompt) => (
-            <PromptCopyButton key={`${resource.id}-${prompt.target}-${prompt.title}`} prompt={prompt} />
-          ))}
+          {resource.prompts.length > 0 ? (
+            resource.prompts.map((prompt) => <PromptCopyButton key={`${resource.id}-${prompt.target}-${prompt.title}`} prompt={prompt} />)
+          ) : (
+            <Text className="muted" size="2">
+              {zhCN.app.notAvailable}
+            </Text>
+          )}
         </div>
+        {resource.prompts.length > 0 && <p className="muted">{zhCN.app.promptBodyEnglish}</p>}
       </div>
     </section>
+    </Card>
   );
 }

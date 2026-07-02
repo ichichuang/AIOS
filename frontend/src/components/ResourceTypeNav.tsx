@@ -1,3 +1,4 @@
+import { Badge, Tabs } from "@radix-ui/themes";
 import { countByView, type ResourceView, VIEW_LABELS } from "../lib/filtering";
 import type { AiosResource } from "../types/inventory";
 
@@ -11,13 +12,15 @@ interface ResourceTypeNavProps {
 
 export function ResourceTypeNav({ resources, activeView, onChange }: ResourceTypeNavProps) {
   return (
-    <nav className="resource-nav" aria-label="Resource types">
-      {views.map((view) => (
-        <button className={view === activeView ? "nav-item active" : "nav-item"} key={view} type="button" onClick={() => onChange(view)}>
-          <span>{VIEW_LABELS[view]}</span>
-          <strong>{countByView(resources, view)}</strong>
-        </button>
-      ))}
-    </nav>
+    <Tabs.Root value={activeView} onValueChange={(view) => onChange(view as ResourceView)}>
+      <Tabs.List className="resource-nav" aria-label="资源模块">
+        {views.map((view) => (
+          <Tabs.Trigger className="nav-item" key={view} value={view}>
+            <span>{VIEW_LABELS[view]}</span>
+            <Badge variant="soft">{countByView(resources, view)}</Badge>
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+    </Tabs.Root>
   );
 }

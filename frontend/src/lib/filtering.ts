@@ -1,4 +1,6 @@
 import type { AiosResource, CapabilityType } from "../types/inventory";
+import { zhCN } from "../i18n/zh-CN";
+import { getResourceDisplay } from "../i18n/resourceText";
 
 export type ResourceView =
   | "dashboard"
@@ -12,15 +14,15 @@ export type ResourceView =
   | "legacy";
 
 export const VIEW_LABELS: Record<ResourceView, string> = {
-  dashboard: "Dashboard",
-  skills: "Skills",
-  mcp: "MCP",
-  scripts: "Scripts",
-  reports: "Reports",
-  "project-packs": "Project-local packs",
-  policies: "Policies",
-  validators: "Validators",
-  legacy: "Legacy"
+  dashboard: zhCN.views.dashboard,
+  skills: zhCN.views.skills,
+  mcp: zhCN.views.mcp,
+  scripts: zhCN.views.scripts,
+  reports: zhCN.views.reports,
+  "project-packs": zhCN.views["project-packs"],
+  policies: zhCN.views.policies,
+  validators: zhCN.views.validators,
+  legacy: zhCN.views.legacy
 };
 
 const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
@@ -46,7 +48,21 @@ export function filterResources(resources: AiosResource[], view: ResourceView, q
   return resources.filter((resource) => {
     if (!belongsToView(resource, view)) return false;
     if (!normalized) return true;
-    const haystack = [resource.name, resource.toolType, resource.capabilityType, resource.status, resource.risk, resource.path, resource.description]
+    const display = getResourceDisplay(resource);
+    const haystack = [
+      resource.name,
+      resource.toolType,
+      resource.capabilityType,
+      resource.status,
+      resource.risk,
+      resource.path,
+      resource.description,
+      display.zhName,
+      display.zhDescription,
+      display.zhCategory,
+      display.zhStatus,
+      display.zhRisk
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();

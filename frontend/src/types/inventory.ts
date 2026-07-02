@@ -55,6 +55,15 @@ export interface UsagePrompt {
 export interface AiosResource {
   id: string;
   name: string;
+  zhName?: string;
+  zhDescription?: string;
+  zhCategory?: string;
+  zhStatus?: string;
+  zhRisk?: string;
+  zhCapability?: string;
+  zhToolType?: string;
+  uiGroup?: string;
+  moduleSummary?: string;
   toolType: ToolType;
   capabilityType: CapabilityType;
   status: ResourceStatus;

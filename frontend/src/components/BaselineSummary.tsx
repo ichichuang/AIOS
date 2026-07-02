@@ -1,53 +1,67 @@
+import { Badge, Card, Code, Text } from "@radix-ui/themes";
+import { formatAutomationState, shortHash, zhCN } from "../i18n/zh-CN";
 import type { BaselineSummary as BaselineSummaryType } from "../types/inventory";
-
-function shortHash(hash: string | null): string {
-  return hash ? `${hash.slice(0, 12)}...${hash.slice(-8)}` : "missing";
-}
 
 interface BaselineSummaryProps {
   baseline: BaselineSummaryType;
 }
 
 export function BaselineSummary({ baseline }: BaselineSummaryProps) {
-  const routerStatus = baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "Partial";
+  const routerStatus = baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用";
 
   return (
-    <section className="summary-grid" aria-label="Baseline summary">
-      <article className="metric-panel wide">
-        <p className="caption">Policy hash</p>
+    <section className="summary-grid" aria-label="基线摘要">
+      <Card className="metric-panel wide" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.policyHash}
+        </Text>
         <strong>{shortHash(baseline.policyHash)}</strong>
-        <span>{baseline.policyHash ? "unchanged guard target" : "policy file missing"}</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Canonical skills</p>
+        <span>{baseline.policyHash ? zhCN.dashboardMetrics.guardTarget : zhCN.dashboardMetrics.policyMissing}</span>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.canonicalSkills}
+        </Text>
         <strong>{baseline.canonicalSkillCount}</strong>
-        <span>/Users/cc/.ai</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Codex active</p>
+        <Code>/Users/cc/.ai</Code>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.codexActive}
+        </Text>
         <strong>{baseline.codexActiveUserSkillCount}</strong>
-        <span>{baseline.codexTopLevelCount} top-level incl. reserved</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Agents active</p>
+        <span>
+          {baseline.codexTopLevelCount} {zhCN.dashboardMetrics.topLevelReserved}
+        </span>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.agentsActive}
+        </Text>
         <strong>{baseline.agentsActiveUserSkillCount}</strong>
-        <span>global entrypoints</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Claude skills</p>
-        <strong>{baseline.claudeSkillCount ?? "n/a"}</strong>
-        <span>safe entrypoint metadata</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Router</p>
+        <span>{zhCN.dashboardMetrics.globalEntrypoints}</span>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.claudeSkills}
+        </Text>
+        <strong>{baseline.claudeSkillCount ?? zhCN.app.notAvailable}</strong>
+        <span>{zhCN.dashboardMetrics.safeEntrypointMetadata}</span>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.router}
+        </Text>
         <strong>{routerStatus}</strong>
-        <span>custom-skill-router</span>
-      </article>
-      <article className="metric-panel">
-        <p className="caption">Codex automations</p>
-        <strong>{baseline.codexAutomationDirectoryState.summary}</strong>
-        <span>must not be recreated by app</span>
-      </article>
+        <Badge variant="soft">{zhCN.dashboardMetrics.customSkillRouter}</Badge>
+      </Card>
+      <Card className="metric-panel" size="2">
+        <Text as="p" className="caption">
+          {zhCN.dashboardMetrics.codexAutomations}
+        </Text>
+        <strong>{formatAutomationState(baseline.codexAutomationDirectoryState)}</strong>
+        <span>{zhCN.dashboardMetrics.mustNotRecreate}</span>
+      </Card>
     </section>
   );
 }
