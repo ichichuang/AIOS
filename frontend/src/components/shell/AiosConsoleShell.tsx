@@ -9,36 +9,32 @@ import { AiosTopCommandBar } from "./AiosTopCommandBar";
 interface AiosConsoleShellProps {
   activeView: ResourceView;
   children: ReactNode;
-  inspectorOpen: boolean;
   inventory: AiosInventory;
   query: string;
   selectedResource: AiosResource | null;
   shownCount: number;
   viewCounts: Record<ResourceView, number>;
-  onCloseInspector: () => void;
+  onClearSelection: () => void;
   onQueryChange: (query: string) => void;
-  onToggleInspector: () => void;
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosConsoleShell({ activeView, children, inspectorOpen, inventory, query, selectedResource, shownCount, viewCounts, onCloseInspector, onQueryChange, onToggleInspector, onViewChange }: AiosConsoleShellProps) {
+export function AiosConsoleShell({ activeView, children, inventory, query, selectedResource, shownCount, viewCounts, onClearSelection, onQueryChange, onViewChange }: AiosConsoleShellProps) {
   return (
-    <Box className={inspectorOpen ? "aios-console-shell inspector-open" : "aios-console-shell"}>
+    <Box className="aios-console-shell">
       <AiosNavigationRail activeView={activeView} viewCounts={viewCounts} onChange={onViewChange} />
       <Box className="aios-console-main">
         <AiosTopCommandBar
           activeView={activeView}
-          inspectorOpen={inspectorOpen}
           inventory={inventory}
           query={query}
           shownCount={shownCount}
           onQueryChange={onQueryChange}
-          onToggleInspector={onToggleInspector}
           onViewChange={onViewChange}
         />
         <Box className="module-workspace">{children}</Box>
       </Box>
-      <AiosInspectorSheet open={inspectorOpen} resource={selectedResource} onClose={onCloseInspector} />
+      <AiosInspectorSheet resource={selectedResource} onMobileClose={onClearSelection} />
     </Box>
   );
 }

@@ -1,6 +1,5 @@
-import { Box, Button, Chip, Stack, Typography } from "@mui/material";
-import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
-import { memo, useCallback, type CSSProperties, type ReactElement } from "react";
+import { Box, Chip, Stack, Typography } from "@mui/material";
+import { memo, useCallback, type CSSProperties, type KeyboardEvent, type ReactElement } from "react";
 import type { RowComponentProps } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
@@ -18,10 +17,26 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, resources, sel
   const display = getResourceDisplay(resource);
   const selected = resource.id === selectedId;
   const handleSelect = useCallback(() => onSelect(resource), [onSelect, resource]);
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onSelect(resource);
+    },
+    [onSelect, resource]
+  );
 
   return (
     <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties}>
-      <Box className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"} data-motion="compact-skill-row">
+      <Box
+        aria-pressed={selected}
+        className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"}
+        data-resource-id={resource.id}
+        role="button"
+        tabIndex={0}
+        onClick={handleSelect}
+        onKeyDown={handleKeyDown}
+      >
         <Box className="compact-skill-main">
           <Typography className="resource-title" component="h3">
             {display.zhName}
@@ -46,9 +61,6 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, resources, sel
         <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end" }}>
           <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
           <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
-          <Button size="small" startIcon={<VisibilityRounded fontSize="small" />} type="button" variant={selected ? "contained" : "outlined"} onClick={handleSelect}>
-            {zhCN.app.viewAction}
-          </Button>
         </Stack>
       </Box>
     </Box>

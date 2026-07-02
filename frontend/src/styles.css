@@ -1,15 +1,11 @@
 .aios-console-shell {
   display: grid;
-  grid-template-columns: var(--aios-rail-width) minmax(0, 1fr) 0;
+  grid-template-columns: var(--aios-rail-width) minmax(0, 1fr) var(--aios-inspector-width);
   gap: var(--aios-shell-gap);
   width: 100%;
   height: 100dvh;
   padding: var(--aios-shell-padding);
   overflow: hidden;
-}
-
-.aios-console-shell.inspector-open {
-  grid-template-columns: var(--aios-rail-width) minmax(0, 1fr) minmax(360px, var(--aios-inspector-width));
 }
 
 .aios-navigation-rail,
@@ -200,9 +196,15 @@
   min-width: 76px;
 }
 
-.inspector-toggle {
-  border: 1px solid var(--aios-outline) !important;
-  background: var(--aios-surface-muted) !important;
+.command-safe-indicator {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--aios-outline);
+  border-radius: 999px;
+  background: var(--aios-surface-muted);
 }
 
 .command-safe-icon {
@@ -520,16 +522,28 @@
   border: 1px solid transparent;
   border-radius: 14px;
   background: var(--aios-surface);
+  cursor: pointer;
   padding: 9px 10px;
   transition:
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease;
 }
 
-.compact-skill-row-inner:hover,
-.compact-skill-row-inner.selected {
+.compact-skill-row-inner:hover {
   border-color: rgba(26, 115, 232, 0.34);
   background: rgba(255, 255, 255, 0.98);
+}
+
+.compact-skill-row-inner.selected,
+.compact-skill-row-inner.selected:hover {
+  border-color: rgba(26, 115, 232, 0.46);
+  background: rgba(232, 240, 254, 0.78);
+  box-shadow: inset 3px 0 0 var(--aios-primary);
+}
+
+.compact-skill-row-inner:focus-visible {
+  outline: 2px solid var(--aios-primary);
+  outline-offset: 2px;
 }
 
 .compact-skill-main,
@@ -578,6 +592,13 @@
   border-color: rgba(26, 115, 232, 0.42) !important;
   background: rgba(255, 255, 255, 0.98);
   transform: translateY(-1px);
+}
+
+.resource-card.selected,
+.resource-card.selected:hover {
+  border-color: rgba(26, 115, 232, 0.48) !important;
+  background: rgba(232, 240, 254, 0.72);
+  box-shadow: inset 3px 0 0 var(--aios-primary);
 }
 
 .resource-card .MuiCardContent-root {
@@ -664,14 +685,6 @@
 .resource-meta-code {
   width: fit-content;
   font-size: 11px;
-}
-
-.resource-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  border-top: 1px solid var(--aios-outline);
-  padding: 7px 10px 9px;
 }
 
 .copy-tooltip-wrap {
@@ -762,13 +775,9 @@
 }
 
 .aios-inspector-sheet {
-  display: none;
+  display: block;
   overflow: hidden;
   border-radius: 24px;
-}
-
-.aios-inspector-sheet.open {
-  display: block;
 }
 
 .inspector-body {
@@ -809,6 +818,11 @@
   border-radius: 16px;
   background: var(--aios-surface);
   padding: 10px;
+}
+
+.inspector-empty-panel {
+  min-height: 128px;
+  align-content: center;
 }
 
 .inspector-path-list {
@@ -876,9 +890,22 @@
   border-radius: 22px 22px 0 0;
 }
 
-@media (max-width: 1320px) {
-  .aios-console-shell,
-  .aios-console-shell.inspector-open {
+@media (max-width: 1320px) and (min-width: 1024px) {
+  .aios-console-shell {
+    grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr) var(--aios-inspector-width);
+  }
+
+  .aios-top-command-bar {
+    grid-template-columns: minmax(160px, 0.36fr) minmax(260px, 1fr) auto;
+  }
+
+  .command-meta.compact {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .aios-console-shell {
     grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr);
   }
 
@@ -915,8 +942,7 @@
 }
 
 @media (max-width: 720px) {
-  .aios-console-shell,
-  .aios-console-shell.inspector-open {
+  .aios-console-shell {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 8px;

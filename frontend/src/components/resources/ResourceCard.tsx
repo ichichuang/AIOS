@@ -1,10 +1,8 @@
-import { Box, Button, Card, CardActionArea, CardActions, CardContent, Stack, Typography } from "@mui/material";
-import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
+import { Box, Card, CardActionArea, CardContent, Stack, Typography } from "@mui/material";
 import { memo } from "react";
 import { getMcpRiskLabels, getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
-import { PromptCopyButton } from "../PromptCopyButton";
 import { ResourceChips } from "./ResourceChips";
 import { ResourceMetaRow } from "./ResourceMetaRow";
 
@@ -20,13 +18,10 @@ interface ResourceCardProps {
 export const ResourceCard = memo(function ResourceCard({ resource, selected, variant = "default", onSelect }: ResourceCardProps) {
   const display = getResourceDisplay(resource);
   const server = getMcpServer(resource);
-  const codexPrompt = resource.prompts.find((prompt) => prompt.target === "codex");
-  const claudePrompt = resource.prompts.find((prompt) => prompt.target === "claude");
-  const showPromptActions = variant === "skill";
 
   return (
     <Card className={selected ? `resource-card material-card ${variant} selected` : `resource-card material-card ${variant}`} data-motion="resource-card">
-      <CardActionArea aria-pressed={selected} onClick={() => onSelect(resource)}>
+      <CardActionArea aria-pressed={selected} data-resource-id={resource.id} onClick={() => onSelect(resource)}>
         <CardContent>
           <Stack className="resource-card-top" direction="row" sx={{ alignItems: "flex-start", gap: 1.5, justifyContent: "space-between" }}>
             <Box className="resource-card-title">
@@ -79,18 +74,6 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
           </Box>
         </CardContent>
       </CardActionArea>
-
-      <CardActions className="resource-actions">
-        <Button size="small" startIcon={<VisibilityRounded fontSize="small" />} type="button" variant="contained" onClick={() => onSelect(resource)}>
-          {zhCN.app.viewAction}
-        </Button>
-        {showPromptActions && (
-          <>
-            <PromptCopyButton compact prompt={codexPrompt} target="codex" />
-            <PromptCopyButton compact prompt={claudePrompt} target="claude" />
-          </>
-        )}
-      </CardActions>
     </Card>
   );
 });

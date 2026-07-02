@@ -1,10 +1,9 @@
 import { Box, ButtonBase, Chip, Stack, Typography } from "@mui/material";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { List } from "react-window";
 import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import { markAiosPerf } from "../../lib/perf";
-import { useVisibleCardRevealMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -40,7 +39,6 @@ export const SkillsModule = memo(function SkillsModule({ query, resources, selec
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
-  const listRef = useRef<HTMLElement>(null);
   const groups = useMemo(() => groupSkillResources(resources), [resources]);
   const defaultGroupKey = groups[0]?.key ?? null;
   const activeKey = getValidGroupKey(groups, activeGroupKey) ?? defaultGroupKey;
@@ -48,8 +46,6 @@ export const SkillsModule = memo(function SkillsModule({ query, resources, selec
   const activeGroup = groups.find((group) => group.key === renderedKey) ?? groups[0] ?? null;
   const visibleResources = useMemo(() => (activeGroup ? filterResourceList(activeGroup.resources, query) : []), [activeGroup, query]);
   const rowProps = useMemo<CompactSkillRowProps>(() => ({ resources: visibleResources, selectedId, onSelect }), [onSelect, selectedId, visibleResources]);
-  const motionKey = `${renderedKey ?? "empty"}:${visibleResources.map((resource) => resource.id).join("|")}`;
-  useVisibleCardRevealMotion(listRef, motionKey, "[data-motion='compact-skill-row']");
 
   const handleGroupChange = useCallback(
     (key: string) => {
@@ -88,7 +84,7 @@ export const SkillsModule = memo(function SkillsModule({ query, resources, selec
                 <SkillGroupButton key={group.key} active={group.key === activeKey} group={group} onSelect={handleGroupChange} />
               ))}
             </Box>
-            <Box className="compact-skill-list-shell" ref={listRef}>
+            <Box className="compact-skill-list-shell">
               <Stack className="active-skill-group-heading" direction="row" sx={{ alignItems: "center", gap: 1, justifyContent: "space-between" }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography component="h2" variant="h3">

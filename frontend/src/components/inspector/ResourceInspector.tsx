@@ -12,9 +12,9 @@ interface ResourceInspectorProps {
 export const ResourceInspector = memo(function ResourceInspector({ resource }: ResourceInspectorProps) {
   if (!resource) {
     return (
-      <Box className="inspector-panel">
+      <Box className="inspector-panel inspector-empty-panel">
         <Typography component="h3" variant="h3">
-          {zhCN.app.detailPanel}
+          {zhCN.app.inspectorEmptyTitle}
         </Typography>
         <Typography color="text.secondary">{zhCN.app.inspectorEmpty}</Typography>
       </Box>

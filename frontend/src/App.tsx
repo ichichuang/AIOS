@@ -25,7 +25,6 @@ export default function App() {
   const [renderedView, setRenderedView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -54,7 +53,6 @@ export default function App() {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
     setActiveView(view);
     setSelectedId(null);
-    setInspectorOpen(false);
     startRouteTransition(() => {
       setRenderedView(view);
     });
@@ -62,15 +60,11 @@ export default function App() {
 
   const selectResource = useCallback((resource: AiosResource) => {
     setSelectedId(resource.id);
-    setInspectorOpen(true);
   }, []);
 
-  const closeInspector = useCallback(() => setInspectorOpen(false), []);
-  const toggleInspector = useCallback(() => setInspectorOpen((open) => !open), []);
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
   const clearSelection = useCallback(() => {
     setSelectedId(null);
-    setInspectorOpen(false);
   }, []);
 
   useEffect(() => {
@@ -118,15 +112,13 @@ export default function App() {
   return (
     <AiosConsoleShell
       activeView={activeView}
-      inspectorOpen={inspectorOpen}
       inventory={inventory}
       query={query}
       selectedResource={selectedResource}
       shownCount={filteredResources.length}
       viewCounts={moduleProps.viewCounts}
-      onCloseInspector={closeInspector}
+      onClearSelection={clearSelection}
       onQueryChange={handleQueryChange}
-      onToggleInspector={toggleInspector}
       onViewChange={handleViewChange}
     >
       <Box ref={moduleRef} className="module-transition-scope">

@@ -1,7 +1,5 @@
-import { Box, Chip, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography } from "@mui/material";
-import CloseFullscreenRounded from "@mui/icons-material/CloseFullscreenRounded";
+import { Box, Chip, InputAdornment, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
-import OpenInFullRounded from "@mui/icons-material/OpenInFullRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import type { KeyboardEvent } from "react";
@@ -13,15 +11,13 @@ import { consoleViews } from "./moduleConfig";
 interface AiosTopCommandBarProps {
   activeView: ResourceView;
   inventory: AiosInventory;
-  inspectorOpen: boolean;
   query: string;
   shownCount: number;
   onQueryChange: (query: string) => void;
-  onToggleInspector: () => void;
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query, shownCount, onQueryChange, onToggleInspector, onViewChange }: AiosTopCommandBarProps) {
+export function AiosTopCommandBar({ activeView, inventory, query, shownCount, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter") return;
     const target = event.target as HTMLInputElement;
@@ -83,13 +79,10 @@ export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query,
             {shownCount} / {inventory.resources.length}
           </Typography>
         </Box>
-        <Tooltip title={inspectorOpen ? "收起检查器" : "展开检查器"}>
-          <IconButton className="inspector-toggle" aria-label={inspectorOpen ? "收起检查器" : "展开检查器"} onClick={onToggleInspector}>
-            {inspectorOpen ? <CloseFullscreenRounded fontSize="small" /> : <OpenInFullRounded fontSize="small" />}
-          </IconButton>
-        </Tooltip>
         <Tooltip title={zhCN.app.safetyState}>
-          <TuneRounded className="command-safe-icon" fontSize="small" />
+          <Box className="command-safe-indicator" component="span" aria-label={zhCN.app.safetyState}>
+            <TuneRounded className="command-safe-icon" fontSize="small" />
+          </Box>
         </Tooltip>
       </Stack>
     </Box>

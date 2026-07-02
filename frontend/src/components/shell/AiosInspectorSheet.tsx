@@ -12,21 +12,20 @@ import { SafetyProfilePanel } from "../inspector/SafetyProfilePanel";
 import { TokenPressurePanel } from "../inspector/TokenPressurePanel";
 
 interface AiosInspectorSheetProps {
-  open: boolean;
   resource: AiosResource | null;
-  onClose: () => void;
+  onMobileClose: () => void;
 }
 
-export function AiosInspectorSheet({ open, resource, onClose }: AiosInspectorSheetProps) {
+export function AiosInspectorSheet({ resource, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
-  const isDesktop = useMediaQuery("(min-width: 1321px)");
+  const isPersistent = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const body = <InspectorBody resource={resource} onClose={onClose} />;
+  const body = <InspectorBody resource={resource} />;
 
-  if (isDesktop) {
+  if (isPersistent) {
     return (
-      <Box className={open ? "aios-inspector-sheet open" : "aios-inspector-sheet"} component="aside" aria-label={zhCN.app.detailPanel}>
-        {open && body}
+      <Box className="aios-inspector-sheet" component="aside" aria-label={zhCN.app.detailPanel}>
+        {body}
       </Box>
     );
   }
@@ -35,21 +34,22 @@ export function AiosInspectorSheet({ open, resource, onClose }: AiosInspectorShe
     <Drawer
       anchor={isMobile ? "bottom" : "right"}
       className="aios-inspector-drawer"
-      open={open}
+      open={Boolean(resource)}
       slotProps={{ paper: { className: isMobile ? "inspector-drawer-paper bottom" : "inspector-drawer-paper" } }}
-      onClose={onClose}
+      onClose={onMobileClose}
     >
-      {body}
+      <InspectorBody resource={resource} onClose={onMobileClose} showClose />
     </Drawer>
   );
 }
 
 interface InspectorBodyProps {
   resource: AiosResource | null;
-  onClose: () => void;
+  showClose?: boolean;
+  onClose?: () => void;
 }
 
-function InspectorBody({ resource, onClose }: InspectorBodyProps) {
+function InspectorBody({ resource, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const display = resource ? getResourceDisplay(resource) : null;
   const panels = resource ? getContextualPanels(resource) : { prompt: false, safety: false, token: false };
@@ -63,7 +63,7 @@ function InspectorBody({ resource, onClose }: InspectorBodyProps) {
             {zhCN.app.detailPanel}
           </Typography>
           <Typography component="h2" variant="h3">
-            {display?.zhName ?? "未选择资源"}
+            {display?.zhName ?? zhCN.app.inspectorEmptyTitle}
           </Typography>
           {display && (
             <Box className="code-pill inspector-code" component="code">
@@ -71,9 +71,11 @@ function InspectorBody({ resource, onClose }: InspectorBodyProps) {
             </Box>
           )}
         </Box>
-        <IconButton aria-label="关闭检查器" onClick={onClose}>
-          <CloseRounded fontSize="small" />
-        </IconButton>
+        {showClose && onClose && (
+          <IconButton aria-label="关闭检查器" onClick={onClose}>
+            <CloseRounded fontSize="small" />
+          </IconButton>
+        )}
       </Stack>
       <Divider />
       <Box className="inspector-scroll">
