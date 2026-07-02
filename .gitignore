@@ -1,0 +1,10 @@
+.DS_Store
+.serena/
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
