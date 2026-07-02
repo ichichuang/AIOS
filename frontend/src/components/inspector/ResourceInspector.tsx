@@ -2,14 +2,16 @@ import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
 import { memo } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
+import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { ResourceMetaRow } from "../resources/ResourceMetaRow";
 
 interface ResourceInspectorProps {
   resource: AiosResource | null;
+  skillCapability: SkillCapabilityClassification | null;
 }
 
-export const ResourceInspector = memo(function ResourceInspector({ resource }: ResourceInspectorProps) {
+export const ResourceInspector = memo(function ResourceInspector({ resource, skillCapability }: ResourceInspectorProps) {
   if (!resource) {
     return (
       <Box className="inspector-panel inspector-empty-panel">
@@ -44,6 +46,7 @@ export const ResourceInspector = memo(function ResourceInspector({ resource }: R
         {display.zhDescription}
       </Typography>
       <Divider />
+      <CapabilityClassificationSection classification={skillCapability} />
       <Box className="inspector-meta-grid">
         <ResourceMetaRow label={zhCN.app.preservedName} value={display.technicalName} code />
         <ResourceMetaRow label="工具类型" value={display.zhToolType} />
@@ -73,6 +76,50 @@ export const ResourceInspector = memo(function ResourceInspector({ resource }: R
     </Box>
   );
 });
+
+interface CapabilityClassificationSectionProps {
+  classification: SkillCapabilityClassification | null;
+}
+
+function CapabilityClassificationSection({ classification }: CapabilityClassificationSectionProps) {
+  if (!classification) return null;
+  const secondaryLabels = classification.secondaryCategories.map((category) => category.title);
+
+  return (
+    <Box className="capability-inspector-section">
+      <Typography component="h4" variant="h3">
+        能力分类
+      </Typography>
+      <Box className="inspector-meta-grid">
+        <ResourceMetaRow label="主分类" value={classification.primaryCategory.title} />
+        <ResourceMetaRow label="可信度" value={getSkillCapabilityConfidenceLabel(classification.confidence)} />
+      </Box>
+      <CapabilityChipLine label="关联能力" values={secondaryLabels.length > 0 ? secondaryLabels : ["无"]} />
+      <CapabilityChipLine label="匹配依据" values={classification.evidenceKeywords.length > 0 ? classification.evidenceKeywords : ["无"]} code />
+    </Box>
+  );
+}
+
+interface CapabilityChipLineProps {
+  label: string;
+  values: string[];
+  code?: boolean;
+}
+
+function CapabilityChipLine({ label, values, code }: CapabilityChipLineProps) {
+  return (
+    <Box className="capability-chip-line">
+      <Typography color="text.secondary" component="span">
+        {label}
+      </Typography>
+      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, minWidth: 0 }}>
+        {values.map((value) => (
+          <Chip className={code ? "capability-chip evidence" : "capability-chip"} key={value} label={value} variant="outlined" />
+        ))}
+      </Stack>
+    </Box>
+  );
+}
 
 interface MetadataRow {
   label: string;

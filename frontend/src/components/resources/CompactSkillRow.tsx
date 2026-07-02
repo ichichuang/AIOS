@@ -3,18 +3,22 @@ import { memo, useCallback, type CSSProperties, type KeyboardEvent, type ReactEl
 import type { RowComponentProps } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
+import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { AiosResource } from "../../types/inventory";
 
 export interface CompactSkillRowProps {
   resources: AiosResource[];
   selectedId: string | null;
+  skillCapabilityById: ReadonlyMap<string, SkillCapabilityClassification>;
+  showCapability: boolean;
   onSelect: (resource: AiosResource) => void;
 }
 
-function CompactSkillRowComponent({ ariaAttributes, index, style, resources, selectedId, onSelect }: RowComponentProps<CompactSkillRowProps>): ReactElement | null {
+function CompactSkillRowComponent({ ariaAttributes, index, style, resources, selectedId, skillCapabilityById, showCapability, onSelect }: RowComponentProps<CompactSkillRowProps>): ReactElement | null {
   const resource = resources[index];
   if (!resource) return null;
   const display = getResourceDisplay(resource);
+  const skillCapability = showCapability ? skillCapabilityById.get(resource.id) : undefined;
   const selected = resource.id === selectedId;
   const handleSelect = useCallback(() => onSelect(resource), [onSelect, resource]);
   const handleKeyDown = useCallback(
@@ -59,6 +63,7 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, resources, sel
         </Box>
 
         <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end" }}>
+          {skillCapability && <Chip className="capability-chip" label={skillCapability.primaryCategory.title} variant="outlined" />}
           <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
           <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
         </Stack>

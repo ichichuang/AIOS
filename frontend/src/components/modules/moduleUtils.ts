@@ -1,16 +1,20 @@
 import { getMcpGroup } from "../../i18n/resourceText";
+import type { ResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
+import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
 import type { ResourceGroupData } from "../resources/ResourceGroup";
 
 export interface AiosModuleProps {
   allResources: AiosResource[];
   baseline: BaselineSummary;
+  displayById: ReadonlyMap<string, ResourceDisplay>;
   query: string;
   resources: AiosResource[];
   selectedId: string | null;
+  skillCapabilityById: ReadonlyMap<string, SkillCapabilityClassification>;
   viewCounts: Record<ResourceView, number>;
   onClearSelection: () => void;
   onSelect: (resource: AiosResource) => void;

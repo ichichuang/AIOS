@@ -4,6 +4,7 @@ import CloseRounded from "@mui/icons-material/CloseRounded";
 import { useRef } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
+import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import { useInspectorMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { PromptPanel } from "../inspector/PromptPanel";
@@ -13,14 +14,15 @@ import { TokenPressurePanel } from "../inspector/TokenPressurePanel";
 
 interface AiosInspectorSheetProps {
   resource: AiosResource | null;
+  skillCapability: SkillCapabilityClassification | null;
   onMobileClose: () => void;
 }
 
-export function AiosInspectorSheet({ resource, onMobileClose }: AiosInspectorSheetProps) {
+export function AiosInspectorSheet({ resource, skillCapability, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
   const isPersistent = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const body = <InspectorBody resource={resource} />;
+  const body = <InspectorBody resource={resource} skillCapability={skillCapability} />;
 
   if (isPersistent) {
     return (
@@ -38,18 +40,19 @@ export function AiosInspectorSheet({ resource, onMobileClose }: AiosInspectorShe
       slotProps={{ paper: { className: isMobile ? "inspector-drawer-paper bottom" : "inspector-drawer-paper" } }}
       onClose={onMobileClose}
     >
-      <InspectorBody resource={resource} onClose={onMobileClose} showClose />
+      <InspectorBody resource={resource} skillCapability={skillCapability} onClose={onMobileClose} showClose />
     </Drawer>
   );
 }
 
 interface InspectorBodyProps {
   resource: AiosResource | null;
+  skillCapability: SkillCapabilityClassification | null;
   showClose?: boolean;
   onClose?: () => void;
 }
 
-function InspectorBody({ resource, showClose = false, onClose }: InspectorBodyProps) {
+function InspectorBody({ resource, skillCapability, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const display = resource ? getResourceDisplay(resource) : null;
   const panels = resource ? getContextualPanels(resource) : { prompt: false, safety: false, token: false };
@@ -79,7 +82,7 @@ function InspectorBody({ resource, showClose = false, onClose }: InspectorBodyPr
       </Stack>
       <Divider />
       <Box className="inspector-scroll">
-        <ResourceInspector resource={resource} />
+        <ResourceInspector resource={resource} skillCapability={skillCapability} />
         {resource && (
           <>
             {panels.safety && <SafetyProfilePanel resource={resource} />}

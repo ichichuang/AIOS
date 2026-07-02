@@ -47,7 +47,12 @@ export function filterResources(resources: AiosResource[], view: ResourceView, q
   return filterResourceList(resources.filter((resource) => belongsToView(resource, view)), query);
 }
 
-export function filterResourceList(resources: AiosResource[], query: string, displayById?: ReadonlyMap<string, ResourceDisplay>): AiosResource[] {
+export function filterResourceList(
+  resources: AiosResource[],
+  query: string,
+  displayById?: ReadonlyMap<string, ResourceDisplay>,
+  searchTextById?: ReadonlyMap<string, string>
+): AiosResource[] {
   const normalized = query.trim().toLowerCase();
   return resources.filter((resource) => {
     if (!normalized) return true;
@@ -65,7 +70,8 @@ export function filterResourceList(resources: AiosResource[], query: string, dis
       display.zhDescription,
       display.zhCategory,
       display.zhStatus,
-      display.zhRisk
+      display.zhRisk,
+      searchTextById?.get(resource.id)
     ]
       .filter(Boolean)
       .join(" ")

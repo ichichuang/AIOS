@@ -417,8 +417,36 @@
 }
 
 .skills-module-scroll {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
+}
+
+.skill-group-toolbar {
+  min-width: 0;
+}
+
+.skill-grouping-switch.MuiToggleButtonGroup-root {
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 999px;
+  background: var(--aios-surface);
+  padding: 2px;
+}
+
+.skill-grouping-switch .MuiToggleButton-root {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px !important;
+  color: var(--aios-muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 12px;
+}
+
+.skill-grouping-switch .MuiToggleButton-root.Mui-selected,
+.skill-grouping-switch .MuiToggleButton-root.Mui-selected:hover {
+  background: var(--aios-primary-soft);
+  color: var(--aios-primary);
 }
 
 .skill-group-index {
@@ -426,6 +454,10 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 8px;
   min-width: 0;
+}
+
+.skill-group-index.capability {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .skill-group-button.MuiButtonBase-root {
@@ -444,6 +476,11 @@
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease,
     transform var(--aios-motion-fast) ease;
+}
+
+.skill-group-button.capability.MuiButtonBase-root {
+  min-height: 76px;
+  border-color: var(--aios-outline-strong);
 }
 
 .skill-group-button:hover,
@@ -473,6 +510,13 @@
   grid-column: 1 / -1;
   font-size: 12px;
   line-height: 1.25;
+}
+
+.skill-group-button.capability span {
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .skill-group-button .MuiChip-root {
@@ -574,6 +618,24 @@
 
 .compact-skill-state {
   flex-wrap: wrap;
+}
+
+.capability-chip.MuiChip-root {
+  max-width: 100%;
+  border-color: var(--aios-outline-strong);
+  background: var(--aios-info-soft);
+  color: var(--aios-info);
+  font-weight: 800;
+}
+
+.capability-chip.evidence.MuiChip-root {
+  background: var(--aios-surface-muted);
+  color: var(--aios-muted);
+}
+
+.capability-chip .MuiChip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .material-card,
@@ -829,6 +891,30 @@
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.capability-inspector-section {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 12px;
+  background: var(--aios-surface-muted);
+  padding: 8px;
+}
+
+.capability-chip-line {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.capability-chip-line > span {
+  color: var(--aios-muted);
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .note-list {

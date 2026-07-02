@@ -15,6 +15,7 @@ import { zhCN } from "./i18n/zh-CN";
 import { buildResourceDisplayMap, buildResourcesByView, countResourcesByView, filterResourceList, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
 import { markAiosPerf } from "./lib/perf";
+import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
 import { useModuleSwapMotion } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
 
@@ -39,6 +40,10 @@ export default function App() {
   }, []);
 
   const displayById = useMemo(() => (inventory ? buildResourceDisplayMap(inventory.resources) : new Map()), [inventory]);
+  const skillCapabilityById = useMemo(
+    () => (inventory ? buildSkillCapabilityClassificationMap(inventory.resources, displayById) : new Map<string, SkillCapabilityClassification>()),
+    [displayById, inventory]
+  );
   const resourceById = useMemo(() => (inventory ? new Map(inventory.resources.map((resource) => [resource.id, resource])) : new Map<string, AiosResource>()), [inventory]);
   const resourcesByView = useMemo(() => (inventory ? buildResourcesByView(inventory.resources) : null), [inventory]);
   const viewCounts = useMemo(() => (resourcesByView ? countResourcesByView(resourcesByView) : null), [resourcesByView]);
@@ -48,6 +53,7 @@ export default function App() {
     [deferredQuery, displayById, moduleResources, renderedView]
   );
   const selectedResource = useMemo(() => (selectedId ? resourceById.get(selectedId) ?? null : null), [resourceById, selectedId]);
+  const selectedSkillCapability = useMemo(() => (selectedId ? skillCapabilityById.get(selectedId) ?? null : null), [selectedId, skillCapabilityById]);
 
   const handleViewChange = useCallback((view: ResourceView) => {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
@@ -100,9 +106,11 @@ export default function App() {
   const moduleProps: AiosModuleProps = {
     allResources: inventory.resources,
     baseline: inventory.baseline,
+    displayById,
     query: deferredQuery,
     resources: filteredResources,
     selectedId: selectedResource?.id ?? null,
+    skillCapabilityById,
     viewCounts: viewCounts ?? countResourcesByView(buildResourcesByView([])),
     onClearSelection: clearSelection,
     onSelect: selectResource,
@@ -115,6 +123,7 @@ export default function App() {
       inventory={inventory}
       query={query}
       selectedResource={selectedResource}
+      selectedSkillCapability={selectedSkillCapability}
       shownCount={filteredResources.length}
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}

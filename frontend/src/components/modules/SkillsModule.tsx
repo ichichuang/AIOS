@@ -1,9 +1,10 @@
-import { Box, ButtonBase, Chip, Stack, Typography } from "@mui/material";
-import { memo, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { Box, ButtonBase, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { memo, useCallback, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { List } from "react-window";
 import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import { markAiosPerf } from "../../lib/perf";
+import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type SkillCapabilityCategoryKey } from "../../lib/skillCapabilityClassifier";
 import type { AiosResource } from "../../types/inventory";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -11,7 +12,9 @@ import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ModuleHeader } from "./ModuleHeader";
 
-interface SkillGroupDefinition {
+type SkillGroupingMode = "capability" | "source";
+
+interface SourceSkillGroupDefinition {
   key: string;
   title: string;
   summary: string;
@@ -26,7 +29,7 @@ interface SkillGroup {
 }
 
 const ROW_HEIGHT = 92;
-const skillGroupDefinitions: SkillGroupDefinition[] = [
+const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
   { key: "codex-entrypoints", title: "Codex 入口", summary: "Codex 活跃技能入口，仅显示元数据。", predicate: (resource) => resource.toolType === "codex" },
   { key: "agents-entrypoints", title: "Agents 入口", summary: "Agents 兼容入口，仅显示元数据。", predicate: (resource) => resource.toolType === "agents" },
   { key: "claude-entrypoints", title: "Claude 入口", summary: "Claude 技能视图，保留原始技能名。", predicate: (resource) => resource.toolType === "claude" },
@@ -35,38 +38,66 @@ const skillGroupDefinitions: SkillGroupDefinition[] = [
   { key: "runtime-views", title: "运行时视图", summary: "运行时生成的入口视图和技能映射。", predicate: (resource) => resource.capabilityType === "runtime-view" }
 ];
 
-export const SkillsModule = memo(function SkillsModule({ query, resources, selectedId, onClearSelection, onSelect }: AiosModuleProps) {
+export const SkillsModule = memo(function SkillsModule({ displayById, query, resources, selectedId, skillCapabilityById, onClearSelection, onSelect }: AiosModuleProps) {
+  const [groupingMode, setGroupingMode] = useState<SkillGroupingMode>("capability");
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
-  const groups = useMemo(() => groupSkillResources(resources), [resources]);
+  const capabilitySearchTextById = useMemo(() => buildSkillCapabilitySearchTextMap(skillCapabilityById), [skillCapabilityById]);
+  const groups = useMemo(
+    () => (groupingMode === "capability" ? groupSkillResourcesByCapability(resources, skillCapabilityById) : groupSkillResourcesBySource(resources)),
+    [groupingMode, resources, skillCapabilityById]
+  );
+  const filteredResourcesByGroupKey = useMemo(
+    () => new Map(groups.map((group) => [group.key, filterResourceList(group.resources, query, displayById, capabilitySearchTextById)])),
+    [capabilitySearchTextById, displayById, groups, query]
+  );
   const defaultGroupKey = groups[0]?.key ?? null;
   const activeKey = getValidGroupKey(groups, activeGroupKey) ?? defaultGroupKey;
   const renderedKey = getValidGroupKey(groups, renderedGroupKey) ?? activeKey;
   const activeGroup = groups.find((group) => group.key === renderedKey) ?? groups[0] ?? null;
-  const visibleResources = useMemo(() => (activeGroup ? filterResourceList(activeGroup.resources, query) : []), [activeGroup, query]);
-  const rowProps = useMemo<CompactSkillRowProps>(() => ({ resources: visibleResources, selectedId, onSelect }), [onSelect, selectedId, visibleResources]);
+  const visibleResources = useMemo(() => (activeGroup ? filteredResourcesByGroupKey.get(activeGroup.key) ?? [] : []), [activeGroup, filteredResourcesByGroupKey]);
+  const queryActive = query.trim().length > 0;
+  const rowProps = useMemo<CompactSkillRowProps>(
+    () => ({ resources: visibleResources, selectedId, skillCapabilityById, showCapability: groupingMode === "capability", onSelect }),
+    [groupingMode, onSelect, selectedId, skillCapabilityById, visibleResources]
+  );
+
+  const handleGroupingModeChange = useCallback(
+    (_event: MouseEvent<HTMLElement>, nextMode: SkillGroupingMode | null) => {
+      if (!nextMode || nextMode === groupingMode) return;
+      markAiosPerf("skills-group-mode-request", { mode: nextMode });
+      setGroupingMode(nextMode);
+      setActiveGroupKey(null);
+      onClearSelection();
+      startGroupTransition(() => {
+        setRenderedGroupKey(null);
+      });
+    },
+    [groupingMode, onClearSelection, startGroupTransition]
+  );
 
   const handleGroupChange = useCallback(
     (key: string) => {
-      markAiosPerf("skills-group-request", { group: key });
+      markAiosPerf("skills-group-request", { group: key, mode: groupingMode });
       setActiveGroupKey(key);
       onClearSelection();
       startGroupTransition(() => {
         setRenderedGroupKey(key);
       });
     },
-    [onClearSelection, startGroupTransition]
+    [groupingMode, onClearSelection, startGroupTransition]
   );
 
   useEffect(() => {
     markAiosPerf("skills-rendered", {
       group: renderedKey ?? "empty",
+      mode: groupingMode,
       visible: visibleResources.length,
       total: resources.length,
       query: query.trim() ? "filtered" : "empty"
     });
-  }, [query, renderedKey, resources.length, visibleResources.length]);
+  }, [groupingMode, query, renderedKey, resources.length, visibleResources.length]);
 
   return (
     <Box className="module-surface skills-module" component="section" aria-label={moduleAriaLabel("skills")}>
@@ -79,9 +110,30 @@ export const SkillsModule = memo(function SkillsModule({ query, resources, selec
           <ModuleEmptyState />
         ) : (
           <>
-            <Box className="skill-group-index" role="tablist" aria-label="技能来源分组">
+            <Stack className="skill-group-toolbar" direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
+              <ToggleButtonGroup
+                aria-label="技能分组模式"
+                className="skill-grouping-switch"
+                exclusive
+                size="small"
+                value={groupingMode}
+                onChange={handleGroupingModeChange}
+              >
+                <ToggleButton value="capability">按能力</ToggleButton>
+                <ToggleButton value="source">按来源</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            <Box className={`skill-group-index ${groupingMode}`} role="tablist" aria-label={groupingMode === "capability" ? "技能能力分组" : "技能来源分组"}>
               {groups.map((group) => (
-                <SkillGroupButton key={group.key} active={group.key === activeKey} group={group} onSelect={handleGroupChange} />
+                <SkillGroupButton
+                  key={group.key}
+                  active={group.key === activeKey}
+                  filteredCount={filteredResourcesByGroupKey.get(group.key)?.length ?? 0}
+                  group={group}
+                  mode={groupingMode}
+                  queryActive={queryActive}
+                  onSelect={handleGroupChange}
+                />
               ))}
             </Box>
             <Box className="compact-skill-list-shell">
@@ -120,27 +172,31 @@ export const SkillsModule = memo(function SkillsModule({ query, resources, selec
 
 interface SkillGroupButtonProps {
   active: boolean;
+  filteredCount: number;
   group: SkillGroup;
+  mode: SkillGroupingMode;
+  queryActive: boolean;
   onSelect: (key: string) => void;
 }
 
-const SkillGroupButton = memo(function SkillGroupButton({ active, group, onSelect }: SkillGroupButtonProps) {
+const SkillGroupButton = memo(function SkillGroupButton({ active, filteredCount, group, mode, queryActive, onSelect }: SkillGroupButtonProps) {
   const handleClick = useCallback(() => onSelect(group.key), [group.key, onSelect]);
+  const countLabel = queryActive ? `${filteredCount} / ${group.resources.length} 项` : `${group.resources.length} 项`;
 
   return (
-    <ButtonBase className={active ? "skill-group-button active" : "skill-group-button"} role="tab" aria-selected={active} onClick={handleClick}>
+    <ButtonBase className={["skill-group-button", mode, active ? "active" : ""].filter(Boolean).join(" ")} role="tab" aria-selected={active} onClick={handleClick}>
       <Typography component="strong">{group.title}</Typography>
       <Typography color="text.secondary" component="span">
         {group.summary}
       </Typography>
-      <Chip label={`${group.resources.length} 项`} variant={active ? "filled" : "outlined"} />
+      <Chip label={countLabel} variant={active ? "filled" : "outlined"} />
     </ButtonBase>
   );
 });
 
-function groupSkillResources(resources: AiosResource[]): SkillGroup[] {
+function groupSkillResourcesBySource(resources: AiosResource[]): SkillGroup[] {
   const assigned = new Set<string>();
-  const groups = skillGroupDefinitions
+  const groups = sourceSkillGroupDefinitions
     .map((definition) => {
       const groupResources = resources.filter((resource) => {
         const matched = definition.predicate(resource);
@@ -162,6 +218,23 @@ function groupSkillResources(resources: AiosResource[]): SkillGroup[] {
   }
 
   return groups;
+}
+
+function groupSkillResourcesByCapability(resources: AiosResource[], skillCapabilityById: ReadonlyMap<string, { primaryCategory: { key: SkillCapabilityCategoryKey } }>): SkillGroup[] {
+  const resourcesByCategory = new Map<SkillCapabilityCategoryKey, AiosResource[]>(SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, []]));
+
+  for (const resource of resources) {
+    const categoryKey = skillCapabilityById.get(resource.id)?.primaryCategory.key ?? "other";
+    const categoryResources = resourcesByCategory.get(categoryKey) ?? resourcesByCategory.get("other");
+    categoryResources?.push(resource);
+  }
+
+  return SKILL_CAPABILITY_CATEGORIES.map((category) => ({
+    key: category.key,
+    title: category.title,
+    summary: category.summary,
+    resources: resourcesByCategory.get(category.key) ?? []
+  })).filter((group) => group.resources.length > 0);
 }
 
 function getValidGroupKey(groups: SkillGroup[], key: string | null): string | null {
