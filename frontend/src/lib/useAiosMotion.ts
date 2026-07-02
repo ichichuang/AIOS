@@ -24,10 +24,14 @@ export function useModuleSwapMotion(scope: RefObject<HTMLElement>, dependency: u
   useGSAP(
     () => {
       if (reduced || !scope.current) return;
-      scope.current.style.willChange = "opacity, transform";
+      const header = scope.current.querySelector<HTMLElement>(".module-header");
+      const rows = gsap.utils.toArray<HTMLElement>("[data-motion='compact-skill-row'], [data-motion='resource-card']", scope.current).slice(0, 8);
+      const targets = [header, ...rows].filter((target): target is HTMLElement => Boolean(target));
+      if (!targets.length) return;
+      targets.forEach((target) => (target.style.willChange = "opacity, transform"));
       gsap
         .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(scope.current, { autoAlpha: 0, y: 6, force3D: true }, { autoAlpha: 1, y: 0, force3D: true, onComplete: () => scope.current && (scope.current.style.willChange = "") });
+        .fromTo(targets, { autoAlpha: 0, y: 6, force3D: true }, { autoAlpha: 1, y: 0, force3D: true, onComplete: () => targets.forEach((target) => (target.style.willChange = "")) });
     },
     { dependencies: [dependency, reduced], scope }
   );

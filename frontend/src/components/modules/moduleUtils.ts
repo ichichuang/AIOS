@@ -8,8 +8,11 @@ import type { ResourceGroupData } from "../resources/ResourceGroup";
 export interface AiosModuleProps {
   allResources: AiosResource[];
   baseline: BaselineSummary;
+  query: string;
   resources: AiosResource[];
   selectedId: string | null;
+  viewCounts: Record<ResourceView, number>;
+  onClearSelection: () => void;
   onSelect: (resource: AiosResource) => void;
   onViewChange: (view: ResourceView) => void;
 }

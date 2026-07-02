@@ -28,6 +28,7 @@ Use this skill only inside `/Users/cc/.ai/AIOS`.
 - Use compact module headers, a custom Material navigation rail, contextual drawer/side-sheet inspectors, one-line command-style search, concise Chinese labels, and clear status badges.
 - Keep dashboard overview content only in the dashboard module, inside the module scroll region.
 - Keep the inspector collapsed by default and open it only for explicit resource selection or inspector toggle.
+- Keep Skills group-first: render the group index and active compact row list only; do not mount hidden skill groups or prompt copy buttons for every skill.
 - Keep hierarchy dense and readable; this is a local AI control center, not a marketing page.
 - Avoid nested cards, repeated metric-card mosaics, and dense tables as the primary UI.
 - Dashboard content belongs only on the dashboard. Other modules need specialized layouts.

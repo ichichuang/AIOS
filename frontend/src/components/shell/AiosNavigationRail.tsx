@@ -1,23 +1,18 @@
 import { Box, ButtonBase, Tooltip, Typography } from "@mui/material";
 import type { SvgIconComponent } from "@mui/icons-material";
-import { memo, useMemo, useRef } from "react";
-import { countByView, type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { memo, useRef } from "react";
+import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import { useNavIndicatorMotion } from "../../lib/useAiosMotion";
-import type { AiosResource } from "../../types/inventory";
 import { consoleViews, moduleIcons } from "./moduleConfig";
 
 interface AiosNavigationRailProps {
   activeView: ResourceView;
-  resources: AiosResource[];
+  viewCounts: Record<ResourceView, number>;
   onChange: (view: ResourceView) => void;
 }
 
-export function AiosNavigationRail({ activeView, resources, onChange }: AiosNavigationRailProps) {
+export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNavigationRailProps) {
   const railRef = useRef<HTMLElement>(null);
-  const counts = useMemo(
-    () => Object.fromEntries(consoleViews.map((view) => [view, countByView(resources, view)])) as Record<ResourceView, number>,
-    [resources]
-  );
   useNavIndicatorMotion(railRef, activeView);
 
   return (
@@ -29,7 +24,7 @@ export function AiosNavigationRail({ activeView, resources, onChange }: AiosNavi
       <Box className="rail-items" data-nav-track>
         <Box className="rail-selected-pill" data-nav-indicator aria-hidden="true" />
         {consoleViews.map((view) => {
-          return <AiosNavigationItem key={view} active={view === activeView} count={counts[view]} icon={moduleIcons[view]} view={view} onChange={onChange} />;
+          return <AiosNavigationItem key={view} active={view === activeView} count={viewCounts[view]} icon={moduleIcons[view]} view={view} onChange={onChange} />;
         })}
       </Box>
     </Box>

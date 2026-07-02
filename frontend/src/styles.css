@@ -395,6 +395,8 @@
   display: grid;
   gap: 8px;
   min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
 }
 
 .resource-group-heading {
@@ -410,6 +412,154 @@
 
 .resource-card-grid.timeline {
   grid-template-columns: 1fr;
+}
+
+.skills-module-scroll {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.skill-group-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-group-button.MuiButtonBase-root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  align-items: center;
+  min-height: 68px;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  color: var(--aios-text);
+  padding: 8px 10px;
+  text-align: left;
+  transition:
+    background-color var(--aios-motion-fast) ease,
+    border-color var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
+}
+
+.skill-group-button:hover,
+.skill-group-button.active {
+  border-color: rgba(26, 115, 232, 0.32);
+  background: var(--aios-primary-soft);
+}
+
+.skill-group-button:active {
+  transform: translateY(1px);
+}
+
+.skill-group-button strong,
+.skill-group-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-group-button strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.skill-group-button span {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.skill-group-button .MuiChip-root {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.compact-skill-list-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.active-skill-group-heading {
+  min-width: 0;
+  border-bottom: 1px solid var(--aios-outline);
+  padding: 2px 0 8px;
+}
+
+.active-skill-group-heading h2,
+.active-skill-group-heading p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-skill-window {
+  min-width: 0;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.compact-skill-row {
+  min-width: 0;
+  padding: 3px 0;
+}
+
+.compact-skill-row-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(150px, 0.72fr) auto;
+  gap: 12px;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--aios-surface);
+  padding: 9px 10px;
+  transition:
+    background-color var(--aios-motion-fast) ease,
+    border-color var(--aios-motion-fast) ease;
+}
+
+.compact-skill-row-inner:hover,
+.compact-skill-row-inner.selected {
+  border-color: rgba(26, 115, 232, 0.34);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.compact-skill-main,
+.compact-skill-path,
+.compact-skill-state {
+  min-width: 0;
+}
+
+.compact-skill-main {
+  display: grid;
+  gap: 3px;
+}
+
+.compact-skill-path {
+  display: grid;
+  gap: 4px;
+}
+
+.compact-path-code {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-skill-state {
+  flex-wrap: wrap;
 }
 
 .material-card,
@@ -828,10 +978,26 @@
 
   .dashboard-summary,
   .quick-entry-grid,
+  .skill-group-index,
   .resource-card-grid,
   .policy-guardrail-grid,
   .validator-notice-grid {
     grid-template-columns: 1fr;
+  }
+
+  .compact-skill-row-inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    align-content: center;
+    min-height: 86px;
+  }
+
+  .compact-skill-path {
+    display: none;
+  }
+
+  .compact-skill-state {
+    justify-content: flex-start !important;
   }
 
   .resource-card .MuiCardContent-root {

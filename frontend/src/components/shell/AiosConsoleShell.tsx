@@ -14,16 +14,17 @@ interface AiosConsoleShellProps {
   query: string;
   selectedResource: AiosResource | null;
   shownCount: number;
+  viewCounts: Record<ResourceView, number>;
   onCloseInspector: () => void;
   onQueryChange: (query: string) => void;
   onToggleInspector: () => void;
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosConsoleShell({ activeView, children, inspectorOpen, inventory, query, selectedResource, shownCount, onCloseInspector, onQueryChange, onToggleInspector, onViewChange }: AiosConsoleShellProps) {
+export function AiosConsoleShell({ activeView, children, inspectorOpen, inventory, query, selectedResource, shownCount, viewCounts, onCloseInspector, onQueryChange, onToggleInspector, onViewChange }: AiosConsoleShellProps) {
   return (
     <Box className={inspectorOpen ? "aios-console-shell inspector-open" : "aios-console-shell"}>
-      <AiosNavigationRail activeView={activeView} resources={inventory.resources} onChange={onViewChange} />
+      <AiosNavigationRail activeView={activeView} viewCounts={viewCounts} onChange={onViewChange} />
       <Box className="aios-console-main">
         <AiosTopCommandBar
           activeView={activeView}

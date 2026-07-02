@@ -1,6 +1,6 @@
 import type { AiosResource, CapabilityType } from "../types/inventory";
 import { zhCN } from "../i18n/zh-CN";
-import { getResourceDisplay } from "../i18n/resourceText";
+import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
 
 export type ResourceView =
   | "dashboard"
@@ -44,11 +44,14 @@ export function belongsToView(resource: AiosResource, view: ResourceView): boole
 }
 
 export function filterResources(resources: AiosResource[], view: ResourceView, query: string): AiosResource[] {
+  return filterResourceList(resources.filter((resource) => belongsToView(resource, view)), query);
+}
+
+export function filterResourceList(resources: AiosResource[], query: string, displayById?: ReadonlyMap<string, ResourceDisplay>): AiosResource[] {
   const normalized = query.trim().toLowerCase();
   return resources.filter((resource) => {
-    if (!belongsToView(resource, view)) return false;
     if (!normalized) return true;
-    const display = getResourceDisplay(resource);
+    const display = displayById?.get(resource.id) ?? getResourceDisplay(resource);
     const haystack = [
       resource.name,
       resource.toolType,
@@ -73,4 +76,26 @@ export function filterResources(resources: AiosResource[], view: ResourceView, q
 
 export function countByView(resources: AiosResource[], view: ResourceView): number {
   return resources.filter((resource) => belongsToView(resource, view)).length;
+}
+
+export function buildResourceDisplayMap(resources: AiosResource[]): Map<string, ResourceDisplay> {
+  return new Map(resources.map((resource) => [resource.id, getResourceDisplay(resource)]));
+}
+
+export function buildResourcesByView(resources: AiosResource[]): Record<ResourceView, AiosResource[]> {
+  return {
+    dashboard: resources,
+    skills: resources.filter((resource) => belongsToView(resource, "skills")),
+    mcp: resources.filter((resource) => belongsToView(resource, "mcp")),
+    scripts: resources.filter((resource) => belongsToView(resource, "scripts")),
+    reports: resources.filter((resource) => belongsToView(resource, "reports")),
+    "project-packs": resources.filter((resource) => belongsToView(resource, "project-packs")),
+    policies: resources.filter((resource) => belongsToView(resource, "policies")),
+    validators: resources.filter((resource) => belongsToView(resource, "validators")),
+    legacy: resources.filter((resource) => belongsToView(resource, "legacy"))
+  };
+}
+
+export function countResourcesByView(resourcesByView: Record<ResourceView, AiosResource[]>): Record<ResourceView, number> {
+  return Object.fromEntries(Object.entries(resourcesByView).map(([view, resources]) => [view, resources.length])) as Record<ResourceView, number>;
 }

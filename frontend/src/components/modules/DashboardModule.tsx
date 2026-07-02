@@ -1,6 +1,7 @@
 import { Box, ButtonBase, Chip, Stack, Typography } from "@mui/material";
+import { useMemo } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
-import { countByView, type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
@@ -10,9 +11,9 @@ import { ModuleHeader } from "./ModuleHeader";
 
 const quickViews: ResourceView[] = ["skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
-export function DashboardModule({ allResources, baseline, selectedId, onSelect, onViewChange }: AiosModuleProps) {
-  const risks = riskCounts(allResources);
-  const recentReports = sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3);
+export function DashboardModule({ allResources, baseline, selectedId, viewCounts, onSelect, onViewChange }: AiosModuleProps) {
+  const risks = useMemo(() => riskCounts(allResources), [allResources]);
+  const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
 
   return (
     <Box className="module-surface dashboard-module" component="section" aria-label="总览模块">
@@ -62,7 +63,7 @@ export function DashboardModule({ allResources, baseline, selectedId, onSelect, 
                   <Icon fontSize="small" />
                   <Typography component="strong">{VIEW_LABELS[view]}</Typography>
                   <Typography color="text.secondary" component="span">
-                    {countByView(allResources, view)} 项
+                    {viewCounts[view]} 项
                   </Typography>
                 </ButtonBase>
               );

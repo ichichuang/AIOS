@@ -1,5 +1,5 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
-import { useMemo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { useVisibleCardRevealMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { ResourceCard, type ResourceCardVariant } from "./ResourceCard";
@@ -18,7 +18,7 @@ interface ResourceGroupProps {
   onSelect: (resource: AiosResource) => void;
 }
 
-export function ResourceGroup({ group, selectedId, variant = "default", timeline, onSelect }: ResourceGroupProps) {
+export const ResourceGroup = memo(function ResourceGroup({ group, selectedId, variant = "default", timeline, onSelect }: ResourceGroupProps) {
   const groupRef = useRef<HTMLElement>(null);
   const motionKey = useMemo(() => group.resources.map((resource) => resource.id).join("|"), [group.resources]);
   useVisibleCardRevealMotion(groupRef, `${group.title}:${motionKey}`);
@@ -45,4 +45,4 @@ export function ResourceGroup({ group, selectedId, variant = "default", timeline
       </Box>
     </Box>
   );
-}
+});

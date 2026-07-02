@@ -1,5 +1,5 @@
 import { Box, Typography } from "@mui/material";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
 import { DashboardModule } from "./components/modules/DashboardModule";
 import { LegacyModule } from "./components/modules/LegacyModule";
@@ -12,8 +12,9 @@ import { SkillsModule } from "./components/modules/SkillsModule";
 import { ValidatorsModule } from "./components/modules/ValidatorsModule";
 import type { AiosModuleProps } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
-import { filterResources, type ResourceView } from "./lib/filtering";
+import { buildResourceDisplayMap, buildResourcesByView, countResourcesByView, filterResourceList, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
+import { markAiosPerf } from "./lib/perf";
 import { useModuleSwapMotion } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
 
@@ -21,11 +22,14 @@ export default function App() {
   const [inventory, setInventory] = useState<AiosInventory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ResourceView>("dashboard");
+  const [renderedView, setRenderedView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [, startRouteTransition] = useTransition();
+  const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
-  useModuleSwapMotion(moduleRef, activeView);
+  useModuleSwapMotion(moduleRef, renderedView);
 
   useEffect(() => {
     loadInventory()
@@ -35,15 +39,26 @@ export default function App() {
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
   }, []);
 
-  const filteredResources = useMemo(() => (inventory ? filterResources(inventory.resources, activeView, query) : []), [inventory, activeView, query]);
-  const selectedResource = useMemo(() => (selectedId ? filteredResources.find((resource) => resource.id === selectedId) ?? null : null), [filteredResources, selectedId]);
+  const displayById = useMemo(() => (inventory ? buildResourceDisplayMap(inventory.resources) : new Map()), [inventory]);
+  const resourceById = useMemo(() => (inventory ? new Map(inventory.resources.map((resource) => [resource.id, resource])) : new Map<string, AiosResource>()), [inventory]);
+  const resourcesByView = useMemo(() => (inventory ? buildResourcesByView(inventory.resources) : null), [inventory]);
+  const viewCounts = useMemo(() => (resourcesByView ? countResourcesByView(resourcesByView) : null), [resourcesByView]);
+  const moduleResources = useMemo(() => (resourcesByView ? resourcesByView[renderedView] : []), [renderedView, resourcesByView]);
+  const filteredResources = useMemo(
+    () => (renderedView === "skills" ? moduleResources : filterResourceList(moduleResources, deferredQuery, displayById)),
+    [deferredQuery, displayById, moduleResources, renderedView]
+  );
+  const selectedResource = useMemo(() => (selectedId ? resourceById.get(selectedId) ?? null : null), [resourceById, selectedId]);
 
   const handleViewChange = useCallback((view: ResourceView) => {
-    const nextResources = inventory ? filterResources(inventory.resources, view, query) : [];
+    markAiosPerf("module-nav-request", { from: activeView, to: view });
     setActiveView(view);
-    setSelectedId(view === "dashboard" ? null : nextResources[0]?.id ?? null);
+    setSelectedId(null);
     setInspectorOpen(false);
-  }, [inventory, query]);
+    startRouteTransition(() => {
+      setRenderedView(view);
+    });
+  }, [activeView, startRouteTransition]);
 
   const selectResource = useCallback((resource: AiosResource) => {
     setSelectedId(resource.id);
@@ -53,6 +68,18 @@ export default function App() {
   const closeInspector = useCallback(() => setInspectorOpen(false), []);
   const toggleInspector = useCallback(() => setInspectorOpen((open) => !open), []);
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
+  const clearSelection = useCallback(() => {
+    setSelectedId(null);
+    setInspectorOpen(false);
+  }, []);
+
+  useEffect(() => {
+    markAiosPerf("module-rendered", {
+      view: renderedView,
+      visible: filteredResources.length,
+      query: deferredQuery.trim() ? "filtered" : "empty"
+    });
+  }, [deferredQuery, filteredResources.length, renderedView]);
 
   if (error) {
     return (
@@ -79,8 +106,11 @@ export default function App() {
   const moduleProps: AiosModuleProps = {
     allResources: inventory.resources,
     baseline: inventory.baseline,
+    query: deferredQuery,
     resources: filteredResources,
     selectedId: selectedResource?.id ?? null,
+    viewCounts: viewCounts ?? countResourcesByView(buildResourcesByView([])),
+    onClearSelection: clearSelection,
     onSelect: selectResource,
     onViewChange: handleViewChange
   };
@@ -93,13 +123,14 @@ export default function App() {
       query={query}
       selectedResource={selectedResource}
       shownCount={filteredResources.length}
+      viewCounts={moduleProps.viewCounts}
       onCloseInspector={closeInspector}
       onQueryChange={handleQueryChange}
       onToggleInspector={toggleInspector}
       onViewChange={handleViewChange}
     >
       <Box ref={moduleRef} className="module-transition-scope">
-        {renderModule(activeView, moduleProps)}
+        {renderModule(renderedView, moduleProps)}
       </Box>
     </AiosConsoleShell>
   );

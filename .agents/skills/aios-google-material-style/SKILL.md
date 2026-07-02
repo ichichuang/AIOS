@@ -16,6 +16,7 @@ Use Material UI as the primary React UI framework for this repository. Build AIO
 - Do not render floating suggestion chips in the top bar. Search can switch modules, but it should not create a second visual command row.
 - Dashboard is a compact landing page only. Do not render dashboard summaries inside every module, and keep dashboard content inside the module scroll region.
 - Keep the contextual inspector collapsed by default. Open it only after explicit resource selection or inspector toggle.
+- Skills must use a group index plus compact rows, render only the active skill group, and keep prompt copy actions inside the inspector instead of per-row buttons.
 - Skills, MCP, Scripts, Reports, Project Packs, Policies, Validators, and Legacy need specialized module layouts rather than one generic card wall.
 - Keep user-facing UI copy in Simplified Chinese except original technical names such as `Codex`, `Claude`, `MCP`, package names, file paths, and command names.
 - Show Chinese capability titles beside original technical names for skills and resources.
