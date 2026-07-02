@@ -5,7 +5,7 @@ import { getResourceDisplay } from "../i18n/resourceText";
 import { zhCN } from "../i18n/zh-CN";
 import type { ResourceView } from "../lib/filtering";
 import { VIEW_LABELS } from "../lib/filtering";
-import { useCardEntrance } from "../lib/useAiosMotion";
+import { useCardRevealMotion } from "../lib/useAiosMotion";
 import { PromptCopyButton } from "./PromptCopyButton";
 import type { AiosResource, McpServerRecord } from "../types/inventory";
 
@@ -20,7 +20,7 @@ export function ResourceList({ resources, selectedId, activeView, onSelect }: Re
   const listRef = useRef<HTMLElement>(null);
   const motionKey = useMemo(() => resources.map((resource) => resource.id).join("|"), [resources]);
   const groups = useMemo(() => groupResources(resources, activeView), [activeView, resources]);
-  useCardEntrance(listRef, motionKey, "[data-motion='resource-card']");
+  useCardRevealMotion(listRef, motionKey, "[data-motion='resource-card']");
 
   return (
     <Box className="resource-list-panel" component="section" ref={listRef}>

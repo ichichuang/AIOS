@@ -1,8 +1,10 @@
 import { Box, Divider, IconButton, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
 import Drawer from "@mui/material/Drawer";
 import CloseRounded from "@mui/icons-material/CloseRounded";
+import { useRef } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
+import { useInspectorMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { PromptPanel } from "../inspector/PromptPanel";
 import { ResourceInspector } from "../inspector/ResourceInspector";
@@ -17,7 +19,7 @@ interface AiosInspectorSheetProps {
 
 export function AiosInspectorSheet({ open, resource, onClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
+  const isDesktop = useMediaQuery("(min-width: 1321px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const body = <InspectorBody resource={resource} onClose={onClose} />;
 
@@ -48,10 +50,13 @@ interface InspectorBodyProps {
 }
 
 function InspectorBody({ resource, onClose }: InspectorBodyProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
   const display = resource ? getResourceDisplay(resource) : null;
+  const panels = resource ? getContextualPanels(resource) : { prompt: false, safety: false, token: false };
+  useInspectorMotion(bodyRef, resource?.id ?? "empty");
 
   return (
-    <Box className="inspector-body">
+    <Box className="inspector-body" ref={bodyRef}>
       <Stack className="inspector-header" direction="row" sx={{ alignItems: "flex-start", gap: 1.5, justifyContent: "space-between" }}>
         <Box sx={{ minWidth: 0 }}>
           <Typography className="eyebrow" component="p">
@@ -75,12 +80,29 @@ function InspectorBody({ resource, onClose }: InspectorBodyProps) {
         <ResourceInspector resource={resource} />
         {resource && (
           <>
-            <SafetyProfilePanel resource={resource} />
-            <TokenPressurePanel resource={resource} />
-            <PromptPanel resource={resource} />
+            {panels.safety && <SafetyProfilePanel resource={resource} />}
+            {panels.token && <TokenPressurePanel resource={resource} />}
+            {panels.prompt && <PromptPanel resource={resource} />}
           </>
         )}
       </Box>
     </Box>
   );
+}
+
+function getContextualPanels(resource: AiosResource): { prompt: boolean; safety: boolean; token: boolean } {
+  const hasElevatedSafety =
+    resource.risk !== "low" ||
+    !resource.safetyProfile.readOnly ||
+    resource.safetyProfile.writesGlobalState ||
+    resource.safetyProfile.executionRisk !== "low" ||
+    resource.safetyProfile.secretExposureRisk !== "low";
+  const isBoundaryResource = ["mcp-server", "mcp-client", "policy", "validator", "script"].includes(resource.capabilityType);
+  const isTokenResource = ["skill", "runtime-view", "report", "usage-prompt"].includes(resource.capabilityType);
+
+  return {
+    prompt: resource.prompts.length > 0,
+    safety: hasElevatedSafety || isBoundaryResource,
+    token: resource.tokenPressure.level !== "low" || isTokenResource
+  };
 }

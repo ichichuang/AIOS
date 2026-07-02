@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useRef } from "react";
 import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../i18n/resourceText";
 import { zhCN } from "../i18n/zh-CN";
-import { useDetailSwitch } from "../lib/useAiosMotion";
+import { useInspectorMotion } from "../lib/useAiosMotion";
 import { PromptCopyButton } from "./PromptCopyButton";
 import type { AiosResource } from "../types/inventory";
 
@@ -13,7 +13,7 @@ interface ResourceDetailProps {
 
 export function ResourceDetail({ resource }: ResourceDetailProps) {
   const detailRef = useRef<HTMLElement>(null);
-  useDetailSwitch(detailRef, resource?.id ?? "empty");
+  useInspectorMotion(detailRef, resource?.id ?? "empty");
 
   if (!resource) {
     return (

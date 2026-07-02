@@ -19,7 +19,7 @@
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--aios-outline);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--aios-surface-raised);
   box-shadow: var(--aios-shadow);
 }
 
@@ -54,6 +54,7 @@
 }
 
 .rail-items {
+  position: relative;
   display: grid;
   align-content: start;
   gap: 6px;
@@ -62,7 +63,22 @@
   overscroll-behavior: contain;
 }
 
+.rail-selected-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border: 1px solid rgba(26, 115, 232, 0.18);
+  border-radius: 18px;
+  background: var(--aios-selected-surface);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, width, height;
+}
+
 .rail-item {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1fr;
   gap: 4px;
@@ -74,14 +90,18 @@
   padding: 8px;
   text-align: center;
   transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background-color var(--aios-motion-fast) ease,
+    color var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
 }
 
-.rail-item:hover,
+.rail-item:hover {
+  background: rgba(232, 240, 254, 0.64);
+  color: var(--aios-primary);
+}
+
 .rail-item.active {
-  background: var(--aios-primary-soft);
+  background: transparent;
   color: var(--aios-primary);
 }
 
@@ -117,11 +137,11 @@
 .aios-top-command-bar {
   display: grid;
   grid-template-columns: minmax(210px, 0.62fr) minmax(320px, 1.1fr) minmax(260px, 0.62fr);
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  min-height: 84px;
+  min-height: var(--aios-topbar-height);
   border-radius: 26px;
-  padding: 12px 14px;
+  padding: 8px 12px;
 }
 
 .command-title,
@@ -130,24 +150,41 @@
   min-width: 0;
 }
 
+.command-title {
+  gap: 1px !important;
+}
+
 .command-title h1 {
   overflow-wrap: anywhere;
+  font-size: 1.12rem;
+  line-height: 1.12;
+}
+
+.command-title .eyebrow {
+  font-size: 11px;
+  line-height: 1;
 }
 
 .command-search-wrap {
+  position: relative;
   display: grid;
-  gap: 8px;
   align-content: center;
 }
 
 .command-search .MuiOutlinedInput-root {
-  min-height: 42px;
+  min-height: 40px;
   box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.08);
 }
 
 .command-suggestions {
-  min-height: 26px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 4;
+  min-height: 0;
+  max-width: 100%;
   overflow: hidden;
+  padding: 2px;
 }
 
 .command-status {
@@ -156,18 +193,23 @@
 
 .command-meta {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
   border: 1px solid var(--aios-outline);
   border-radius: 16px;
   background: var(--aios-surface-muted);
-  padding: 8px 10px;
+  padding: 4px 8px;
+}
+
+.command-meta .caption {
+  font-size: 10px;
+  line-height: 1;
 }
 
 .command-meta strong {
   overflow: hidden;
   color: var(--aios-text);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -740,7 +782,7 @@
   }
 
   .command-title {
-    display: none;
+    display: none !important;
   }
 
   .command-status {

@@ -11,7 +11,7 @@ import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import type { SvgIconComponent } from "@mui/icons-material";
 import { useMemo, useRef } from "react";
 import { countByView, type ResourceView, VIEW_LABELS } from "../lib/filtering";
-import { useCardEntrance } from "../lib/useAiosMotion";
+import { useCardRevealMotion } from "../lib/useAiosMotion";
 import { zhCN } from "../i18n/zh-CN";
 import type { AiosResource } from "../types/inventory";
 
@@ -38,7 +38,7 @@ interface ModuleOverviewProps {
 export function ModuleOverview({ resources, activeView, onChange }: ModuleOverviewProps) {
   const overviewRef = useRef<HTMLElement>(null);
   const motionKey = useMemo(() => moduleViews.map((view) => `${view}:${countByView(resources, view)}`).join("|"), [resources]);
-  useCardEntrance(overviewRef, motionKey, "[data-motion='module-card']");
+  useCardRevealMotion(overviewRef, motionKey, "[data-motion='module-card']");
 
   return (
     <Box className="module-overview" component="section" ref={overviewRef} aria-label={zhCN.app.moduleOverview}>

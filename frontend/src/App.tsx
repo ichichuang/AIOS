@@ -14,7 +14,7 @@ import type { AiosModuleProps } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
 import { filterResources, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
-import { useModuleTransition } from "./lib/useAiosMotion";
+import { useModuleSwapMotion } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
 
 export default function App() {
@@ -23,9 +23,9 @@ export default function App() {
   const [activeView, setActiveView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
+  const [inspectorOpen, setInspectorOpen] = useState(() => window.matchMedia("(min-width: 1321px)").matches);
   const moduleRef = useRef<HTMLDivElement>(null);
-  useModuleTransition(moduleRef, `${activeView}:${query}`);
+  useModuleSwapMotion(moduleRef, activeView);
 
   useEffect(() => {
     loadInventory()

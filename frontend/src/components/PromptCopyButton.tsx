@@ -2,7 +2,7 @@ import { Button, Tooltip } from "@mui/material";
 import ContentCopyRounded from "@mui/icons-material/ContentCopyRounded";
 import { useRef, useState } from "react";
 import { zhCN } from "../i18n/zh-CN";
-import { useCopyFeedback } from "../lib/useAiosMotion";
+import { useCopyFeedbackMotion } from "../lib/useAiosMotion";
 import type { PromptTarget, UsagePrompt } from "../types/inventory";
 
 interface PromptCopyButtonProps {
@@ -16,7 +16,7 @@ export function PromptCopyButton({ prompt, target, compact }: PromptCopyButtonPr
   const buttonRef = useRef<HTMLButtonElement>(null);
   const copyTarget = prompt?.target ?? target ?? "codex";
   const label = copyTarget === "codex" ? zhCN.app.copyCodexCall : zhCN.app.copyClaudeCall;
-  useCopyFeedback(buttonRef, copied);
+  useCopyFeedbackMotion(buttonRef, copied);
 
   async function copyPrompt() {
     if (!prompt) return;

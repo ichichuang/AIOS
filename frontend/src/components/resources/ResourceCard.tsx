@@ -66,6 +66,7 @@ export function ResourceCard({ resource, selected, variant = "default", onSelect
             ) : variant === "project-pack" ? (
               <>
                 <ResourceMetaRow label="资源根" value={getMetadataString(resource, "root") ?? display.pathPreview} code />
+                <ResourceMetaRow label="清单时间" value={formatDate(resource.updatedAt)} />
                 <ResourceMetaRow label="边界" value="项目本地只读展示" />
               </>
             ) : (

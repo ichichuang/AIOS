@@ -38,7 +38,7 @@ const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
 
 export function belongsToView(resource: AiosResource, view: ResourceView): boolean {
   if (view === "dashboard") return true;
-  if (view === "legacy") return resource.toolType === "legacy";
+  if (view === "legacy") return resource.toolType === "legacy" || resource.capabilityType === "usage-prompt";
   const capabilities = capabilityByView[view];
   return capabilities ? capabilities.includes(resource.capabilityType) : true;
 }
@@ -56,6 +56,7 @@ export function filterResources(resources: AiosResource[], view: ResourceView, q
       resource.status,
       resource.risk,
       resource.path,
+      ...resource.paths,
       resource.description,
       display.zhName,
       display.zhDescription,

@@ -39,13 +39,10 @@ export function AiosTopCommandBar({ activeView, inventory, inspectorOpen, query,
     <Box className="aios-top-command-bar">
       <Stack className="command-title" spacing={0.35}>
         <Typography className="eyebrow" component="p">
-          本地只读 · Material 控制台
+          本地只读 · Material Console V2
         </Typography>
         <Typography component="h1" variant="h2">
-          AIOS Material 控制台
-        </Typography>
-        <Typography color="text.secondary" variant="body2">
-          {zhCN.moduleSummaries[activeView]}
+          AIOS 控制中心
         </Typography>
       </Stack>
 

@@ -80,7 +80,9 @@ export const materialTheme = createTheme({
           "--aios-bg": designTokens.color.background,
           "--aios-bg-alt": designTokens.color.backgroundAlt,
           "--aios-surface": designTokens.color.surface,
+          "--aios-surface-raised": designTokens.surface.raised,
           "--aios-surface-muted": designTokens.color.surfaceMuted,
+          "--aios-selected-surface": designTokens.color.selectedSurface,
           "--aios-outline": designTokens.color.outline,
           "--aios-outline-strong": designTokens.color.outlineStrong,
           "--aios-text": designTokens.color.text,
@@ -101,11 +103,15 @@ export const materialTheme = createTheme({
           "--aios-shadow-lifted": designTokens.shadow.lifted,
           "--aios-rail-width": `${designTokens.shell.railWidth}px`,
           "--aios-rail-compact-width": `${designTokens.shell.railCompactWidth}px`,
+          "--aios-topbar-height": `${designTokens.shell.topbarHeight}px`,
           "--aios-inspector-width": `${designTokens.shell.inspectorWidth}px`,
+          "--aios-inspector-max-width": `${designTokens.shell.inspectorMaxWidth}px`,
           "--aios-shell-gap": `${designTokens.shell.gap}px`,
           "--aios-shell-padding": `${designTokens.shell.viewportPadding}px`,
           "--aios-module-header": `${designTokens.shell.moduleHeaderHeight}px`,
-          "--aios-summary-band": `${designTokens.shell.summaryBandHeight}px`
+          "--aios-summary-band": `${designTokens.shell.summaryBandHeight}px`,
+          "--aios-motion-fast": `${designTokens.motion.durationFast}s`,
+          "--aios-motion-base": `${designTokens.motion.durationBase}s`
         },
         "*": {
           boxSizing: "border-box"

@@ -9,6 +9,7 @@ export const designTokens = {
     surfaceMuted: "#f8fafd",
     outline: "rgba(60, 64, 67, 0.16)",
     outlineStrong: "rgba(60, 64, 67, 0.26)",
+    selectedSurface: "#d8e8ff",
     text: "#1f1f1f",
     textMuted: "#5f6368",
     textSubtle: "#7b818a",
@@ -31,6 +32,7 @@ export const designTokens = {
   shell: {
     railWidth: 92,
     railCompactWidth: 82,
+    topbarHeight: 64,
     inspectorWidth: 376,
     inspectorMaxWidth: 392,
     gap: 14,
@@ -43,6 +45,24 @@ export const designTokens = {
     cardPadding: 14,
     compactGap: 8,
     comfortableGap: 14
+  },
+  surface: {
+    base: "#ffffff",
+    soft: "#f8fafd",
+    raised: "rgba(255, 255, 255, 0.94)",
+    selected: "#d8e8ff"
+  },
+  motion: {
+    durationFast: 0.18,
+    durationBase: 0.22,
+    durationSlow: 0.26,
+    easeStandard: "power2.out",
+    easeEmphasis: "power3.out"
+  },
+  inspector: {
+    width: 376,
+    maxWidth: 392,
+    drawerHeight: "76dvh"
   },
   shadow: {
     surface: "0 1px 2px rgba(60, 64, 67, 0.14), 0 2px 6px rgba(60, 64, 67, 0.08)",

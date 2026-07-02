@@ -1,9 +1,9 @@
 ---
 name: aios-ui-polish-react-gsap
-description: "Project-local guidance for polishing the AIOS Control Center React UI with Radix Themes and GSAP."
+description: "Project-local guidance for polishing the AIOS Control Center React UI with MUI and scoped GSAP."
 ---
 
-# AIOS UI Polish With React, Radix Themes, And GSAP
+# AIOS UI Polish With React, MUI, And GSAP
 
 Use this skill only inside `/Users/cc/.ai/AIOS`.
 
@@ -23,11 +23,12 @@ Use this skill only inside `/Users/cc/.ai/AIOS`.
 
 ## Visual System
 
-- Use Radix Themes for visual components when it improves structure, accessibility, or consistency.
+- Use MUI as the primary UI system. Do not introduce Radix Themes, shadcn/ui, Tailwind as the main styling system, heavy admin templates, remote fonts, or external runtime assets.
 - Prefer fixed viewport modular layouts over whole-page scrolling.
-- Use compact cards, segmented navigation, drawer-like inspectors, tabs, command-style search, concise Chinese labels, and clear status badges.
+- Use compact module headers, a custom Material navigation rail, contextual drawer/side-sheet inspectors, command-style search, concise Chinese labels, and clear status badges.
 - Keep hierarchy dense and readable; this is a local AI control center, not a marketing page.
-- Do not install or run shadcn/ui in this repository.
+- Avoid nested cards, repeated metric-card mosaics, and dense tables as the primary UI.
+- Dashboard content belongs only on the dashboard. Other modules need specialized layouts.
 
 ## Motion
 
@@ -36,6 +37,8 @@ Use this skill only inside `/Users/cc/.ai/AIOS`.
 - Scope animations with React refs.
 - Rely on `useGSAP` cleanup through GSAP context.
 - Respect `prefers-reduced-motion`.
-- Animate opacity, transform, scale, and clip-path rather than layout properties.
-- Use lightweight transitions for module switching, detail panel changes, card entrance, and copy feedback.
-- Do not use scroll-driven animations or ScrollTrigger in Phase 1.1.
+- Animate only opacity and transform (`x`, `y`, `scale`). Do not use blur, filter, clip-path, layout animation, or broad stagger effects.
+- Use explicit hooks for module switching, selected nav indicator, first-page card reveal, inspector changes, and copy feedback.
+- Use timelines with defaults around `0.18s` to `0.26s`, `power2.out` or `power3.out`, and `overwrite: "auto"` where repeated interactions can stack tweens.
+- Animate only visible or first-page card groups. Do not animate hundreds of cards at once.
+- Do not use ScrollTrigger, scroll-driven animation, Draggable, Flip, SplitText, premium plugins, or remote animation assets.
