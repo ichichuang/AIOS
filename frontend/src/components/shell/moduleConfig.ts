@@ -28,13 +28,13 @@ export const navigationGroups: NavigationGroup[] = [
   },
   {
     key: "inventory",
-    title: "能力清单",
+    title: "清单",
     summary: "本地能力、MCP 元数据与项目包清单。",
     views: ["skills", "mcp", "project-packs"]
   },
   {
     key: "operations",
-    title: "本地操作",
+    title: "操作",
     summary: "脚本与报告仅作为只读清单展示。",
     views: ["scripts", "reports"]
   },
@@ -46,7 +46,7 @@ export const navigationGroups: NavigationGroup[] = [
   },
   {
     key: "legacy",
-    title: "旧入口 / 兼容",
+    title: "兼容",
     summary: "旧入口与兼容边界，不恢复旧工作流。",
     views: ["legacy"]
   }

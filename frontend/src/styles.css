@@ -22,10 +22,10 @@
 .aios-navigation-rail {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
   border-radius: 22px;
-  padding: 8px 6px;
+  padding: 8px 6px 7px;
 }
 
 .rail-brand {
@@ -33,16 +33,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 48px;
+  gap: 2px;
+  min-height: 40px;
   border-radius: 16px;
   background: var(--aios-primary-soft);
   color: var(--aios-primary);
 }
 
 .rail-brand-logo {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -61,44 +61,44 @@
 
 .rail-desktop-status {
   display: grid;
-  gap: 4px;
+  gap: 2px;
+  align-content: center;
   min-width: 0;
   border: 1px solid var(--aios-outline);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--aios-surface-muted);
-  padding: 6px 4px;
+  padding: 5px 3px;
   text-align: center;
 }
 
-.rail-desktop-status .MuiChip-root {
-  width: 100%;
-  min-width: 0;
-  height: 20px;
-  font-size: 10px;
-}
-
-.rail-desktop-status .MuiChip-label {
+.rail-desktop-status span {
   min-width: 0;
   overflow: hidden;
+  color: var(--aios-success);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.1;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rail-desktop-status .rail-status-copy {
-  display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
   color: var(--aios-subtle);
   font-size: 9px;
   font-weight: 800;
-  line-height: 1.15;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 
 .rail-items {
   position: relative;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -106,25 +106,25 @@
 
 .rail-group {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .rail-group-heading {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
-  padding: 0 4px;
+  height: 13px;
+  padding: 0 2px;
 }
 
 .rail-group-title {
-  overflow: hidden;
   color: var(--aios-subtle);
   font-size: 9px;
   font-weight: 900;
   line-height: 1.1;
   text-align: center;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -132,20 +132,9 @@
   color: var(--aios-primary);
 }
 
-.rail-group-active {
-  overflow: hidden;
-  color: var(--aios-primary);
-  font-size: 9px;
-  font-weight: 900;
-  line-height: 1;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .rail-group-items {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -165,39 +154,54 @@
   position: relative;
   z-index: 1;
   display: grid;
+  grid-template-rows: 20px 13px;
   grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   align-items: center;
   justify-items: center;
   width: 100%;
   max-width: 100%;
-  min-height: 54px;
-  border-radius: 15px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 13px;
   color: var(--aios-muted);
-  padding: 6px 4px;
+  padding: 7px 4px 5px;
   text-align: center;
   transition:
     background-color var(--aios-motion-fast) ease,
-    color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    border-color var(--aios-motion-fast) ease,
+    color var(--aios-motion-fast) ease;
 }
 
 .rail-item:hover {
+  border-color: var(--aios-outline-strong);
   background: var(--aios-primary-soft);
   color: var(--aios-primary);
 }
 
 .rail-item.active {
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-selected-surface);
   color: var(--aios-primary);
+  box-shadow: inset 3px 0 0 var(--aios-primary);
 }
 
-.rail-item:active {
-  transform: translateY(1px);
+.rail-item:focus-visible {
+  outline: 2px solid var(--aios-primary);
+  outline-offset: 2px;
+}
+
+.rail-item svg {
+  align-self: end;
+  font-size: 20px;
 }
 
 .rail-label.MuiTypography-root {
   max-width: 100%;
-  font-size: 11px;
+  align-self: start;
+  font-size: 10.5px;
   font-weight: 800;
   line-height: 1.05;
   overflow: hidden;
@@ -206,16 +210,18 @@
 }
 
 .rail-count.MuiTypography-root {
-  color: var(--aios-subtle);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.05;
-}
-
-.rail-helper.MuiTypography-root {
-  display: none;
-  max-width: 100%;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  max-width: 26px;
+  height: 15px;
   overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--aios-outline-strong) 70%, transparent);
+  border-radius: 999px;
+  background: var(--aios-surface-muted);
   color: var(--aios-subtle);
   font-size: 9px;
   font-weight: 800;
@@ -224,16 +230,18 @@
   white-space: nowrap;
 }
 
-.rail-item.active .rail-helper {
-  display: block;
+.rail-item.active .rail-count {
+  border-color: color-mix(in srgb, var(--aios-primary) 52%, transparent);
+  background: var(--aios-primary-soft);
   color: var(--aios-primary);
 }
 
 .rail-action-dock {
   display: grid;
   place-items: center;
+  min-height: 46px;
   border-top: 1px solid var(--aios-outline);
-  padding-top: 8px;
+  padding-top: 7px;
 }
 
 .theme-mode-button.MuiIconButton-root {
@@ -2543,7 +2551,7 @@
 
   .rail-group-items {
     grid-auto-flow: column;
-    grid-auto-columns: 62px;
+    grid-auto-columns: 58px;
     gap: 5px;
   }
 
@@ -2556,16 +2564,10 @@
   }
 
   .rail-item {
-    min-height: 56px;
+    height: 50px;
+    min-height: 50px;
+    max-height: 50px;
     padding: 6px 4px;
-  }
-
-  .rail-count {
-    display: none;
-  }
-
-  .rail-helper {
-    display: none !important;
   }
 
   .aios-top-command-bar {

@@ -1,4 +1,4 @@
-import { Box, ButtonBase, Chip, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { Box, ButtonBase, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Typography } from "@mui/material";
 import BrightnessAutoRounded from "@mui/icons-material/BrightnessAutoRounded";
 import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
 import LightModeRounded from "@mui/icons-material/LightModeRounded";
@@ -30,10 +30,9 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
         <Typography component="span">Desktop</Typography>
       </Box>
       <Box className="rail-desktop-status" aria-label="桌面产品边界">
-        <Chip className="status-chip status-ok" label="本地" size="small" />
-        <Chip className="status-chip status-ok" label="只读" size="small" />
+        <Typography component="span">本地只读</Typography>
         <Typography className="rail-status-copy" component="span">
-          壳 MVP · 无全盘扫描
+          壳 MVP · 无全盘
         </Typography>
       </Box>
       <Box className="rail-items" data-nav-track>
@@ -46,11 +45,6 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
                 <Typography className="rail-group-title" component="span">
                   {group.title}
                 </Typography>
-                {activeInGroup && (
-                  <Typography className="rail-group-active" component="span">
-                    当前
-                  </Typography>
-                )}
               </Box>
               <Box className="rail-group-items">
                 {group.views.map((view) => {
@@ -87,55 +81,28 @@ interface AiosNavigationItemProps {
 
 const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, groupSummary, icon: Icon, view, onChange }: AiosNavigationItemProps) {
   const moduleSummary = zhCN.moduleSummaries[view];
+  const label = VIEW_LABELS[view];
+  const title = `${label} · ${moduleSummary} · ${groupSummary} · ${count} 项`;
   return (
-    <Tooltip title={`${VIEW_LABELS[view]} · ${moduleSummary} · ${groupSummary}`} placement="right">
-      <ButtonBase
-        className={active ? "rail-item active" : "rail-item"}
-        aria-current={active ? "page" : undefined}
-        aria-label={`${VIEW_LABELS[view]}，${moduleSummary}，${count} 项`}
-        aria-pressed={active}
-        data-nav-active={active ? "true" : undefined}
-        onClick={() => onChange(view)}
-      >
-        <Icon fontSize="small" />
-        <Typography className="rail-label" component="span">
-          {VIEW_LABELS[view]}
-        </Typography>
-        <Typography className="rail-helper" component="span">
-          {getModuleHelper(view)}
-        </Typography>
-        <Typography className="rail-count" component="span">
-          {count}
-        </Typography>
-      </ButtonBase>
-    </Tooltip>
+    <ButtonBase
+      className={active ? "rail-item active" : "rail-item"}
+      aria-current={active ? "page" : undefined}
+      aria-label={`${label}，${moduleSummary}，${count} 项`}
+      aria-pressed={active}
+      data-nav-active={active ? "true" : undefined}
+      title={title}
+      onClick={() => onChange(view)}
+    >
+      <Icon fontSize="small" />
+      <Typography className="rail-label" component="span">
+        {label}
+      </Typography>
+      <Typography className="rail-count" component="span">
+        {count}
+      </Typography>
+    </ButtonBase>
   );
 });
-
-function getModuleHelper(view: ResourceView): string {
-  switch (view) {
-    case "dashboard":
-      return "状态";
-    case "skills":
-      return "能力";
-    case "mcp":
-      return "元数据";
-    case "scripts":
-      return "不执行";
-    case "reports":
-      return "时间线";
-    case "project-packs":
-      return "项目";
-    case "policies":
-      return "守卫";
-    case "validators":
-      return "观察";
-    case "legacy":
-      return "兼容";
-    default:
-      return "模块";
-  }
-}
 
 function ThemeActionDock() {
   const { mode, modeLabel, setMode } = useAiosThemeMode();
@@ -159,20 +126,19 @@ function ThemeActionDock() {
 
   return (
     <Box className="rail-action-dock" aria-label="外观操作">
-      <Tooltip title={`${zhCN.theme.toggle} · ${modeLabel}`} placement="right">
-        <IconButton
-          className={`theme-mode-button mode-${mode}`}
-          aria-controls={open ? "aios-theme-mode-menu" : undefined}
-          aria-expanded={open ? "true" : undefined}
-          aria-haspopup="menu"
-          aria-label={label}
-          size="small"
-          type="button"
-          onClick={openMenu}
-        >
-          <ModeIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+      <IconButton
+        className={`theme-mode-button mode-${mode}`}
+        aria-controls={open ? "aios-theme-mode-menu" : undefined}
+        aria-expanded={open ? "true" : undefined}
+        aria-haspopup="menu"
+        aria-label={label}
+        size="small"
+        title={`${zhCN.theme.toggle} · ${modeLabel}`}
+        type="button"
+        onClick={openMenu}
+      >
+        <ModeIcon fontSize="small" />
+      </IconButton>
       <Menu id="aios-theme-mode-menu" anchorEl={anchorEl} className="theme-mode-menu" open={open} onClose={closeMenu}>
         {themeModeOptions.map((option) => {
           const Icon = option.icon;
