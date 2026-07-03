@@ -52,6 +52,7 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
 
   const secondaryChip = getSecondaryChip();
   const visibleChips = [{ label: sourceLabel, className: "source-chip" }, ...(secondaryChip ? [secondaryChip] : [])].slice(0, 2);
+  const boundaryLabel = resource.safetyProfile.readOnly && !resource.safetyProfile.writesGlobalState ? "本地只读" : "边界需复核";
 
   return (
     <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties}>
@@ -66,21 +67,32 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
       >
         <Box className="compact-skill-main">
           <Box className="compact-skill-title-line">
-            <Typography className="resource-title compact-skill-title" component="h3">
+            <Typography className="resource-title compact-skill-title" component="h3" title={enrichment.displayNameZh}>
               {enrichment.displayNameZh}
             </Typography>
-            <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code">
+            <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code" title={display.technicalName}>
               {display.technicalName}
             </Box>
           </Box>
-          <Typography className="resource-description compact-skill-description" color="text.secondary" variant="body2">
+          <Typography className="resource-description compact-skill-description" color="text.secondary" title={enrichment.shortPurposeZh || enrichment.displayDescriptionZh} variant="body2">
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
+          <Box className="compact-skill-meta-line" aria-label="技能资源摘要">
+            <Typography component="span" title={`${display.zhToolType} / ${display.zhCapability}`}>
+              {display.zhToolType} / {display.zhCapability}
+            </Typography>
+            <Typography component="span" title={sourceLabel}>
+              {sourceLabel}
+            </Typography>
+            <Typography component="span" title={boundaryLabel}>
+              {boundaryLabel}
+            </Typography>
+          </Box>
         </Box>
 
         <Box className="compact-skill-state">
           {visibleChips.map((chip) => (
-            <Chip className={chip.className} key={chip.label} label={chip.label} variant="outlined" />
+            <Chip className={chip.className} key={chip.label} label={chip.label} title={chip.label} variant="outlined" />
           ))}
         </Box>
       </Box>

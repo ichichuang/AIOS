@@ -102,7 +102,7 @@ export function AiosChipZone({ chips, className }: { chips?: AiosUsageChip[]; cl
   return (
     <Box className={["aios-chip-zone", "resource-chip-row", className].filter(Boolean).join(" ")}>
       {chips.slice(0, 2).map((chip) => (
-        <Chip className={chip.className} key={chip.label} label={chip.label} variant={chip.variant ?? "outlined"} />
+        <Chip className={chip.className} key={chip.label} label={chip.label} title={chip.label} variant={chip.variant ?? "outlined"} />
       ))}
     </Box>
   );
@@ -126,16 +126,16 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
       {icon && <Box className="aios-usage-icon">{icon}</Box>}
       <Box className="aios-usage-main">
         <Box className="aios-usage-title-line">
-          <Typography className="resource-title" component="h3">
+          <Typography className="resource-title" component="h3" title={title}>
             {title}
           </Typography>
           {technicalName && (
-            <Box className="code-pill resource-technical-name" component="code">
+            <Box className="code-pill resource-technical-name" component="code" title={technicalName}>
               {technicalName}
             </Box>
           )}
         </Box>
-        <Typography className="resource-description" color="text.secondary" variant="body2">
+        <Typography className="resource-description" color="text.secondary" title={purpose} variant="body2">
           {purpose}
         </Typography>
         {meta}
@@ -147,7 +147,7 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
   return (
     <Box className={["aios-usage-card", "material-card", selected ? "selected" : "", className].filter(Boolean).join(" ")} data-motion="resource-card">
       {onClick ? (
-        <ButtonBase className="aios-usage-action" aria-pressed={selected} onClick={onClick}>
+        <ButtonBase className="aios-usage-action" aria-current={selected ? "true" : undefined} aria-pressed={selected} onClick={onClick}>
           {body}
         </ButtonBase>
       ) : (
@@ -223,23 +223,24 @@ interface AiosTimelineRowProps {
   summary: string;
   chips?: AiosUsageChip[];
   className?: string;
+  meta?: ReactNode;
   selected?: boolean;
   onClick?: () => void;
 }
 
-export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [], className, selected = false, onClick }: AiosTimelineRowProps) {
+export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [], className, meta, selected = false, onClick }: AiosTimelineRowProps) {
   const body = (
     <>
       <Box className="timeline-row-main">
         <Box className="timeline-row-title-line">
-          <Typography className="resource-title" component="h3">
+          <Typography className="resource-title" component="h3" title={title}>
             {title}
           </Typography>
-          <Box className="code-pill resource-technical-name" component="code">
+          <Box className="code-pill resource-technical-name" component="code" title={filename}>
             {filename}
           </Box>
         </Box>
-        <Typography className="timeline-row-summary" color="text.secondary" variant="body2">
+        <Typography className="timeline-row-summary" color="text.secondary" title={`${timestamp} · ${summary}`} variant="body2">
           <Box component="span" className="timeline-row-date">
             {timestamp}
           </Box>
@@ -250,6 +251,7 @@ export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [
             {summary}
           </Box>
         </Typography>
+        {meta}
       </Box>
       <AiosChipZone chips={chips} className="timeline-row-chips" />
     </>
@@ -258,7 +260,7 @@ export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [
   return (
     <Box className={["timeline-row", "aios-timeline-row", "resource-card", selected ? "selected" : "", className].filter(Boolean).join(" ")} data-motion="resource-card">
       {onClick ? (
-        <ButtonBase className="timeline-row-action" aria-pressed={selected} onClick={onClick}>
+        <ButtonBase className="timeline-row-action" aria-current={selected ? "true" : undefined} aria-pressed={selected} onClick={onClick}>
           {body}
         </ButtonBase>
       ) : (

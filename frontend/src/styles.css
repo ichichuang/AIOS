@@ -608,7 +608,7 @@
   gap: var(--aios-card-gap, 10px);
   align-items: flex-start;
   width: 100%;
-  min-height: var(--aios-row-min-height, 86px);
+  min-height: var(--aios-row-min-height, 104px);
   padding: var(--aios-row-padding, 12px 14px);
   color: inherit;
   text-align: left;
@@ -1251,7 +1251,7 @@
 
 .compact-skill-main {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .compact-skill-path {
@@ -1292,6 +1292,31 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compact-skill-meta-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--aios-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.compact-skill-meta-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-skill-meta-line span:not(:last-child)::after {
+  content: "·";
+  margin-left: 8px;
+  color: var(--aios-subtle);
 }
 
 .compact-path-code {
@@ -1637,8 +1662,46 @@
   display: -webkit-box;
   overflow: hidden;
   min-height: 18px;
+  font-size: 12px;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.inventory-meta-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.inventory-meta-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+  background: var(--aios-surface-muted);
+  padding: 3px 6px;
+}
+
+.inventory-meta-item span {
+  flex: 0 0 auto;
+  color: var(--aios-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.inventory-meta-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .resource-meta-grid,
@@ -2333,6 +2396,22 @@
   text-align: center;
 }
 
+.empty-state-hints {
+  display: grid;
+  gap: 4px;
+  max-width: 360px;
+  margin: 4px auto 0;
+  padding: 0;
+  color: var(--aios-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.empty-state-hints li {
+  min-width: 0;
+}
+
 .center-state {
   min-height: 100dvh;
 }
@@ -2595,6 +2674,10 @@
     width: auto;
     justify-content: flex-start;
     max-width: 100%;
+  }
+
+  .inventory-meta-strip {
+    grid-template-columns: 1fr;
   }
 
   .timeline-row-summary {

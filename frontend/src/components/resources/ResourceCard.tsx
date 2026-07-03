@@ -1,5 +1,7 @@
+import { Box, Typography } from "@mui/material";
 import { memo } from "react";
 import { getMcpRiskLabels, getResourceDisplay } from "../../i18n/resourceText";
+import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { AiosTimelineRow, AiosUsageCard, type AiosUsageChip } from "../ui/AiosUiPrimitives";
 
@@ -22,6 +24,7 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
         chips={getUsageChips(resource, server, variant, display)}
         className={`resource-card ${variant}`}
         filename={display.technicalName}
+        meta={<InventoryMetaStrip rows={getInventoryMetaRows(resource, server, variant, display)} />}
         selected={selected}
         summary={display.zhDescription}
         timestamp={formatDate(resource.updatedAt)}
@@ -35,6 +38,7 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
     <AiosUsageCard
       chips={getUsageChips(resource, server, variant, display)}
       className={`resource-card ${variant}`}
+      meta={<InventoryMetaStrip rows={getInventoryMetaRows(resource, server, variant, display)} />}
       purpose={getUsagePurpose(resource, server, variant, display)}
       selected={selected}
       technicalName={display.technicalName}
@@ -44,6 +48,29 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
   );
 });
 
+function InventoryMetaStrip({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  return (
+    <Box className="inventory-meta-strip" aria-label="资源清单摘要">
+      {rows.map((row) => (
+        <Box className="inventory-meta-item" key={row.label}>
+          <Typography component="span">{row.label}</Typography>
+          <Typography component="strong" title={row.value}>
+            {row.value}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+function getInventoryMetaRows(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): Array<{ label: string; value: string }> {
+  return [
+    { label: "类型", value: `${display.zhToolType} / ${display.zhCapability}` },
+    { label: "来源", value: getInventorySourceLabel(resource, server, variant) },
+    { label: "边界", value: getBoundaryLabel(resource, variant) }
+  ];
+}
+
 function getUsageChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): AiosUsageChip[] {
   const chips: AiosUsageChip[] = [];
   if (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available") {
@@ -52,6 +79,8 @@ function getUsageChips(resource: AiosResource, server: McpServerRecord | null, v
   if (resource.risk !== "low") {
     chips.push({ label: display.zhRisk, className: `risk-chip risk-${resource.risk}`, variant: "filled" });
   }
+  const boundaryChip = getBoundaryChip(resource, variant);
+  if (boundaryChip) chips.push(boundaryChip);
 
   const extras = getExtraChips(resource, server, variant);
   for (const label of extras) {
@@ -61,7 +90,7 @@ function getUsageChips(resource: AiosResource, server: McpServerRecord | null, v
 
   if (chips.length < 2) chips.push({ label: display.zhCapability, variant: "outlined" });
   if (chips.length < 2 && display.zhToolType) chips.push({ label: display.zhToolType, variant: "outlined" });
-  return chips.slice(0, 2);
+  return dedupeChips(chips).slice(0, 2);
 }
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
@@ -74,6 +103,45 @@ function getExtraChips(resource: AiosResource, server: McpServerRecord | null, v
   if (variant === "validator") return ["观察"];
   if (variant === "legacy") return ["兼容入口"];
   return [];
+}
+
+function getBoundaryChip(resource: AiosResource, variant: ResourceCardVariant): AiosUsageChip | null {
+  if (resource.safetyProfile.writesGlobalState) return { label: "写入需复核", className: "status-chip status-warn", variant: "filled" };
+  if (variant === "legacy" || resource.toolType === "legacy" || resource.capabilityType === "usage-prompt") return { label: "兼容", className: "status-chip status-warn" };
+  if (variant === "mcp" || resource.capabilityType === "mcp-server" || resource.capabilityType === "mcp-client") return { label: "仅元数据", className: "status-chip status-disabled" };
+  if (resource.safetyProfile.readOnly) return { label: "只读", className: "status-chip status-ok" };
+  return { label: "需复核", className: "status-chip status-warn" };
+}
+
+function dedupeChips(chips: AiosUsageChip[]): AiosUsageChip[] {
+  const seen = new Set<string>();
+  return chips.filter((chip) => {
+    if (seen.has(chip.label)) return false;
+    seen.add(chip.label);
+    return true;
+  });
+}
+
+function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string {
+  if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
+  if (variant === "report") return "本地报告";
+  if (variant === "project-pack") return getProjectPackArea(resource);
+  if (variant === "policy") return "策略守卫";
+  if (variant === "validator") return "观察验证器";
+  if (variant === "legacy" || resource.toolType === "legacy") return "兼容入口";
+
+  const sourceKind = getMetadataString(resource, "sourceKind");
+  if (sourceKind) return sourceKind;
+  if (resource.path || resource.paths.length > 0) return "本地清单";
+  return "未记录";
+}
+
+function getBoundaryLabel(resource: AiosResource, variant: ResourceCardVariant): string {
+  if (resource.safetyProfile.writesGlobalState) return "写入需复核";
+  if (variant === "mcp") return "只读元数据";
+  if (variant === "legacy" || resource.toolType === "legacy") return "兼容只读";
+  if (resource.safetyProfile.readOnly) return "本地只读";
+  return "边界需复核";
 }
 
 function getUsageTitle(server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): string {
