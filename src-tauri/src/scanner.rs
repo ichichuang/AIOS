@@ -564,27 +564,34 @@ fn classify_resource(path: &Path) -> (&'static str, &'static str) {
 
 fn is_broad_or_system_root(path: &Path) -> bool {
     let normalized = normalize_for_policy(path);
-    if matches!(
-        normalized.as_str(),
-        "/" | "/users"
-            | "/volumes"
-            | "/system"
-            | "/library"
-            | "/applications"
-            | "/private"
-            | "/private/tmp"
-            | "/tmp"
-            | "/var"
-            | "/etc"
-            | "/bin"
-            | "/sbin"
-            | "/usr"
-            | "/opt"
-            | "/dev"
-            | "/proc"
-            | "/run"
-            | "/mnt"
-            | "/home"
+    if matches!(normalized.as_str(), "/" | "/users" | "/volumes") {
+        return true;
+    }
+
+    if is_windows_broad_or_system_root(&normalized) {
+        return true;
+    }
+
+    if matches_denied_root_or_descendant(
+        &normalized,
+        &[
+            "/system",
+            "/library",
+            "/applications",
+            "/private",
+            "/tmp",
+            "/var",
+            "/etc",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/opt",
+            "/dev",
+            "/proc",
+            "/run",
+            "/mnt",
+            "/home",
+        ],
     ) {
         return true;
     }
@@ -607,6 +614,29 @@ fn is_broad_or_system_root(path: &Path) -> bool {
             || value.ends_with(":/program files (x86)")
             || value.ends_with(":/programdata")
     )
+}
+
+fn is_windows_broad_or_system_root(normalized: &str) -> bool {
+    let bytes = normalized.as_bytes();
+    if bytes.len() < 2 || bytes[1] != b':' || !bytes[0].is_ascii_alphabetic() {
+        return false;
+    }
+
+    matches!(
+        &normalized[2..],
+        "" | "/"
+            | "/users"
+            | "/windows"
+            | "/program files"
+            | "/program files (x86)"
+            | "/programdata"
+    )
+}
+
+fn matches_denied_root_or_descendant(normalized: &str, roots: &[&str]) -> bool {
+    roots
+        .iter()
+        .any(|root| normalized == *root || normalized.starts_with(&format!("{root}/")))
 }
 
 fn is_home_root(path: &Path) -> bool {
@@ -798,8 +828,13 @@ impl From<ScanError> for ScanCommandError {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_resource_kind, redact_relative_path, validate_scan_root};
-    use std::path::Path;
+    use super::{
+        classify_resource_kind, redact_relative_path, scan_validated_root, validate_scan_root,
+        SelectedRoot,
+    };
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn rejects_broad_machine_roots() {
@@ -812,6 +847,25 @@ mod tests {
             "/Volumes",
             "/private",
             "/tmp",
+            "C:\\",
+            "C:\\Users",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "D:/",
+        ] {
+            let result = validate_scan_root(Path::new(root));
+            assert!(result.is_err(), "expected {root} to be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_system_root_descendants() {
+        for root in [
+            "/System/Library",
+            "/Library/Application Support",
+            "/Applications/Utilities",
+            "/private/var",
+            "/tmp/aios-custom-scan",
         ] {
             let result = validate_scan_root(Path::new(root));
             assert!(result.is_err(), "expected {root} to be rejected");
@@ -851,5 +905,96 @@ mod tests {
             classify_resource_kind(Path::new("misc/local.txt")),
             "unknown-local-resource"
         );
+    }
+
+    #[test]
+    fn scans_fixture_with_classification_and_excludes() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "test-fixture".to_string(),
+            canonical_root,
+            display_name: "custom-scan-basic".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+        };
+
+        let result = scan_validated_root(&selected).expect("fixture scan should succeed");
+        let kinds = result
+            .resources
+            .iter()
+            .map(|resource| resource.resource_kind)
+            .collect::<HashSet<_>>();
+
+        for expected in [
+            "skill",
+            "prompt",
+            "mcp-config",
+            "script",
+            "report-doc",
+            "project-pack",
+            "policy-governance",
+            "validator",
+            "package-manifest",
+            "unknown-local-resource",
+        ] {
+            assert!(kinds.contains(expected), "missing kind {expected}");
+        }
+
+        assert!(
+            result
+                .resources
+                .iter()
+                .all(|resource| !resource.relative_path.contains("venv")),
+            "excluded venv entries should not be returned"
+        );
+        assert!(
+            result.counts.skipped_by_exclude > 0,
+            "fixture should exercise scanner-local excludes"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn skips_symlinks_without_following_targets() {
+        use std::os::unix::fs::symlink;
+
+        let root = symlink_fixture_root();
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("outside-target")).expect("create symlink target");
+        fs::write(root.join("outside-target/SKILL.md"), "not read").expect("write target file");
+        symlink(root.join("outside-target"), root.join("linked-target")).expect("create symlink");
+
+        let selected = SelectedRoot {
+            selection_id: "symlink-fixture".to_string(),
+            canonical_root: root.clone(),
+            display_name: "scanner-symlink-test".to_string(),
+            root_summary: "~/scanner-symlink-test".to_string(),
+        };
+
+        let result = scan_validated_root(&selected).expect("symlink fixture scan should succeed");
+
+        assert!(
+            result.counts.skipped_symlinks >= 1,
+            "symlink should be counted as skipped"
+        );
+        assert!(
+            result
+                .resources
+                .iter()
+                .all(|resource| !resource.relative_path.contains("linked-target/SKILL.md")),
+            "scanner must not follow symlink targets"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../test-fixtures/custom-scan-basic")
+            .canonicalize()
+            .expect("fixture root should exist")
+    }
+
+    fn symlink_fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/scanner-symlink-test")
     }
 }
