@@ -1,12 +1,12 @@
 import { Box, Chip, Typography } from "@mui/material";
 import logoLarge from "../../assets/image/logo.png";
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
-import { AiosCapabilityLauncherCard, AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails } from "../ui/AiosUiPrimitives";
+import { AiosCapabilityLauncherCard, AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard, type AiosUsageChip } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { riskCounts, sortByUpdatedAt } from "./moduleUtils";
 
@@ -17,6 +17,10 @@ import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import CameraAltRounded from "@mui/icons-material/CameraAltRounded";
 import AutoStoriesRounded from "@mui/icons-material/AutoStoriesRounded";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
+import DesktopMacRounded from "@mui/icons-material/DesktopMacRounded";
+import SearchOffRounded from "@mui/icons-material/SearchOffRounded";
+import StorageRounded from "@mui/icons-material/StorageRounded";
+import FolderOffRounded from "@mui/icons-material/FolderOffRounded";
 
 const quickViews: ResourceView[] = ["skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
@@ -65,6 +69,57 @@ const capabilityEntries = [
   }
 ];
 
+const desktopStatusChips: AiosUsageChip[] = [
+  { label: "本地运行", className: "status-chip status-ok" },
+  { label: "默认只读", className: "status-chip status-ok" },
+  { label: "桌面壳 MVP", variant: "outlined" },
+  { label: "不做全盘扫描", className: "status-chip status-disabled" }
+];
+
+const desktopBoundaryCards: Array<{
+  title: string;
+  purpose: string;
+  icon: ReactNode;
+  chips: AiosUsageChip[];
+}> = [
+  {
+    title: "Tauri 桌面壳",
+    purpose: "当前桌面壳承载现有 Material Console 前端，保持本地只读展示。",
+    icon: <DesktopMacRounded fontSize="small" />,
+    chips: [
+      { label: "可用", className: "status-chip status-ok", variant: "filled" },
+      { label: "Phase 1" }
+    ]
+  },
+  {
+    title: "扫描引擎",
+    purpose: "Rust 扫描引擎尚未实现；当前继续读取现有 snapshot，不发起扫描任务。",
+    icon: <SearchOffRounded fontSize="small" />,
+    chips: [
+      { label: "未实现", className: "status-chip status-warn", variant: "filled" },
+      { label: "未来 Phase 2" }
+    ]
+  },
+  {
+    title: "SQLite 本地索引",
+    purpose: "SQLite 索引尚未实现；JSON snapshot 兼容路径继续保留。",
+    icon: <StorageRounded fontSize="small" />,
+    chips: [
+      { label: "未实现", className: "status-chip status-warn", variant: "filled" },
+      { label: "未来 Phase 3" }
+    ]
+  },
+  {
+    title: "全盘扫描",
+    purpose: "全盘扫描不属于 MVP，未启用，也不是 Phase 1-4 的默认能力。",
+    icon: <FolderOffRounded fontSize="small" />,
+    chips: [
+      { label: "禁用", className: "status-chip status-disabled", variant: "filled" },
+      { label: "非 MVP" }
+    ]
+  }
+];
+
 export function DashboardModule({ allResources, baseline, selectedId, viewCounts, onSelect, onViewChange, onQueryChange }: AiosModuleProps) {
   const risks = useMemo(() => riskCounts(allResources), [allResources]);
   const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
@@ -93,12 +148,34 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
       <Box className="dashboard-brand-card">
         <Box className="dashboard-brand-logo" component="img" src={logoLarge} alt="AIOS Logo" />
         <Box className="dashboard-brand-copy">
-          <Typography variant="h3">AIOS Engine</Typography>
+          <Typography variant="h3">AIOS Desktop</Typography>
           <Typography variant="body2" color="text.secondary">
-            本地可信智能体操作系统 · 只读控制面板
+            桌面壳 MVP · 本地可信智能体操作系统 · 默认只读控制面板
           </Typography>
         </Box>
+        <Box className="dashboard-desktop-status" aria-label="AIOS Desktop MVP 边界">
+          <Box className="dashboard-status-copy">
+            <Typography component="strong">桌面产品状态</Typography>
+            <Typography color="text.secondary" variant="body2">
+              当前仅展示 repo-local snapshot 和现有清单；不执行脚本、MCP、扫描任务或全盘遍历。
+            </Typography>
+          </Box>
+          <Box className="dashboard-status-chip-row">
+            {desktopStatusChips.map((chip) => (
+              <Chip className={chip.className} key={chip.label} label={chip.label} variant={chip.variant ?? "filled"} />
+            ))}
+          </Box>
+        </Box>
       </Box>
+
+      <AiosSection className="desktop-boundary-section">
+        <AiosSectionHeader title="桌面能力边界" summary="Phase 1.5 只做产品状态表达，不改变后端能力。" />
+        <Box className="quick-entry-grid desktop-boundary-grid">
+          {desktopBoundaryCards.map((entry) => (
+            <AiosUsageCard className="dashboard-boundary-card" chips={entry.chips} icon={entry.icon} key={entry.title} purpose={entry.purpose} title={entry.title} />
+          ))}
+        </Box>
+      </AiosSection>
 
       <AiosSection>
           <AiosSectionHeader title="常用能力库" />

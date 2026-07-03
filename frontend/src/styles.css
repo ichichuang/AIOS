@@ -616,7 +616,8 @@
 }
 
 .dashboard-brand-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(280px, 0.95fr);
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -655,6 +656,63 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dashboard-desktop-status {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border-left: 1px solid var(--aios-outline);
+  padding-left: 14px;
+}
+
+.dashboard-status-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dashboard-status-copy strong {
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.dashboard-status-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-status-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dashboard-status-chip-row .MuiChip-root {
+  max-width: 100%;
+  height: 24px;
+  font-size: 11px;
+}
+
+.desktop-boundary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+
+.dashboard-boundary-card .aios-usage-action,
+.dashboard-boundary-card .aios-usage-action.static {
+  min-height: 108px;
+  padding: 12px;
+}
+
+.dashboard-boundary-card .resource-description {
+  -webkit-line-clamp: 3;
 }
 
 .risk-meter {
@@ -2119,6 +2177,18 @@
   .quick-entry-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dashboard-brand-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .dashboard-desktop-status {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--aios-outline);
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -2212,6 +2282,16 @@
   .policy-guardrail-grid,
   .validator-notice-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-brand-card {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .dashboard-brand-logo {
+    height: 28px;
+    max-width: 88px;
   }
 
   .aios-section-header {

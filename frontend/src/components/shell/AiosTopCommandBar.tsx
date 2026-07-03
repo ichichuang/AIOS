@@ -32,7 +32,7 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
       <Box className="command-title">
         <Box className="command-title-logo" component="img" src={labelIcon} alt="AIOS Logo" />
         <Typography component="h1" variant="h2">
-          AIOS 控制中心
+          AIOS Desktop
         </Typography>
         <Chip className="status-chip status-ok" label="本地只读" />
       </Box>
