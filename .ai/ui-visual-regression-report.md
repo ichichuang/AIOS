@@ -1,4 +1,4 @@
-# AIOS Material Console Layout Polish Final Pass
+# AIOS Material Console UI Defect Repair
 
 ## Status
 
@@ -6,58 +6,70 @@ GO
 
 ## Browser QA
 
-- URL: `http://127.0.0.1:5177/`
-- Browser route: MCP Playwright browser, 1440x900 desktop and 390x844 mobile.
+- URL: `http://127.0.0.1:5175/`
+- Browser route: in-app Browser unavailable (`agent.browsers.list()` returned `[]`); used Playwright Python with system Google Chrome.
 - Page identity: `AIOS 控制中心`.
-- Blank page / framework overlay: passed.
-- Console warnings/errors: 0 on clean post-fix run.
-- Body-level scroll: 0 failures; `html`, `body`, and `#root` remain fixed-height with internal scroll regions.
+- Console warnings/errors: 0.
+- Body-level scroll: none at 1440x900 desktop and 390x844 mobile; internal scroll regions remain in use.
 - Rapid navigation switching: passed across 总览、技能库、MCP、脚本、报告、项目包、策略、验证器、旧入口.
-- Skills search: `nvwa` 11 rows, `frontend` 11 rows, `top-ui` 1 row.
-- Skills view options: list shell height delta `0`.
+- Dashboard launcher checks: required titles are visible and readable, including `前端与界面`, `小程序与移动端`, `设计美化与动效`, `技能蒸馏 / 人物视角`, `浏览器测试与截图`, `文档与知识库`, `本地系统与工具`.
+- Inspector checks:
+  - Dashboard empty state now shows contextual usage guidance.
+  - Selected resource inspector primary panel uses `max-height: none` and `overflow: visible`.
+  - `如何使用` is visible above technical accordions when prompts exist.
+  - Technical details remain visually secondary and collapsed by default.
+- Resource card checks:
+  - MCP, 脚本, 验证器 cards show readable titles, code-pill technical names, purpose text, and at most 2 chips.
+  - Default cards do not show path blocks.
+  - Chip lanes do not dominate the text column.
+- Report checks:
+  - Dashboard recent reports and Reports module rows use the left-aligned timeline primitive.
+  - Report rows show title + filename code pill, date + summary, at most 2 chips, and no full path preview.
+- Skills checks:
+  - View options popover open/close preserved module content height.
+  - Category rail remained readable.
+  - `nvwa`, `frontend`, and `top-ui` searches returned visible virtualized rows.
 
-## Fixed Issues
+## Fixed Defects
 
-1. Added shared layout primitives for sections, section headers, chip zones, usage rows/cards, and timeline rows.
-2. Normalized module/card variables for content padding, card padding, row minimum heights, report row height, card gaps, and section gaps.
-3. Converted recent reports and Reports module rows to the same left-aligned timeline row grammar.
-4. Raised shared ButtonBase row specificity so MUI defaults cannot remove row/card padding.
-5. Removed visible full-path copy from default policy guardrail cards.
-6. Moved module/resource technical details, paths, commands, args, env var names, provenance, token pressure, and risk detail into the persistent inspector.
-7. Simplified MCP, Scripts, Project Packs, Policies, Validators, and Legacy default cards to usage-first title/code/purpose/chip rows.
-8. Stabilized Skills view options as a Popover that does not collapse or shift the virtualized list.
-9. Removed standalone GSAP group reveal animation; module swap, nav indicator, inspector, and copy feedback remain scoped.
-10. Fixed React duplicate-key console warning in inspector technical detail rows.
+1. Added a dedicated Dashboard capability launcher card so action chips and code pills no longer squeeze Chinese titles into fragments.
+2. Removed broad quick-entry text truncation rules that affected unrelated launcher cards.
+3. Replaced the blank inspector empty state with a compact contextual module guide.
+4. Kept selected inspector content unclipped and kept `如何使用` above technical accordions.
+5. Strengthened shared usage and timeline primitives for left alignment, padding, fixed chip lanes, and selected accents.
+6. Increased resource card minimum widths and two-line purpose clamps for MCP, Scripts, Validators, Project Packs, Policies, and Legacy style cards.
+7. Preserved Reports and recent reports on the same left-aligned timeline primitive with no default path preview.
+8. Kept Skills view options and category rail from collapsing the virtualized list layout.
 
 ## Screenshot Paths
 
-- `.ai/ui-snapshots/layout-polish-pass/dashboard-light.png`
-- `.ai/ui-snapshots/layout-polish-pass/dashboard-dark.png`
-- `.ai/ui-snapshots/layout-polish-pass/skills-default.png`
-- `.ai/ui-snapshots/layout-polish-pass/skills-view-options-open.png`
-- `.ai/ui-snapshots/layout-polish-pass/mcp.png`
-- `.ai/ui-snapshots/layout-polish-pass/scripts.png`
-- `.ai/ui-snapshots/layout-polish-pass/reports.png`
-- `.ai/ui-snapshots/layout-polish-pass/project-packs.png`
-- `.ai/ui-snapshots/layout-polish-pass/policies.png`
-- `.ai/ui-snapshots/layout-polish-pass/validators.png`
-- `.ai/ui-snapshots/layout-polish-pass/legacy.png`
-- `.ai/ui-snapshots/layout-polish-pass/inspector-selected-resource.png`
-- `.ai/ui-snapshots/layout-polish-pass/mobile-390x844-dashboard.png`
+- `.ai/ui-snapshots/ui-defect-repair/dashboard-dark-readable-cards.png`
+- `.ai/ui-snapshots/ui-defect-repair/dashboard-light-readable-cards.png`
+- `.ai/ui-snapshots/ui-defect-repair/inspector-empty-dashboard.png`
+- `.ai/ui-snapshots/ui-defect-repair/inspector-selected-resource.png`
+- `.ai/ui-snapshots/ui-defect-repair/mcp-cards-readable.png`
+- `.ai/ui-snapshots/ui-defect-repair/scripts-cards-readable.png`
+- `.ai/ui-snapshots/ui-defect-repair/validators-cards-readable.png`
+- `.ai/ui-snapshots/ui-defect-repair/reports-left-aligned.png`
+- `.ai/ui-snapshots/ui-defect-repair/skills-options-open-stable.png`
+- `.ai/ui-snapshots/ui-defect-repair/skills-nvwa-search.png`
+- `.ai/ui-snapshots/ui-defect-repair/mobile-390x844.png`
 
 ## GSAP Verification
 
-- `useAiosMotion.ts` only keeps scoped opacity/transform motion for module swap, selected nav indicator, inspector content, and copy feedback.
-- No GSAP width, height, top, left, grid-template, box-shadow, filter, blur, clip-path, scroll, or `react-window` row transform animation is used.
+- `frontend/src/lib/useAiosMotion.ts` remains limited to scoped opacity/transform motion for selected nav indicator, module swaps, inspector content switches, and copy feedback.
+- No GSAP tween animates width, height, top, left, grid-template, box-shadow, filter, blur, clip-path, scroll, or react-window row transforms.
 - `useGSAP` scoped cleanup remains in place.
-- `contextSafe` remains used for copy feedback.
-- `overwrite: "auto"` remains on repeatable tweens.
+- `contextSafe` remains used for event-triggered copy feedback.
+- Repeatable tweens keep `overwrite: "auto"`.
 - `prefers-reduced-motion` is respected.
 
 ## Remaining Visual Risks
 
-- Search result counts reflect the current generated inventory; changes to the snapshot can change visible row counts without indicating a layout regression.
-- Dense technical values are intentionally preserved in inspector accordions and may wrap there by design.
+- Vite still reports the existing large chunk warning during frontend build; this pass did not change bundling.
+- Inventory-dependent counts and report filenames may change when the generated snapshot changes.
+- Very long technical names are intentionally kept in single-line code pills with ellipsis in default rows.
+- On narrow mobile widths, bottom navigation labels are horizontally constrained by viewport size.
 
 ## Final Decision
 

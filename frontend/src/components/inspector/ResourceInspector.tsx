@@ -2,6 +2,7 @@ import { Box, Chip, Typography } from "@mui/material";
 import { memo } from "react";
 import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
+import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import {
   buildSkillDisplayEnrichment,
@@ -14,24 +15,20 @@ import { getDiscoveryBooleanLabel, getMetadataString as getDiscoveryMetadataStri
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { PromptCopyButton } from "../PromptCopyButton";
-import { AiosInspectorSection, AiosTechnicalDetails, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
+import { AiosInspectorEmptyGuide, AiosInspectorSection, AiosInspectorUsagePanel, AiosTechnicalDetails, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
 
 interface ResourceInspectorProps {
+  activeView: ResourceView;
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  visibleCount: number;
 }
 
-export const ResourceInspector = memo(function ResourceInspector({ resource, skillIdentity, skillCapability }: ResourceInspectorProps) {
+export const ResourceInspector = memo(function ResourceInspector({ activeView, resource, skillIdentity, skillCapability, visibleCount }: ResourceInspectorProps) {
   if (!resource) {
-    return (
-      <Box className="inspector-panel inspector-empty-panel">
-        <Typography component="h3" variant="h3">
-          {zhCN.app.inspectorEmptyTitle}
-        </Typography>
-        <Typography color="text.secondary">{zhCN.app.inspectorEmpty}</Typography>
-      </Box>
-    );
+    const guide = getEmptyInspectorGuide(activeView, visibleCount);
+    return <AiosInspectorEmptyGuide badge={guide.badge} hints={guide.hints} summary={guide.summary} title={guide.title} />;
   }
 
   const display = getResourceDisplay(resource);
@@ -66,86 +63,116 @@ export const ResourceInspector = memo(function ResourceInspector({ resource, ski
           </Box>
         </Box>
 
-        <Typography color="text.secondary" variant="body2">
-          {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
-        </Typography>
+        <Box className="inspector-summary-block">
+          <Typography className="inspector-field-label" component="p">
+            是什么
+          </Typography>
+          <Typography className="inspector-description" color="text.secondary" variant="body2">
+            {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
+          </Typography>
+        </Box>
 
         {enrichment.inferredUseCases.length > 0 && (
           <Box className="inspector-use-cases" aria-label="适合场景">
             <Typography component="span" variant="body2">
               适合用于
             </Typography>
-            {enrichment.inferredUseCases.slice(0, 3).map((useCase) => (
-              <Chip key={useCase} label={useCase} size="small" variant="outlined" />
-            ))}
-          </Box>
-        )}
-
-        {resource.prompts.length > 0 && (
-          <Box className="inspector-copy-actions">
-            {codexPrompt && <PromptCopyButton prompt={codexPrompt} target="codex" compact />}
-            {claudePrompt && <PromptCopyButton prompt={claudePrompt} target="claude" compact />}
-            <Typography color="text.secondary" variant="body2">
-              {zhCN.app.promptBodyEnglish}
-            </Typography>
+            <Box className="inspector-use-case-chips">
+              {enrichment.inferredUseCases.slice(0, 3).map((useCase) => (
+                <Chip key={useCase} label={useCase} size="small" variant="outlined" />
+              ))}
+            </Box>
           </Box>
         )}
       </Box>
 
-      <AiosInspectorSection title="来源与路径">
-        <AiosTechnicalDetails rows={sourceRows}>
-          <Box className="inspector-path-list">
-            <Typography variant="body2">路径详情</Typography>
-            {resource.paths.length > 0 ? (
-              resource.paths.slice(0, 6).map((path) => (
-                <Box className="code-pill path-detail" component="code" key={path}>
-                  {path}
-                </Box>
-              ))
-            ) : (
-              <Typography color="text.secondary" variant="body2">{zhCN.app.noPath}</Typography>
-            )}
-            {resource.paths.length > 6 && (
-              <Typography color="text.secondary" variant="body2">
-                还有 {resource.paths.length - 6} 个路径已省略。
-              </Typography>
-            )}
-          </Box>
-        </AiosTechnicalDetails>
-      </AiosInspectorSection>
+      {resource.prompts.length > 0 && (
+        <AiosInspectorUsagePanel title="如何使用" summary={zhCN.app.promptBodyEnglish}>
+          {codexPrompt && <PromptCopyButton prompt={codexPrompt} target="codex" compact />}
+          {claudePrompt && <PromptCopyButton prompt={claudePrompt} target="claude" compact />}
+        </AiosInspectorUsagePanel>
+      )}
 
-      <AiosInspectorSection title="安全与风险">
-        <AiosTechnicalDetails rows={safetyRows}>
-          {resource.safetyProfile.notes.length > 0 && (
-            <Box className="note-list" component="ul">
-              {resource.safetyProfile.notes.map((note) => (
-                <li key={note}>{translateSafetyNote(note)}</li>
-              ))}
+      <Box className="inspector-technical-stack" aria-label="技术细节">
+        <AiosInspectorSection title="来源与路径">
+          <AiosTechnicalDetails rows={sourceRows}>
+            <Box className="inspector-path-list">
+              <Typography variant="body2">路径详情</Typography>
+              {resource.paths.length > 0 ? (
+                resource.paths.slice(0, 6).map((path) => (
+                  <Box className="code-pill path-detail" component="code" key={path}>
+                    {path}
+                  </Box>
+                ))
+              ) : (
+                <Typography color="text.secondary" variant="body2">{zhCN.app.noPath}</Typography>
+              )}
+              {resource.paths.length > 6 && (
+                <Typography color="text.secondary" variant="body2">
+                  还有 {resource.paths.length - 6} 个路径已省略。
+                </Typography>
+              )}
             </Box>
-          )}
-        </AiosTechnicalDetails>
-      </AiosInspectorSection>
+          </AiosTechnicalDetails>
+        </AiosInspectorSection>
 
-      <AiosInspectorSection title="元数据质量">
-        <AiosTechnicalDetails rows={qualityRows}>
+        <AiosInspectorSection title="安全与风险">
+          <AiosTechnicalDetails rows={safetyRows}>
+            {resource.safetyProfile.notes.length > 0 && (
+              <Box className="note-list" component="ul">
+                {resource.safetyProfile.notes.map((note) => (
+                  <li key={note}>{translateSafetyNote(note)}</li>
+                ))}
+              </Box>
+            )}
+          </AiosTechnicalDetails>
+        </AiosInspectorSection>
+
+        <AiosInspectorSection title="元数据质量">
+          <AiosTechnicalDetails rows={qualityRows}>
             <CapabilityChipLine label="质量原因" values={enrichment.qualityReasons.length > 0 ? enrichment.qualityReasons : ["未记录额外原因。"]} />
             <CapabilityChipLine label="推断标签" values={enrichment.inferredTags.length > 0 ? enrichment.inferredTags : ["无"]} />
             <CapabilityChipLine label="建议补充" values={enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]).length > 0 ? enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]) : ["无"]} code={enrichment.suggestedFields.length > 0} />
-        </AiosTechnicalDetails>
-      </AiosInspectorSection>
+          </AiosTechnicalDetails>
+        </AiosInspectorSection>
 
-      <AiosInspectorSection title="Token 压力">
-        <AiosTechnicalDetails rows={tokenRows}>
-          {resource.tokenPressure.reason && (
-            <Typography color="text.secondary" variant="body2">
-              {translateTokenReason(resource.tokenPressure.reason)}
-            </Typography>
-          )}
-        </AiosTechnicalDetails>
-      </AiosInspectorSection>
+        <AiosInspectorSection title="Token 压力">
+          <AiosTechnicalDetails rows={tokenRows}>
+            {resource.tokenPressure.reason && (
+              <Typography color="text.secondary" variant="body2">
+                {translateTokenReason(resource.tokenPressure.reason)}
+              </Typography>
+            )}
+          </AiosTechnicalDetails>
+        </AiosInspectorSection>
+      </Box>
     </Box>
   );
 });
+
+function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number): { title: string; summary: string; hints: string[]; badge: string } {
+  if (activeView === "dashboard") {
+    return {
+      title: "选择能力入口或资源查看详情",
+      summary: "总览用于快速进入常用能力库、查看系统边界和近期报告。",
+      hints: ["点击能力卡会切换到技能库并填入搜索词。", "点击近期报告可在这里查看报告详情。", "此面板只展示本地只读信息。"],
+      badge: "总览"
+    };
+  }
+
+  const moduleName = VIEW_LABELS[activeView];
+  const promptCopyHint =
+    activeView === "skills" || activeView === "legacy"
+      ? "选中含提示词的资源后，可复制 Codex / Claude 调用。"
+      : "此模块默认不提供提示词复制，仅展示只读详情。";
+
+  return {
+    title: `${moduleName} 使用指南`,
+    summary: zhCN.moduleSummaries[activeView],
+    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、路径和安全信息。", promptCopyHint],
+    badge: moduleName
+  };
+}
 
 function getSourceRows(
   resource: AiosResource,

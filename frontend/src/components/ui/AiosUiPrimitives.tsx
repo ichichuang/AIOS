@@ -157,6 +157,41 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
   );
 }
 
+interface AiosCapabilityLauncherCardProps {
+  title: string;
+  description: string;
+  actionLabel: string;
+  icon: ReactNode;
+  metaLabel?: string;
+  onClick: () => void;
+}
+
+export function AiosCapabilityLauncherCard({ title, description, actionLabel, icon, metaLabel, onClick }: AiosCapabilityLauncherCardProps) {
+  return (
+    <Box className="aios-capability-launcher-card" data-motion="resource-card">
+      <ButtonBase className="aios-capability-launcher-action" onClick={onClick}>
+        <Box className="aios-capability-launcher-icon">{icon}</Box>
+        <Box className="aios-capability-launcher-copy">
+          <Box className="aios-capability-launcher-title-line">
+            <Typography className="aios-capability-launcher-title" component="h3">
+              {title}
+            </Typography>
+            {metaLabel && (
+              <Box className="code-pill aios-capability-launcher-meta" component="code">
+                {metaLabel}
+              </Box>
+            )}
+          </Box>
+          <Typography className="aios-capability-launcher-description" color="text.secondary" variant="body2">
+            {description}
+          </Typography>
+        </Box>
+        <Chip className="aios-capability-launcher-chip" label={actionLabel} variant="outlined" />
+      </ButtonBase>
+    </Box>
+  );
+}
+
 interface AiosUsageRowProps {
   title: string;
   purpose: string;
@@ -237,6 +272,56 @@ interface AiosInspectorSectionProps {
   title: string;
   children: ReactNode;
   defaultExpanded?: boolean;
+}
+
+interface AiosInspectorEmptyGuideProps {
+  title: string;
+  summary: string;
+  hints: string[];
+  badge?: string;
+}
+
+export function AiosInspectorEmptyGuide({ title, summary, hints, badge }: AiosInspectorEmptyGuideProps) {
+  return (
+    <Box className="inspector-panel inspector-empty-panel aios-inspector-empty-guide">
+      <Box className="aios-inspector-empty-heading">
+        <Typography component="h3" variant="h3">
+          {title}
+        </Typography>
+        {badge && <Chip label={badge} variant="outlined" />}
+      </Box>
+      <Typography color="text.secondary" variant="body2">
+        {summary}
+      </Typography>
+      <Box className="aios-inspector-empty-hints" component="ul">
+        {hints.map((hint) => (
+          <li key={hint}>{hint}</li>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+interface AiosInspectorUsagePanelProps {
+  title: string;
+  summary: string;
+  children: ReactNode;
+}
+
+export function AiosInspectorUsagePanel({ title, summary, children }: AiosInspectorUsagePanelProps) {
+  return (
+    <Box className="aios-inspector-usage-panel">
+      <Box className="aios-inspector-usage-copy">
+        <Typography className="inspector-field-label" component="p">
+          {title}
+        </Typography>
+        <Typography color="text.secondary" variant="body2">
+          {summary}
+        </Typography>
+      </Box>
+      <Box className="aios-inspector-usage-actions">{children}</Box>
+    </Box>
+  );
 }
 
 export function AiosInspectorSection({ title, children, defaultExpanded = false }: AiosInspectorSectionProps) {

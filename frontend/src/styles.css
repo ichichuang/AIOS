@@ -475,10 +475,12 @@
 
 .aios-usage-card {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--aios-outline);
   border-radius: 14px;
   background: var(--aios-surface);
   color: var(--aios-text);
+  text-align: left;
   transition:
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease,
@@ -505,7 +507,7 @@
 .aios-usage-action,
 .aios-usage-action.MuiButtonBase-root {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 136px);
   gap: var(--aios-card-gap, 10px);
   align-items: flex-start;
   width: 100%;
@@ -513,7 +515,9 @@
   padding: var(--aios-row-padding, 12px 14px);
   color: inherit;
   text-align: left;
+  align-content: center;
   justify-content: stretch;
+  justify-items: stretch;
 }
 
 .aios-usage-action.static {
@@ -521,7 +525,7 @@
 }
 
 .aios-usage-card:has(.aios-usage-icon) .aios-usage-action {
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(112px, 136px);
 }
 
 .aios-usage-icon {
@@ -548,18 +552,23 @@
 .aios-usage-title-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .aios-usage-title-line .resource-title {
+  display: -webkit-box;
+  flex: 1 1 180px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .aios-usage-title-line .resource-technical-name {
-  flex: 0 1 auto;
+  flex: 0 1 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -728,11 +737,115 @@
 }
 
 .quick-entry-grid.capability-launcher {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 292px), 1fr));
 }
 
 .quick-entry-grid.module-launcher {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.aios-capability-launcher-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  color: var(--aios-text);
+  text-align: left;
+  transition:
+    background-color var(--aios-motion-fast) ease,
+    border-color var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
+}
+
+.aios-capability-launcher-card:hover {
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-surface-hover);
+  transform: translateY(-1px);
+}
+
+.aios-capability-launcher-action,
+.aios-capability-launcher-action.MuiButtonBase-root {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 10px 12px;
+  align-items: start;
+  width: 100%;
+  min-height: 104px;
+  padding: 14px;
+  color: inherit;
+  text-align: left;
+  justify-items: stretch;
+}
+
+.aios-capability-launcher-icon {
+  display: grid;
+  grid-row: 1 / span 2;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: var(--aios-primary-soft);
+  color: var(--aios-primary);
+}
+
+.aios-capability-launcher-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aios-capability-launcher-title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aios-capability-launcher-title {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.aios-capability-launcher-meta {
+  flex: 0 1 auto;
+  max-width: 132px;
+  font-size: 11px;
+}
+
+.aios-capability-launcher-description {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.aios-capability-launcher-chip.MuiChip-root {
+  grid-column: 2;
+  justify-self: start;
+  max-width: 132px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.aios-capability-launcher-chip .MuiChip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .quick-entry {
@@ -772,13 +885,6 @@
   color: var(--aios-primary);
 }
 
-.quick-entry strong,
-.quick-entry span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .resource-group {
   display: grid;
   gap: var(--aios-card-gap, 10px);
@@ -791,7 +897,7 @@
 
 .resource-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: var(--aios-card-gap, 10px);
   min-width: 0;
 }
@@ -1023,6 +1129,7 @@
 }
 
 .compact-skill-description {
+  display: block;
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -1198,10 +1305,12 @@
 
 .timeline-row {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--aios-outline);
   border-radius: 12px;
   background: var(--aios-surface);
   color: var(--aios-text);
+  text-align: left;
   transition:
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease,
@@ -1232,7 +1341,9 @@
   padding: 12px var(--aios-card-padding-x, 16px);
   color: inherit;
   text-align: left;
+  align-content: center;
   justify-content: stretch;
+  justify-items: stretch;
 }
 
 .timeline-row-action.static {
@@ -1248,6 +1359,7 @@
 .timeline-row-title-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -1260,11 +1372,13 @@
 }
 
 .timeline-row-title-line .resource-title {
+  flex: 1 1 180px;
   min-width: 0;
 }
 
 .timeline-row-title-line .resource-technical-name {
   flex: 0 1 auto;
+  max-width: 100%;
 }
 
 .timeline-row-summary {
@@ -1343,19 +1457,23 @@
   flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
-  flex: 0 0 auto;
-  max-width: 172px;
+  flex: 0 0 136px;
+  width: 136px;
+  max-width: 136px;
+  max-height: 28px;
   justify-content: flex-end;
   overflow: hidden;
 }
 
 .resource-chip-row .MuiChip-root {
-  max-width: 82px;
+  flex: 0 1 65px;
+  max-width: 65px;
   height: 22px;
   font-size: 10px;
 }
 
 .resource-chip-row .MuiChip-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1365,7 +1483,7 @@
   overflow: hidden;
   min-height: 18px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
 }
 
 .resource-meta-grid,
@@ -1422,11 +1540,14 @@
   display: inline-block;
   width: fit-content;
   max-width: 100%;
+  overflow: hidden;
   border: 1px solid var(--aios-outline);
   border-radius: 8px;
   background: var(--aios-surface-muted);
   color: var(--aios-muted);
   padding: 2px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .path-detail {
@@ -1434,7 +1555,16 @@
   width: fit-content;
   max-width: 100%;
   padding: 6px 8px;
+  overflow: visible;
   overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: pre-wrap;
+}
+
+.aios-technical-details .code-pill {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
   white-space: pre-wrap;
 }
 
@@ -1546,6 +1676,9 @@
 
 .inspector-code {
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inspector-scroll {
@@ -1567,13 +1700,12 @@
 
 .inspector-panel-stack {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .inspector-panel.primary {
-  max-height: var(--aios-inspector-summary-max-height);
-  overflow: hidden;
+  gap: 12px;
 }
 
 .inspector-primary-heading {
@@ -1600,6 +1732,30 @@
   white-space: nowrap;
 }
 
+.inspector-summary-block {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.inspector-field-label {
+  margin: 0;
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.inspector-description {
+  display: -webkit-box;
+  overflow: hidden;
+  min-width: 0;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .inspector-primary-actions,
 .inspector-use-cases,
 .inspector-copy-actions {
@@ -1610,15 +1766,38 @@
 }
 
 .inspector-use-cases {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  overflow: visible;
+}
+
+.inspector-use-cases > span {
+  flex: none;
+  color: var(--aios-muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.inspector-use-case-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
   max-height: 28px;
   overflow: hidden;
 }
 
-.inspector-use-cases > span {
-  color: var(--aios-muted);
-  font-size: 12px;
-  font-weight: 800;
+.inspector-use-case-chips .MuiChip-root {
+  flex: 0 1 auto;
+  max-width: 108px;
+}
+
+.inspector-use-case-chips .MuiChip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inspector-copy-actions {
@@ -1630,6 +1809,51 @@
   flex-basis: 100%;
   font-size: 11px;
   line-height: 1.3;
+}
+
+.aios-inspector-usage-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--aios-selected-outline);
+  border-radius: 16px;
+  background: var(--aios-surface);
+  box-shadow: inset 3px 0 0 var(--aios-primary);
+  padding: 14px;
+  text-align: left;
+}
+
+.aios-inspector-usage-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aios-inspector-usage-copy p {
+  margin: 0;
+}
+
+.aios-inspector-usage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.aios-inspector-usage-actions .copy-tooltip-wrap {
+  min-width: 0;
+}
+
+.aios-inspector-usage-actions .copy-button {
+  min-width: 0;
+}
+
+.inspector-technical-stack {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 6px;
 }
 
 .aios-inspector-section.MuiAccordion-root {
@@ -1644,14 +1868,14 @@
 }
 
 .aios-inspector-section .MuiAccordionSummary-root {
-  min-height: 42px;
+  min-height: 44px;
   background: var(--aios-surface-muted);
-  padding: 0 12px;
+  padding: 0 14px;
 }
 
 .aios-inspector-section .MuiAccordionSummary-content {
   align-items: center;
-  margin: 8px 0;
+  margin: 9px 0;
 }
 
 .aios-inspector-section .MuiAccordionSummary-content h3 {
@@ -1681,10 +1905,67 @@
 }
 
 .inspector-empty-panel {
-  min-height: 160px;
-  align-content: center;
+  min-height: auto;
+  align-content: start;
+  gap: 12px;
   justify-items: start;
+  padding: 16px;
   text-align: left;
+}
+
+.aios-inspector-empty-guide {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--aios-primary-soft) 38%, transparent), transparent 52%),
+    var(--aios-surface);
+}
+
+.aios-inspector-empty-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.aios-inspector-empty-heading h3 {
+  min-width: 0;
+  color: var(--aios-text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.aios-inspector-empty-heading .MuiChip-root {
+  flex: none;
+  max-width: 108px;
+}
+
+.aios-inspector-empty-hints {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  color: var(--aios-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.aios-inspector-empty-hints li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.aios-inspector-empty-hints li::before {
+  position: absolute;
+  top: 0.58em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--aios-primary);
+  content: "";
 }
 
 .inspector-path-list {
@@ -1982,6 +2263,8 @@
   }
 
   .resource-chip-row {
+    flex: 0 1 auto;
+    width: auto;
     justify-content: flex-start;
     max-width: 100%;
   }

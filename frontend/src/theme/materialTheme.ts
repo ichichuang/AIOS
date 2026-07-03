@@ -171,9 +171,7 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
         code: {
           maxWidth: "100%",
           fontFamily: designTokens.monoFamily,
-          fontSize: 12,
-          overflowWrap: "anywhere",
-          whiteSpace: "normal"
+          fontSize: 12
         }
       }
     },

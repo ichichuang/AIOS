@@ -6,7 +6,7 @@ import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
-import { AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard } from "../ui/AiosUiPrimitives";
+import { AiosCapabilityLauncherCard, AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { riskCounts, sortByUpdatedAt } from "./moduleUtils";
 
@@ -106,13 +106,12 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
             {capabilityEntries.map((entry) => {
               const Icon = entry.icon;
               return (
-                <AiosUsageCard
-                  chips={[{ label: "进入技能库" }]}
-                  className="quick-entry"
-                  key={entry.title}
+                <AiosCapabilityLauncherCard
+                  actionLabel="进入技能库"
+                  description={entry.description}
                   icon={<Icon fontSize="small" />}
-                  purpose={entry.description}
-                  technicalName={entry.query}
+                  key={entry.title}
+                  metaLabel={entry.query}
                   title={entry.title}
                   onClick={() => handleCapabilityClick(entry.query)}
                 />
@@ -127,13 +126,12 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
             {quickViews.map((view) => {
               const Icon = moduleIcons[view];
               return (
-                <AiosUsageCard
-                  chips={[{ label: `${viewCounts[view]} 项` }]}
-                  className="quick-entry"
-                  key={view}
+                <AiosCapabilityLauncherCard
+                  actionLabel={`${viewCounts[view]} 项`}
+                  description={zhCN.moduleSummaries[view]}
                   icon={<Icon fontSize="small" />}
-                  purpose={zhCN.moduleSummaries[view]}
-                  technicalName={view}
+                  key={view}
+                  metaLabel={view}
                   title={VIEW_LABELS[view]}
                   onClick={() => onViewChange(view)}
                 />

@@ -3,6 +3,7 @@ import Drawer from "@mui/material/Drawer";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import { useRef } from "react";
 import { zhCN } from "../../i18n/zh-CN";
+import type { ResourceView } from "../../lib/filtering";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { useInspectorMotion } from "../../lib/useAiosMotion";
@@ -10,17 +11,19 @@ import type { AiosResource } from "../../types/inventory";
 import { ResourceInspector } from "../inspector/ResourceInspector";
 
 interface AiosInspectorSheetProps {
+  activeView: ResourceView;
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  visibleCount: number;
   onMobileClose: () => void;
 }
 
-export function AiosInspectorSheet({ resource, skillIdentity, skillCapability, onMobileClose }: AiosInspectorSheetProps) {
+export function AiosInspectorSheet({ activeView, resource, skillIdentity, skillCapability, visibleCount, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
   const isPersistent = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const body = <InspectorBody resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} />;
+  const body = <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} visibleCount={visibleCount} />;
 
   if (isPersistent) {
     return (
@@ -38,20 +41,22 @@ export function AiosInspectorSheet({ resource, skillIdentity, skillCapability, o
       slotProps={{ paper: { className: isMobile ? "inspector-drawer-paper bottom" : "inspector-drawer-paper" } }}
       onClose={onMobileClose}
     >
-      <InspectorBody resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} onClose={onMobileClose} showClose />
+      <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} visibleCount={visibleCount} onClose={onMobileClose} showClose />
     </Drawer>
   );
 }
 
 interface InspectorBodyProps {
+  activeView: ResourceView;
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  visibleCount: number;
   showClose?: boolean;
   onClose?: () => void;
 }
 
-function InspectorBody({ resource, skillIdentity, skillCapability, showClose = false, onClose }: InspectorBodyProps) {
+function InspectorBody({ activeView, resource, skillIdentity, skillCapability, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
 
@@ -69,7 +74,7 @@ function InspectorBody({ resource, skillIdentity, skillCapability, showClose = f
       </Box>
       <Divider />
       <Box className="inspector-scroll">
-        <ResourceInspector resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} />
+        <ResourceInspector activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} visibleCount={visibleCount} />
       </Box>
     </Box>
   );

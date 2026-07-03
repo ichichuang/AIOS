@@ -51,7 +51,14 @@ export function AiosConsoleShell({
         />
         <Box className="module-workspace">{children}</Box>
       </Box>
-      <AiosInspectorSheet resource={selectedResource} skillIdentity={selectedSkillIdentity} skillCapability={selectedSkillCapability} onMobileClose={onClearSelection} />
+      <AiosInspectorSheet
+        activeView={activeView}
+        resource={selectedResource}
+        skillIdentity={selectedSkillIdentity}
+        skillCapability={selectedSkillCapability}
+        visibleCount={shownCount}
+        onMobileClose={onClearSelection}
+      />
     </Box>
   );
 }
