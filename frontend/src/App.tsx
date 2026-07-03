@@ -10,7 +10,7 @@ import { ReportsModule } from "./components/modules/ReportsModule";
 import { ScriptsModule } from "./components/modules/ScriptsModule";
 import { SkillsModule } from "./components/modules/SkillsModule";
 import { ValidatorsModule } from "./components/modules/ValidatorsModule";
-import type { AiosModuleProps } from "./components/modules/moduleUtils";
+import type { AiosModuleProps, ResourceSelectionContext } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
 import { buildResourceDisplayMap, buildResourcesByView, countResourcesByView, filterResourceList, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
@@ -25,7 +25,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<ResourceView>("dashboard");
   const [renderedView, setRenderedView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ resource: AiosResource; context?: ResourceSelectionContext } | null>(null);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -44,7 +44,6 @@ export default function App() {
     () => (inventory ? buildSkillCapabilityClassificationMap(inventory.resources, displayById) : new Map<string, SkillCapabilityClassification>()),
     [displayById, inventory]
   );
-  const resourceById = useMemo(() => (inventory ? new Map(inventory.resources.map((resource) => [resource.id, resource])) : new Map<string, AiosResource>()), [inventory]);
   const resourcesByView = useMemo(() => (inventory ? buildResourcesByView(inventory.resources) : null), [inventory]);
   const viewCounts = useMemo(() => (resourcesByView ? countResourcesByView(resourcesByView) : null), [resourcesByView]);
   const moduleResources = useMemo(() => (resourcesByView ? resourcesByView[renderedView] : []), [renderedView, resourcesByView]);
@@ -52,25 +51,27 @@ export default function App() {
     () => (renderedView === "skills" ? moduleResources : filterResourceList(moduleResources, deferredQuery, displayById)),
     [deferredQuery, displayById, moduleResources, renderedView]
   );
-  const selectedResource = useMemo(() => (selectedId ? resourceById.get(selectedId) ?? null : null), [resourceById, selectedId]);
+  const selectedResource = selection?.resource ?? null;
+  const selectedSkillIdentity = selection?.context?.skillIdentity ?? null;
+  const selectedId = selectedResource?.id ?? null;
   const selectedSkillCapability = useMemo(() => (selectedId ? skillCapabilityById.get(selectedId) ?? null : null), [selectedId, skillCapabilityById]);
 
   const handleViewChange = useCallback((view: ResourceView) => {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
     setActiveView(view);
-    setSelectedId(null);
+    setSelection(null);
     startRouteTransition(() => {
       setRenderedView(view);
     });
   }, [activeView, startRouteTransition]);
 
-  const selectResource = useCallback((resource: AiosResource) => {
-    setSelectedId(resource.id);
+  const selectResource = useCallback((resource: AiosResource, context?: ResourceSelectionContext) => {
+    setSelection({ resource, context });
   }, []);
 
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
   const clearSelection = useCallback(() => {
-    setSelectedId(null);
+    setSelection(null);
   }, []);
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function App() {
     displayById,
     query: deferredQuery,
     resources: filteredResources,
-    selectedId: selectedResource?.id ?? null,
+    selectedId,
     skillCapabilityById,
     viewCounts: viewCounts ?? countResourcesByView(buildResourcesByView([])),
     onClearSelection: clearSelection,
@@ -123,6 +124,7 @@ export default function App() {
       inventory={inventory}
       query={query}
       selectedResource={selectedResource}
+      selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
       shownCount={filteredResources.length}
       viewCounts={moduleProps.viewCounts}

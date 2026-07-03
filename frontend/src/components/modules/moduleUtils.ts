@@ -4,8 +4,13 @@ import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
+import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
 import type { ResourceGroupData } from "../resources/ResourceGroup";
+
+export interface ResourceSelectionContext {
+  skillIdentity?: SkillIdentityRow;
+}
 
 export interface AiosModuleProps {
   allResources: AiosResource[];
@@ -17,7 +22,7 @@ export interface AiosModuleProps {
   skillCapabilityById: ReadonlyMap<string, SkillCapabilityClassification>;
   viewCounts: Record<ResourceView, number>;
   onClearSelection: () => void;
-  onSelect: (resource: AiosResource) => void;
+  onSelect: (resource: AiosResource, context?: ResourceSelectionContext) => void;
   onViewChange: (view: ResourceView) => void;
 }
 

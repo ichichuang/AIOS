@@ -57,6 +57,7 @@ export interface SkillDiscoveryMetadata {
   sourceKinds?: string[];
   discoveryRoot?: string;
   manifestPath?: string;
+  canonicalPath?: string;
   indexed?: boolean;
   registryListed?: boolean;
   activeEntrypoint?: boolean;

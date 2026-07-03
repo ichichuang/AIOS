@@ -5,6 +5,23 @@ export interface SkillSourceBadge {
   label: string;
 }
 
+export const HUASHU_FAMILY_INHERITED_ALIASES = [
+  "huashu",
+  "huashu-nuwa",
+  "huashu-nvwa",
+  "nuwa",
+  "nvwa",
+  "女娲",
+  "蒸馏",
+  "distill",
+  "distilled",
+  "distillation",
+  "persona",
+  "perspective",
+  "人物",
+  "角色"
+] as const;
+
 const SOURCE_LABELS: Record<string, string> = {
   "active-entrypoint": "活跃入口",
   "skills-index": "索引技能",
@@ -39,9 +56,36 @@ export function getSkillMetadataSearchText(resource: AiosResource): string {
     ...getMetadataStringArray(resource, "capabilities"),
     ...getMetadataStringArray(resource, "sourceTypes"),
     ...getSkillSourceBadges(resource).map((badge) => badge.label),
-    ...getNuwaSearchVariants([resource.name, ...getMetadataStringArray(resource, "aliases")])
+    ...getSkillFamilyInheritedAliases(resource),
+    ...getNuwaSearchVariants([resource.name, ...getMetadataStringArray(resource, "aliases"), ...getHuashuPathSignals(resource)])
   ];
   return terms.filter(Boolean).join(" ");
+}
+
+export function getSkillFamilyInheritedAliases(resource: AiosResource): string[] {
+  return isHuashuFamilyResource(resource) ? [...HUASHU_FAMILY_INHERITED_ALIASES] : [];
+}
+
+export function isHuashuFamilyResource(resource: AiosResource): boolean {
+  const searchable = [
+    resource.name,
+    resource.path,
+    ...resource.paths,
+    getMetadataString(resource, "manifestPath"),
+    getMetadataString(resource, "canonicalPath"),
+    getMetadataString(resource, "sourcePath"),
+    getMetadataString(resource, "discoveryRoot"),
+    getMetadataString(resource, "category"),
+    ...getMetadataStringArray(resource, "aliases"),
+    ...getMetadataStringArray(resource, "sourceTypes"),
+    ...getMetadataStringArray(resource, "capabilities"),
+    ...getMetadataStringArray(resource, "tags")
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /huashu[-_/]n(?:u|v)wa/.test(searchable) || /huashu-nuwa\/examples/.test(searchable);
 }
 
 export function getMetadataString(resource: AiosResource, key: string): string | null {
@@ -70,6 +114,16 @@ function getNuwaSearchVariants(values: string[]): string[] {
     if (value.includes("huashu-nvwa")) variants.push(value.replace(/huashu-nvwa/g, "huashu-nuwa"));
   }
   return [...new Set(variants)];
+}
+
+function getHuashuPathSignals(resource: AiosResource): string[] {
+  return [
+    resource.path,
+    ...resource.paths,
+    getMetadataString(resource, "manifestPath"),
+    getMetadataString(resource, "canonicalPath"),
+    getMetadataString(resource, "discoveryRoot")
+  ].filter((value): value is string => Boolean(value));
 }
 
 function dedupeBadges(badges: SkillSourceBadge[]): SkillSourceBadge[] {

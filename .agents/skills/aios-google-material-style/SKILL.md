@@ -18,6 +18,10 @@ Use Material UI as the primary React UI framework for this repository. Build AIO
 - Keep the contextual inspector collapsed by default. Open it only after explicit resource selection or inspector toggle.
 - Skills must use a group index plus compact rows, render only the active skill group, and keep prompt copy actions inside the inspector instead of per-row buttons.
 - Skills should default to local capability-based classification, while preserving source-based grouping as a compact alternate mode.
+- Skills must render merged identity rows by default, not raw runtime/source resources. Keep raw entrypoint/source rows behind an explicit debug toggle.
+- Skills identity rows must show source badges for provenance, including index, Registry, filesystem, Codex, Agents, Claude, and project-local package sources.
+- Distilled skill families must support frontend family alias inheritance so child/example identities remain searchable by parent terms such as huashu, nuwa/nvwa, persona, perspective, 女娲, and 蒸馏.
+- Skills rows and inspectors must use the local enriched display name, enriched description, and metadata quality status when source metadata is weak, while keeping original technical names and paths visible.
 - Skills, MCP, Scripts, Reports, Project Packs, Policies, Validators, and Legacy need specialized module layouts rather than one generic card wall.
 - Keep user-facing UI copy in Simplified Chinese except original technical names such as `Codex`, `Claude`, `MCP`, package names, file paths, and command names.
 - Show Chinese capability titles beside original technical names for skills and resources.

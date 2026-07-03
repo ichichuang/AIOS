@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { classifySkillCapability, getSkillCapabilitySearchText } from "./skillCapabilityClassifier";
-import type { AiosResource } from "../types/inventory";
+import { classifySkillCapability, getSkillCapabilitySearchText } from "./skillCapabilityClassifier.ts";
+import type { AiosResource } from "../types/inventory.ts";
 
 function makeSkillResource(overrides: Partial<AiosResource> & Pick<AiosResource, "id" | "name" | "description">): AiosResource {
   return {

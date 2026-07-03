@@ -1,5 +1,6 @@
 import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
 import type { AiosResource } from "../types/inventory";
+import { buildSkillDisplayEnrichment, getSkillQualitySearchText } from "./skillDisplayEnrichment";
 import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
 
 export type SkillCapabilityCategoryKey =
@@ -242,9 +243,10 @@ function getConfidence(score: number, evidenceCount: number): SkillCapabilityCon
 }
 
 function buildCandidateText(resource: AiosResource, display: ResourceDisplay): CandidateText {
+  const enrichment = buildSkillDisplayEnrichment(resource, display);
   return {
-    identity: normalizeText([resource.name, getPathSignal(resource.path), display.zhName, display.zhCategory, display.zhCapability, getSkillMetadataSearchText(resource)].join(" ")),
-    description: normalizeText([resource.description, display.zhDescription, getSkillMetadataSearchText(resource)].join(" ")),
+    identity: normalizeText([resource.name, getPathSignal(resource.path), display.zhName, enrichment.displayNameZh, display.zhCategory, display.zhCapability, getSkillMetadataSearchText(resource)].join(" ")),
+    description: normalizeText([resource.description, display.zhDescription, enrichment.displayDescriptionZh, getSkillQualitySearchText(enrichment), getSkillMetadataSearchText(resource)].join(" ")),
     type: normalizeText([resource.toolType, resource.capabilityType].join(" "))
   };
 }

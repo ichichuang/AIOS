@@ -5,6 +5,8 @@ import { useRef } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
+import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
+import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { useInspectorMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { PromptPanel } from "../inspector/PromptPanel";
@@ -14,15 +16,16 @@ import { TokenPressurePanel } from "../inspector/TokenPressurePanel";
 
 interface AiosInspectorSheetProps {
   resource: AiosResource | null;
+  skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
   onMobileClose: () => void;
 }
 
-export function AiosInspectorSheet({ resource, skillCapability, onMobileClose }: AiosInspectorSheetProps) {
+export function AiosInspectorSheet({ resource, skillIdentity, skillCapability, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
   const isPersistent = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const body = <InspectorBody resource={resource} skillCapability={skillCapability} />;
+  const body = <InspectorBody resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} />;
 
   if (isPersistent) {
     return (
@@ -40,21 +43,23 @@ export function AiosInspectorSheet({ resource, skillCapability, onMobileClose }:
       slotProps={{ paper: { className: isMobile ? "inspector-drawer-paper bottom" : "inspector-drawer-paper" } }}
       onClose={onMobileClose}
     >
-      <InspectorBody resource={resource} skillCapability={skillCapability} onClose={onMobileClose} showClose />
+      <InspectorBody resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} onClose={onMobileClose} showClose />
     </Drawer>
   );
 }
 
 interface InspectorBodyProps {
   resource: AiosResource | null;
+  skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
   showClose?: boolean;
   onClose?: () => void;
 }
 
-function InspectorBody({ resource, skillCapability, showClose = false, onClose }: InspectorBodyProps) {
+function InspectorBody({ resource, skillIdentity, skillCapability, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const display = resource ? getResourceDisplay(resource) : null;
+  const enrichment = resource && display ? buildSkillDisplayEnrichment(skillIdentity ?? resource, display) : null;
   const panels = resource ? getContextualPanels(resource) : { prompt: false, safety: false, token: false };
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
 
@@ -66,7 +71,7 @@ function InspectorBody({ resource, skillCapability, showClose = false, onClose }
             {zhCN.app.detailPanel}
           </Typography>
           <Typography component="h2" variant="h3">
-            {display?.zhName ?? zhCN.app.inspectorEmptyTitle}
+            {enrichment?.displayNameZh ?? zhCN.app.inspectorEmptyTitle}
           </Typography>
           {display && (
             <Box className="code-pill inspector-code" component="code">
@@ -82,7 +87,7 @@ function InspectorBody({ resource, skillCapability, showClose = false, onClose }
       </Stack>
       <Divider />
       <Box className="inspector-scroll">
-        <ResourceInspector resource={resource} skillCapability={skillCapability} />
+        <ResourceInspector resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} />
         {resource && (
           <>
             {panels.safety && <SafetyProfilePanel resource={resource} />}

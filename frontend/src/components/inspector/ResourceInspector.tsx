@@ -3,16 +3,25 @@ import { memo } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
-import { getDiscoveryBooleanLabel, getMetadataString as getDiscoveryMetadataString, getSkillSourceBadges } from "../../lib/skillDiscoveryMetadata";
+import {
+  buildSkillDisplayEnrichment,
+  ENRICHMENT_SOURCE_LABELS,
+  getQualityLevelLabel,
+  SUGGESTED_FIELD_LABELS,
+  type SkillDisplayEnrichment
+} from "../../lib/skillDisplayEnrichment";
+import { getDiscoveryBooleanLabel, getMetadataString as getDiscoveryMetadataString, getMetadataStringArray, getSkillSourceBadges } from "../../lib/skillDiscoveryMetadata";
+import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { ResourceMetaRow } from "../resources/ResourceMetaRow";
 
 interface ResourceInspectorProps {
   resource: AiosResource | null;
+  skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
 }
 
-export const ResourceInspector = memo(function ResourceInspector({ resource, skillCapability }: ResourceInspectorProps) {
+export const ResourceInspector = memo(function ResourceInspector({ resource, skillIdentity, skillCapability }: ResourceInspectorProps) {
   if (!resource) {
     return (
       <Box className="inspector-panel inspector-empty-panel">
@@ -25,6 +34,7 @@ export const ResourceInspector = memo(function ResourceInspector({ resource, ski
   }
 
   const display = getResourceDisplay(resource);
+  const enrichment = buildSkillDisplayEnrichment(skillIdentity ?? resource, display);
   const metadataRows = getMetadataRows(resource);
 
   return (
@@ -35,21 +45,32 @@ export const ResourceInspector = memo(function ResourceInspector({ resource, ski
             {display.zhCategory}
           </Typography>
           <Typography component="h3" variant="h3">
-            {display.zhName}
+            {enrichment.displayNameZh}
           </Typography>
         </Box>
         <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, justifyContent: "flex-end" }}>
+          <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getQualityLevelLabel(enrichment.qualityLevel)} variant="outlined" />
+          {(enrichment.enrichmentSource === "inferred" || enrichment.enrichmentSource === "fallback") && <Chip className="quality-chip quality-inferred" label="自动推断" variant="outlined" />}
           <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
           <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
         </Stack>
       </Stack>
       <Typography color="text.secondary" variant="body2">
-        {display.zhDescription}
+        {enrichment.displayDescriptionZh}
       </Typography>
       <Divider />
       <CapabilityClassificationSection classification={skillCapability} />
+      <MetadataQualitySection enrichment={enrichment} originalName={display.technicalName} />
+      <SkillIdentityProvenanceSection identity={skillIdentity} />
       <Box className="inspector-meta-grid">
-        <ResourceMetaRow label={zhCN.app.preservedName} value={display.technicalName} code />
+        {display.technicalName !== enrichment.displayNameZh ? (
+          <>
+            <ResourceMetaRow label="原始名称" value={display.technicalName} code />
+            <ResourceMetaRow label="显示名称" value={enrichment.displayNameZh} />
+          </>
+        ) : (
+          <ResourceMetaRow label={zhCN.app.preservedName} value={display.technicalName} code />
+        )}
         <ResourceMetaRow label="工具类型" value={display.zhToolType} />
         <ResourceMetaRow label="能力类型" value={display.zhCapability} />
         <ResourceMetaRow label="风险解释" value={display.zhRiskDescription} />
@@ -77,6 +98,63 @@ export const ResourceInspector = memo(function ResourceInspector({ resource, ski
     </Box>
   );
 });
+
+interface MetadataQualitySectionProps {
+  enrichment: SkillDisplayEnrichment;
+  originalName: string;
+}
+
+function MetadataQualitySection({ enrichment, originalName }: MetadataQualitySectionProps) {
+  const suggestedFields = enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]);
+  const reasonValues = enrichment.qualityReasons.length > 0 ? enrichment.qualityReasons : ["未记录额外原因。"];
+  const inferredTags = enrichment.inferredTags.length > 0 ? enrichment.inferredTags : ["无"];
+  const inferredUseCases = enrichment.inferredUseCases.length > 0 ? enrichment.inferredUseCases : ["无"];
+
+  return (
+    <Box className="metadata-quality-section">
+      <Typography component="h4" variant="h3">
+        元数据质量
+      </Typography>
+      <Box className="inspector-meta-grid">
+        <ResourceMetaRow label="质量等级" value={getQualityLevelLabel(enrichment.qualityLevel)} />
+        <ResourceMetaRow label="展示说明来源" value={ENRICHMENT_SOURCE_LABELS[enrichment.enrichmentSource]} code />
+        {originalName !== enrichment.displayNameZh && <ResourceMetaRow label="显示名称" value={enrichment.displayNameZh} />}
+      </Box>
+      <CapabilityChipLine label="质量原因" values={reasonValues} />
+      <CapabilityChipLine label="推断标签" values={inferredTags} />
+      <CapabilityChipLine label="适用场景" values={inferredUseCases} />
+      <CapabilityChipLine label="建议补充" values={suggestedFields.length > 0 ? suggestedFields : ["无"]} code={suggestedFields.length > 0} />
+    </Box>
+  );
+}
+
+interface SkillIdentityProvenanceSectionProps {
+  identity: SkillIdentityRow | null;
+}
+
+function SkillIdentityProvenanceSection({ identity }: SkillIdentityProvenanceSectionProps) {
+  if (!identity) return null;
+  const provenance = getSkillIdentityProvenance(identity);
+
+  return (
+    <Box className="source-provenance-section">
+      <Typography component="h4" variant="h3">
+        技能身份
+      </Typography>
+      <Box className="inspector-meta-grid">
+        <ResourceMetaRow label="来源" value={provenance.sourceLabels || "未记录"} />
+        <ResourceMetaRow label="活跃入口" value={provenance.activeEntrypoints || "无"} code={Boolean(provenance.activeEntrypoints)} />
+        <ResourceMetaRow label="索引记录" value={provenance.indexRecords || "无"} code={Boolean(provenance.indexRecords)} />
+        <ResourceMetaRow label="Registry 记录" value={provenance.registryRecords || "无"} code={Boolean(provenance.registryRecords)} />
+        <ResourceMetaRow label="文件系统发现" value={provenance.filesystemRecords || "无"} code={Boolean(provenance.filesystemRecords)} />
+        <ResourceMetaRow label="manifest path" value={provenance.manifestPaths || "无"} code={Boolean(provenance.manifestPaths)} />
+        {provenance.canonicalPaths && <ResourceMetaRow label="canonical path" value={provenance.canonicalPaths} code />}
+        {provenance.discoveryRoots && <ResourceMetaRow label="discovery root" value={provenance.discoveryRoots} code />}
+        <ResourceMetaRow label="merged source count" value={identity.sources.length} />
+      </Box>
+    </Box>
+  );
+}
 
 interface CapabilityClassificationSectionProps {
   classification: SkillCapabilityClassification | null;
@@ -126,6 +204,71 @@ interface MetadataRow {
   label: string;
   value: string | number;
   code?: boolean;
+}
+
+interface SkillIdentityProvenance {
+  sourceLabels: string;
+  activeEntrypoints: string;
+  indexRecords: string;
+  registryRecords: string;
+  filesystemRecords: string;
+  manifestPaths: string;
+  canonicalPaths: string;
+  discoveryRoots: string;
+}
+
+function getSkillIdentityProvenance(identity: SkillIdentityRow): SkillIdentityProvenance {
+  const sourceLabels = identity.sourceBadges.map((badge) => badge.label).join(" / ");
+  const activeEntrypoints = uniqueStrings(identity.sources.filter(isActiveEntrypointSource).map(formatSourcePath)).join("\n");
+  const indexRecords = uniqueStrings(identity.sources.filter(isIndexSource).map(formatSourcePath)).join("\n");
+  const registryRecords = uniqueStrings(identity.sources.filter(isRegistrySource).map(formatSourcePath)).join("\n");
+  const filesystemRecords = uniqueStrings(identity.sources.filter(isFilesystemSource).map(formatSourcePath)).join("\n");
+  const manifestPaths = uniqueStrings(identity.sources.flatMap((source) => [getDiscoveryMetadataString(source, "manifestPath"), ...source.paths.filter(isQualifiedSkillManifestPath)])).join("\n");
+  const canonicalPaths = uniqueStrings(identity.sources.map((source) => getDiscoveryMetadataString(source, "canonicalPath"))).join("\n");
+  const discoveryRoots = uniqueStrings(identity.sources.map((source) => getDiscoveryMetadataString(source, "discoveryRoot"))).join("\n");
+
+  return {
+    sourceLabels,
+    activeEntrypoints,
+    indexRecords,
+    registryRecords,
+    filesystemRecords,
+    manifestPaths,
+    canonicalPaths,
+    discoveryRoots
+  };
+}
+
+function isActiveEntrypointSource(resource: AiosResource): boolean {
+  return resource.metadata?.activeEntrypoint === true || resource.metadata?.entrypoint === true || getMetadataSourceKinds(resource).includes("active-entrypoint");
+}
+
+function isIndexSource(resource: AiosResource): boolean {
+  return resource.metadata?.indexed === true || getMetadataSourceKinds(resource).includes("skills-index");
+}
+
+function isRegistrySource(resource: AiosResource): boolean {
+  return resource.metadata?.registryListed === true || resource.capabilityType === "registry" || getMetadataSourceKinds(resource).includes("custom-registry");
+}
+
+function isFilesystemSource(resource: AiosResource): boolean {
+  return resource.metadata?.discoveredOnly === true || getMetadataSourceKinds(resource).includes("filesystem");
+}
+
+function getMetadataSourceKinds(resource: AiosResource): string[] {
+  return uniqueStrings([getDiscoveryMetadataString(resource, "sourceKind"), ...getMetadataStringArray(resource, "sourceKinds")]);
+}
+
+function formatSourcePath(resource: AiosResource): string {
+  return `${resource.toolType}: ${resource.path ?? resource.paths[0] ?? resource.name}`;
+}
+
+function isQualifiedSkillManifestPath(value: string): boolean {
+  return value.replace(/\\/g, "/").toLowerCase().endsWith("/skill.md");
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value && value.trim())))];
 }
 
 function getMetadataRows(resource: AiosResource): MetadataRow[] {

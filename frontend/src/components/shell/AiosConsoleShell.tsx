@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AiosInventory, AiosResource } from "../../types/inventory";
 import type { ResourceView } from "../../lib/filtering";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
+import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { AiosInspectorSheet } from "./AiosInspectorSheet";
 import { AiosNavigationRail } from "./AiosNavigationRail";
 import { AiosTopCommandBar } from "./AiosTopCommandBar";
@@ -13,6 +14,7 @@ interface AiosConsoleShellProps {
   inventory: AiosInventory;
   query: string;
   selectedResource: AiosResource | null;
+  selectedSkillIdentity: SkillIdentityRow | null;
   selectedSkillCapability: SkillCapabilityClassification | null;
   shownCount: number;
   viewCounts: Record<ResourceView, number>;
@@ -27,6 +29,7 @@ export function AiosConsoleShell({
   inventory,
   query,
   selectedResource,
+  selectedSkillIdentity,
   selectedSkillCapability,
   shownCount,
   viewCounts,
@@ -48,7 +51,7 @@ export function AiosConsoleShell({
         />
         <Box className="module-workspace">{children}</Box>
       </Box>
-      <AiosInspectorSheet resource={selectedResource} skillCapability={selectedSkillCapability} onMobileClose={onClearSelection} />
+      <AiosInspectorSheet resource={selectedResource} skillIdentity={selectedSkillIdentity} skillCapability={selectedSkillCapability} onMobileClose={onClearSelection} />
     </Box>
   );
 }

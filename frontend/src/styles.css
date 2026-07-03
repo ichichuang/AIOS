@@ -502,6 +502,8 @@
 
 .skill-group-toolbar {
   min-width: 0;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .skill-grouping-switch.MuiToggleButtonGroup-root {
@@ -710,13 +712,18 @@
 }
 
 .source-chip.source-active-entrypoint.MuiChip-root,
-.source-chip.source-skills-index.MuiChip-root {
+.source-chip.source-skills-index.MuiChip-root,
+.source-chip.source-codex.MuiChip-root,
+.source-chip.source-agents.MuiChip-root,
+.source-chip.source-claude.MuiChip-root {
   background: var(--aios-primary-soft);
   color: var(--aios-primary);
 }
 
 .source-chip.source-custom-registry.MuiChip-root,
-.source-chip.source-filesystem.MuiChip-root {
+.source-chip.source-filesystem.MuiChip-root,
+.source-chip.source-project-pack.MuiChip-root,
+.source-chip.source-view-mode.MuiChip-root {
   background: var(--aios-info-soft);
   color: var(--aios-info);
 }
@@ -751,6 +758,36 @@
 }
 
 .capability-chip .MuiChip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quality-chip.MuiChip-root {
+  max-width: 104px;
+  border-color: var(--aios-outline-strong);
+  background: var(--aios-surface-muted);
+  color: var(--aios-muted);
+  font-weight: 800;
+}
+
+.quality-chip.quality-complete.MuiChip-root,
+.quality-chip.quality-usable.MuiChip-root {
+  background: var(--aios-success-soft);
+  color: var(--aios-success);
+}
+
+.quality-chip.quality-weak.MuiChip-root,
+.quality-chip.quality-inferred.MuiChip-root {
+  background: var(--aios-warning-soft);
+  color: var(--aios-warning);
+}
+
+.quality-chip.quality-needs-review.MuiChip-root {
+  background: var(--aios-error-soft);
+  color: var(--aios-error);
+}
+
+.quality-chip .MuiChip-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1010,7 +1047,9 @@
   min-width: 0;
 }
 
-.capability-inspector-section {
+.capability-inspector-section,
+.metadata-quality-section,
+.source-provenance-section {
   display: grid;
   gap: 7px;
   min-width: 0;
