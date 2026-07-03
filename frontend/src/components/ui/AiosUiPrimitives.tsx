@@ -346,11 +346,13 @@ export function AiosTechnicalDetails({ rows, children }: { rows?: AiosTechnicalD
                 {row.label}
               </Typography>
               {row.code ? (
-                <Box className="code-pill resource-meta-code" component="code">
-                  {row.value}
+                <Box className="code-pill resource-meta-code" component="code" title={formatTechnicalDetailValue(row.value)}>
+                  {formatTechnicalDetailValue(row.value)}
                 </Box>
               ) : (
-                <Typography component="strong">{row.value}</Typography>
+                <Typography component="strong" title={formatTechnicalDetailValue(row.value)}>
+                  {formatTechnicalDetailValue(row.value)}
+                </Typography>
               )}
             </Box>
           ))}
@@ -359,4 +361,9 @@ export function AiosTechnicalDetails({ rows, children }: { rows?: AiosTechnicalD
       {children}
     </Box>
   );
+}
+
+function formatTechnicalDetailValue(value: string | number): string {
+  const formatted = String(value).trim();
+  return formatted.length > 0 ? formatted : "未记录";
 }

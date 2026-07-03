@@ -1920,6 +1920,114 @@
   min-width: 0;
 }
 
+.inspector-boundary-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inspector-boundary-chip-row .MuiChip-root {
+  max-width: 116px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.inspector-boundary-chip-row .MuiChip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspector-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.inspector-context-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 10px;
+  background: var(--aios-surface-muted);
+  padding: 7px 8px;
+}
+
+.inspector-context-item span {
+  overflow: hidden;
+  color: var(--aios-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-context-item strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspector-boundary-callout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 12px;
+  background: var(--aios-surface-muted);
+  padding: 9px 10px;
+}
+
+.inspector-boundary-callout.info {
+  border-color: color-mix(in srgb, var(--aios-info) 34%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-info-soft) 58%, var(--aios-surface));
+}
+
+.inspector-boundary-callout.warn {
+  border-color: color-mix(in srgb, var(--aios-warning) 38%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-warning-soft) 56%, var(--aios-surface));
+}
+
+.inspector-boundary-callout-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inspector-boundary-callout-copy strong {
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.inspector-boundary-callout-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspector-boundary-callout .MuiChip-root {
+  max-width: 96px;
+  height: 24px;
+  font-size: 11px;
+}
+
 .inspector-use-cases {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -2127,6 +2235,23 @@
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.inspector-empty-detail {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px dashed var(--aios-outline);
+  border-radius: 12px;
+  background: var(--aios-surface-muted);
+  padding: 9px 10px;
+}
+
+.inspector-empty-detail strong {
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .capability-inspector-section,
@@ -2483,5 +2608,14 @@
 
   .resource-meta-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inspector-context-grid,
+  .inspector-boundary-callout {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector-boundary-callout .MuiChip-root {
+    justify-self: start;
   }
 }

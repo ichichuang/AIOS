@@ -41,6 +41,9 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
   const tokenRows = getTokenRows(resource);
   const codexPrompt = resource.prompts.find((prompt) => prompt.target === "codex");
   const claudePrompt = resource.prompts.find((prompt) => prompt.target === "claude");
+  const primaryMetaRows = getPrimaryMetaRows(resource, display, provenance);
+  const boundaryChips = getBoundaryChips(resource);
+  const detailNotice = getInspectorDetailNotice(resource, metadataRows, provenance);
 
   return (
     <Box className="inspector-panel-stack">
@@ -53,7 +56,7 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
             <Typography component="h3" variant="h3">
               {enrichment.displayNameZh}
             </Typography>
-            <Box className="code-pill inspector-code" component="code">
+            <Box className="code-pill inspector-code" component="code" title={display.technicalName}>
               {display.technicalName}
             </Box>
           </Box>
@@ -63,14 +66,43 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
           </Box>
         </Box>
 
+        <Box className="inspector-boundary-chip-row" aria-label="资源安全边界">
+          {boundaryChips.map((chip) => (
+            <Chip className={chip.className} key={chip.label} label={chip.label} size="small" variant={chip.variant ?? "outlined"} />
+          ))}
+        </Box>
+
+        <Box className="inspector-context-grid" aria-label="资源摘要">
+          {primaryMetaRows.map((row) => (
+            <Box className="inspector-context-item" key={row.label}>
+              <Typography component="span">{row.label}</Typography>
+              <Typography component="strong" title={row.value}>
+                {row.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+
         <Box className="inspector-summary-block">
           <Typography className="inspector-field-label" component="p">
             是什么
           </Typography>
-          <Typography className="inspector-description" color="text.secondary" variant="body2">
+          <Typography className="inspector-description" color="text.secondary" variant="body2" title={enrichment.displayDescriptionZh}>
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
         </Box>
+
+        {detailNotice && (
+          <Box className={`inspector-boundary-callout ${detailNotice.tone}`}>
+            <Box className="inspector-boundary-callout-copy">
+              <Typography component="strong">{detailNotice.title}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {detailNotice.body}
+              </Typography>
+            </Box>
+            <Chip className={detailNotice.chipClassName} label={detailNotice.chipLabel} size="small" variant="outlined" />
+          </Box>
+        )}
 
         {enrichment.inferredUseCases.length > 0 && (
           <Box className="inspector-use-cases" aria-label="适合场景">
@@ -100,12 +132,17 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
               <Typography variant="body2">路径详情</Typography>
               {resource.paths.length > 0 ? (
                 resource.paths.slice(0, 6).map((path) => (
-                  <Box className="code-pill path-detail" component="code" key={path}>
+                  <Box className="code-pill path-detail" component="code" key={path} title={path}>
                     {path}
                   </Box>
                 ))
               ) : (
-                <Typography color="text.secondary" variant="body2">{zhCN.app.noPath}</Typography>
+                <Box className="inspector-empty-detail">
+                  <Typography component="strong">未记录路径</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    当前资源只提供清单级元数据，未暴露可打开的文件路径。
+                  </Typography>
+                </Box>
               )}
               {resource.paths.length > 6 && (
                 <Typography color="text.secondary" variant="body2">
@@ -155,7 +192,7 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
     return {
       title: "选择能力入口或资源查看详情",
       summary: "总览用于快速进入常用能力库、查看系统边界和近期报告。",
-      hints: ["点击能力卡会切换到技能库并填入搜索词。", "点击近期报告可在这里查看报告详情。", "此面板只展示本地只读信息。"],
+      hints: ["点击能力卡会切换到技能库并填入搜索词。", "点击近期报告可在这里查看报告详情。", "检查器只展示本地只读元数据，不执行脚本、MCP 或扫描。"],
       badge: "总览"
     };
   }
@@ -165,13 +202,89 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
     activeView === "skills" || activeView === "legacy"
       ? "选中含提示词的资源后，可复制 Codex / Claude 调用。"
       : "此模块默认不提供提示词复制，仅展示只读详情。";
+  const legacyHint = activeView === "legacy" ? "旧入口只用于兼容识别，不恢复旧全局基线。" : "详情面板不会触发全盘扫描或后台执行。";
 
   return {
     title: `${moduleName} 使用指南`,
     summary: zhCN.moduleSummaries[activeView],
-    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、路径和安全信息。", promptCopyHint],
+    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、来源、路径和安全边界。", promptCopyHint, legacyHint],
     badge: moduleName
   };
+}
+
+function getPrimaryMetaRows(resource: AiosResource, display: ReturnType<typeof getResourceDisplay>, provenance: SkillIdentityProvenance | null): Array<{ label: string; value: string }> {
+  return [
+    { label: "类型", value: `${display.zhToolType} / ${display.zhCapability}` },
+    { label: "来源", value: getPrimarySourceLabel(resource, provenance) },
+    { label: "边界", value: getBoundaryLabel(resource) },
+    { label: "更新", value: resource.updatedAt ? formatDate(resource.updatedAt) : "未记录" }
+  ];
+}
+
+function getBoundaryChips(resource: AiosResource): Array<{ label: string; className?: string; variant?: "filled" | "outlined" }> {
+  return [
+    { label: resource.safetyProfile.readOnly ? "本地只读" : "只读需复核", className: resource.safetyProfile.readOnly ? "status-chip status-ok" : "status-chip status-warn", variant: "filled" },
+    { label: "仅元数据" },
+    { label: "敏感值隐藏" },
+    { label: "UI 不执行" },
+    { label: "无全盘扫描", className: "status-chip status-disabled" }
+  ];
+}
+
+function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTechnicalDetailRow[], provenance: SkillIdentityProvenance | null): { title: string; body: string; chipLabel: string; chipClassName?: string; tone: "info" | "warn" } | null {
+  if (resource.toolType === "legacy" || resource.capabilityType === "usage-prompt") {
+    return {
+      title: "兼容资源",
+      body: "此资源用于识别迁移边界，不恢复旧入口、不写回全局配置。",
+      chipLabel: "兼容",
+      tone: "warn"
+    };
+  }
+
+  const hasDetail = Boolean(provenance || metadataRows.length > 0 || resource.paths.length > 0 || resource.updatedAt);
+  if (!hasDetail) {
+    return {
+      title: "可用元数据有限",
+      body: "当前清单只记录名称、类型和安全边界；未补充路径、来源或更新时间。",
+      chipLabel: "元数据不足",
+      chipClassName: "status-chip status-warn",
+      tone: "warn"
+    };
+  }
+
+  if (resource.prompts.length === 0) {
+    return {
+      title: "只读详情",
+      body: "此资源未提供可复制提示词；页面只展示清单、安全画像和来源信息。",
+      chipLabel: "无执行入口",
+      tone: "info"
+    };
+  }
+
+  return null;
+}
+
+function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentityProvenance | null): string {
+  if (provenance?.sourceLabels) return provenance.sourceLabels;
+
+  const server = getMcpServer(resource);
+  if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
+
+  const sourceBadges = getSkillSourceBadges(resource);
+  if (sourceBadges.length > 0) return sourceBadges.map((badge) => badge.label).join(" / ");
+
+  const sourceKind = getDiscoveryMetadataString(resource, "sourceKind");
+  if (sourceKind) return sourceKind;
+
+  if (resource.path || resource.paths.length > 0) return "本地清单";
+  if (resource.toolType === "legacy") return "兼容入口";
+  return "未记录";
+}
+
+function getBoundaryLabel(resource: AiosResource): string {
+  if (resource.safetyProfile.readOnly && !resource.safetyProfile.writesGlobalState) return "本地只读";
+  if (resource.safetyProfile.writesGlobalState) return "写入风险需复核";
+  return "只读状态需复核";
 }
 
 function getSourceRows(
