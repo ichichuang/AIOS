@@ -30,3 +30,12 @@ See:
 - `docs/ARCHITECTURE.zh-CN.md`
 - `docs/SAFETY.zh-CN.md`
 - `docs/ROADMAP.zh-CN.md`
+
+## Desktop / Tauri Phase 0
+
+AIOS Desktop 的产品化方向记录在以下 Phase 0 文档中。它们只定义架构、扫描安全策略和迁移计划，不表示当前仓库已经引入 Tauri 运行时：
+
+- `docs/DESKTOP_PRODUCT_RFC.zh-CN.md`
+- `docs/DESKTOP_ARCHITECTURE.zh-CN.md`
+- `docs/SCANNER_POLICY.zh-CN.md`
+- `docs/TAURI_MIGRATION_PLAN.zh-CN.md`
