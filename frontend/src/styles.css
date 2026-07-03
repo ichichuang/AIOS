@@ -21,11 +21,11 @@
 
 .aios-navigation-rail {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 6px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
   overflow: hidden;
-  border-radius: 22px;
-  padding: 8px 6px 7px;
+  border-radius: 24px;
+  padding: 10px 8px 8px;
 }
 
 .rail-brand {
@@ -33,64 +33,25 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-height: 40px;
-  border-radius: 16px;
-  background: var(--aios-primary-soft);
+  gap: 4px;
+  min-height: 54px;
+  border: 1px solid color-mix(in srgb, var(--aios-primary) 18%, var(--aios-outline));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-primary-soft) 68%, var(--aios-surface));
   color: var(--aios-primary);
 }
 
 .rail-brand-logo {
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
 }
 
-.rail-brand strong {
+.rail-brand-mark {
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-}
-
-.rail-brand span {
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-  opacity: 0.8;
-}
-
-.rail-desktop-status {
-  display: grid;
-  gap: 2px;
-  align-content: center;
-  min-width: 0;
-  border: 1px solid var(--aios-outline);
-  border-radius: 12px;
-  background: var(--aios-surface-muted);
-  padding: 5px 3px;
-  text-align: center;
-}
-
-.rail-desktop-status span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--aios-success);
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-desktop-status .rail-status-copy {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--aios-subtle);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  letter-spacing: 0;
 }
 
 
@@ -98,44 +59,36 @@
   position: relative;
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 10px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 2px 0;
 }
 
 .rail-group {
   display: grid;
-  gap: 3px;
+  gap: 7px;
   min-width: 0;
 }
 
-.rail-group-heading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  height: 13px;
-  padding: 0 2px;
+.rail-group-marker {
+  width: 22px;
+  height: 1px;
+  margin: 1px auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aios-outline-strong) 58%, transparent);
 }
 
-.rail-group-title {
-  color: var(--aios-subtle);
-  font-size: 9px;
-  font-weight: 900;
-  line-height: 1.1;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.rail-group.active .rail-group-title {
-  color: var(--aios-primary);
+.rail-group.active .rail-group-marker {
+  background: color-mix(in srgb, var(--aios-primary) 42%, transparent);
 }
 
 .rail-group-items {
   display: grid;
-  gap: 4px;
+  gap: 7px;
   min-width: 0;
+  justify-items: center;
 }
 
 .rail-selected-pill {
@@ -143,9 +96,12 @@
   top: 0;
   left: 0;
   z-index: 0;
-  border: 1px solid var(--aios-selected-outline);
-  border-radius: 15px;
-  background: var(--aios-selected-surface);
+  border: 1px solid color-mix(in srgb, var(--aios-primary) 36%, var(--aios-selected-outline));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-primary-soft) 74%, var(--aios-surface));
+  box-shadow:
+    inset 3px 0 0 var(--aios-primary),
+    0 6px 18px color-mix(in srgb, var(--aios-primary) 12%, transparent);
   opacity: 0;
   pointer-events: none;
 }
@@ -154,38 +110,34 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: 20px 13px;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  align-items: center;
-  justify-items: center;
-  width: 100%;
-  max-width: 100%;
-  height: 48px;
-  min-height: 48px;
-  max-height: 48px;
+  place-items: center;
+  width: 54px;
+  max-width: 54px;
+  height: 50px;
+  min-height: 50px;
+  max-height: 50px;
   border: 1px solid transparent;
-  border-radius: 13px;
+  border-radius: 18px;
   color: var(--aios-muted);
-  padding: 7px 4px 5px;
+  padding: 0;
   text-align: center;
   transition:
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease,
-    color var(--aios-motion-fast) ease;
+    color var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
 }
 
 .rail-item:hover {
-  border-color: var(--aios-outline-strong);
-  background: var(--aios-primary-soft);
+  border-color: color-mix(in srgb, var(--aios-primary) 18%, var(--aios-outline-strong));
+  background: color-mix(in srgb, var(--aios-primary-soft) 58%, transparent);
   color: var(--aios-primary);
 }
 
 .rail-item.active {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-selected-surface);
+  border-color: transparent;
+  background: transparent;
   color: var(--aios-primary);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
 }
 
 .rail-item:focus-visible {
@@ -194,54 +146,48 @@
 }
 
 .rail-item svg {
-  align-self: end;
-  font-size: 20px;
-}
-
-.rail-label.MuiTypography-root {
-  max-width: 100%;
-  align-self: start;
-  font-size: 10.5px;
-  font-weight: 800;
-  line-height: 1.05;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 23px;
 }
 
 .rail-count.MuiTypography-root {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  right: 5px;
+  bottom: 5px;
   display: inline-grid;
   place-items: center;
-  min-width: 17px;
-  max-width: 26px;
-  height: 15px;
+  min-width: 18px;
+  max-width: 32px;
+  height: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--aios-outline-strong) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--aios-primary) 30%, transparent);
   border-radius: 999px;
-  background: var(--aios-surface-muted);
-  color: var(--aios-subtle);
+  background: color-mix(in srgb, var(--aios-surface) 82%, var(--aios-primary-soft));
+  color: var(--aios-primary);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
+  opacity: 0;
   text-overflow: ellipsis;
+  transform: translateY(2px);
+  transition:
+    opacity var(--aios-motion-fast) ease,
+    transform var(--aios-motion-fast) ease;
   white-space: nowrap;
 }
 
-.rail-item.active .rail-count {
-  border-color: color-mix(in srgb, var(--aios-primary) 52%, transparent);
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+.rail-item.active .rail-count,
+.rail-item:hover .rail-count,
+.rail-item:focus-visible .rail-count {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .rail-action-dock {
   display: grid;
   place-items: center;
-  min-height: 46px;
+  min-height: 50px;
   border-top: 1px solid var(--aios-outline);
-  padding-top: 7px;
+  padding-top: 8px;
 }
 
 .theme-mode-button.MuiIconButton-root {
@@ -279,7 +225,7 @@
 
 .aios-top-command-bar {
   display: grid;
-  grid-template-columns: minmax(190px, 0.42fr) minmax(320px, 1fr) minmax(230px, 0.42fr);
+  grid-template-columns: minmax(230px, 0.44fr) minmax(300px, 1fr) minmax(230px, 0.42fr);
   gap: 10px;
   align-items: center;
   height: var(--aios-topbar-height);
@@ -312,6 +258,10 @@
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.command-boundary-chip.MuiChip-root {
+  max-width: 92px;
 }
 
 .command-search-wrap {
@@ -356,7 +306,8 @@
 }
 
 .command-meta.compact {
-  min-width: 76px;
+  min-width: 116px;
+  max-width: 148px;
 }
 
 .command-safe-indicator {
@@ -2449,6 +2400,10 @@
   .command-meta.compact {
     display: none;
   }
+
+  .command-boundary-chip.MuiChip-root {
+    display: none;
+  }
 }
 
 @media (max-width: 1023px) {
@@ -2465,6 +2420,10 @@
   }
 
   .command-meta.compact {
+    display: none;
+  }
+
+  .command-boundary-chip.MuiChip-root {
     display: none;
   }
 }
@@ -2525,10 +2484,6 @@
     display: none;
   }
 
-  .rail-desktop-status {
-    display: none;
-  }
-
   .rail-items {
     grid-column: 1;
     grid-auto-flow: column;
@@ -2545,14 +2500,14 @@
     min-width: max-content;
   }
 
-  .rail-group-heading {
+  .rail-group-marker {
     display: none;
   }
 
   .rail-group-items {
     grid-auto-flow: column;
-    grid-auto-columns: 58px;
-    gap: 5px;
+    grid-auto-columns: 54px;
+    gap: 6px;
   }
 
   .rail-action-dock {
@@ -2563,11 +2518,18 @@
     padding: 0 0 0 8px;
   }
 
-  .rail-item {
+  .rail-item.MuiButtonBase-root {
+    width: 52px;
+    max-width: 52px;
     height: 50px;
     min-height: 50px;
     max-height: 50px;
-    padding: 6px 4px;
+  }
+
+  .rail-selected-pill {
+    box-shadow:
+      inset 0 -3px 0 var(--aios-primary),
+      0 6px 18px color-mix(in srgb, var(--aios-primary) 12%, transparent);
   }
 
   .aios-top-command-bar {

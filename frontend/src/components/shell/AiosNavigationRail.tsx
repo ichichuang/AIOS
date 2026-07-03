@@ -24,28 +24,19 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
 
   return (
     <Box className="aios-navigation-rail" component="nav" ref={railRef} aria-label="AIOS 模块导航">
-      <Box className="rail-brand" aria-label="AIOS Material 控制台">
+      <Box className="rail-brand" aria-label="AIOS Desktop">
         <Box className="rail-brand-logo" component="img" src={labelIcon} alt="AIOS Logo" />
-        <Typography component="strong">AIOS</Typography>
-        <Typography component="span">Desktop</Typography>
-      </Box>
-      <Box className="rail-desktop-status" aria-label="桌面产品边界">
-        <Typography component="span">本地只读</Typography>
-        <Typography className="rail-status-copy" component="span">
-          壳 MVP · 无全盘
+        <Typography className="rail-brand-mark" component="strong" aria-hidden="true">
+          AIOS
         </Typography>
       </Box>
       <Box className="rail-items" data-nav-track>
         <Box className="rail-selected-pill" data-nav-indicator aria-hidden="true" />
-        {navigationGroups.map((group) => {
+        {navigationGroups.map((group, groupIndex) => {
           const activeInGroup = group.views.includes(activeView);
           return (
             <Box className={activeInGroup ? "rail-group active" : "rail-group"} key={group.key} aria-label={`${group.title}：${group.summary}`}>
-              <Box className="rail-group-heading">
-                <Typography className="rail-group-title" component="span">
-                  {group.title}
-                </Typography>
-              </Box>
+              {groupIndex > 0 && <Box className="rail-group-marker" aria-hidden="true" />}
               <Box className="rail-group-items">
                 {group.views.map((view) => {
                   return (
@@ -94,9 +85,6 @@ const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, gro
       onClick={() => onChange(view)}
     >
       <Icon fontSize="small" />
-      <Typography className="rail-label" component="span">
-        {label}
-      </Typography>
       <Typography className="rail-count" component="span">
         {count}
       </Typography>

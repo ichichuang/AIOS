@@ -19,6 +19,9 @@ interface AiosTopCommandBarProps {
 }
 
 export function AiosTopCommandBar({ activeView, inventory, query, shownCount, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
+  const activeModuleLabel = VIEW_LABELS[activeView];
+  const boundaryLabel = "本地只读 · 无全盘扫描";
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter") return;
     const target = event.target as HTMLInputElement;
@@ -34,7 +37,7 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
         <Typography component="h1" variant="h2">
           AIOS Desktop
         </Typography>
-        <Chip className="status-chip status-ok" label="本地只读" />
+        <Chip className="status-chip status-ok command-boundary-chip" label="本地只读" title={boundaryLabel} />
       </Box>
 
       <Box className="command-search-wrap">
@@ -75,14 +78,14 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
         </Box>
         <Box className="command-meta compact">
           <Typography className="caption" component="p">
-            {VIEW_LABELS[activeView]}
+            {zhCN.app.activeModule}
           </Typography>
-          <Typography component="strong">
-            {shownCount} / {inventory.resources.length}
+          <Typography component="strong" title={`${activeModuleLabel} · ${shownCount} 项可见，总计 ${inventory.resources.length} 项`}>
+            {activeModuleLabel} · {shownCount} 项
           </Typography>
         </Box>
-        <Tooltip title={zhCN.app.safetyState}>
-          <Box className="command-safe-indicator" component="span" aria-label={zhCN.app.safetyState}>
+        <Tooltip title={`${zhCN.app.safetyState} · 无全盘扫描`}>
+          <Box className="command-safe-indicator" component="span" aria-label={`${zhCN.app.safetyState}，无全盘扫描`}>
             <TuneRounded className="command-safe-icon" fontSize="small" />
           </Box>
         </Tooltip>
