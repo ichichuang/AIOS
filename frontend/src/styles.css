@@ -25,7 +25,7 @@
   gap: 10px;
   overflow: hidden;
   border-radius: 24px;
-  padding: 10px 8px 8px;
+  padding: 20px 8px 8px;
 }
 
 .rail-brand {
@@ -33,25 +33,57 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 54px;
-  border: 1px solid color-mix(in srgb, var(--aios-primary) 18%, var(--aios-outline));
+  gap: 6px;
+  padding: 12px 6px;
+  min-height: 68px;
+  border: 1px solid color-mix(in srgb, var(--aios-primary) 20%, var(--aios-outline));
   border-radius: 18px;
-  background: color-mix(in srgb, var(--aios-primary-soft) 68%, var(--aios-surface));
+  background: linear-gradient(180deg, 
+    color-mix(in srgb, var(--aios-primary-soft) 85%, var(--aios-surface)) 0%, 
+    color-mix(in srgb, var(--aios-primary-soft) 40%, var(--aios-surface)) 100%
+  );
   color: var(--aios-primary);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--aios-primary) 6%, transparent);
+  transition: border-color var(--aios-motion-fast) ease,
+              box-shadow var(--aios-motion-fast) ease,
+              background var(--aios-motion-fast) ease,
+              transform var(--aios-motion-fast) ease;
+  cursor: default;
+}
+
+.rail-brand:hover {
+  border-color: color-mix(in srgb, var(--aios-primary) 36%, var(--aios-outline-strong));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--aios-primary) 12%, transparent);
+  background: linear-gradient(180deg, 
+    color-mix(in srgb, var(--aios-primary-soft) 95%, var(--aios-surface)) 0%, 
+    color-mix(in srgb, var(--aios-primary-soft) 55%, var(--aios-surface)) 100%
+  );
 }
 
 .rail-brand-logo {
   width: 26px;
   height: 26px;
   object-fit: contain;
+  transition: transform var(--aios-motion-fast) ease;
+}
+
+.rail-brand:hover .rail-brand-logo {
+  transform: scale(1.08) translateY(-1px);
 }
 
 .rail-brand-mark {
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-  letter-spacing: 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  transition: opacity var(--aios-motion-fast) ease, letter-spacing var(--aios-motion-fast) ease;
+}
+
+.rail-brand:hover .rail-brand-mark {
+  opacity: 1;
+  letter-spacing: 0.08em;
 }
 
 
