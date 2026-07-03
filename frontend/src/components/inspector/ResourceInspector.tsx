@@ -197,6 +197,15 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
     };
   }
 
+  if (activeView === "custom-scan") {
+    return {
+      title: "选择扫描结果查看详情",
+      summary: "目录扫描结果只包含路径、大小、扩展名、修改时间、分类原因和安全标签。",
+      hints: ["先通过目录扫描模块选择一个目录并运行扫描。", "敏感路径段会显示为 [sensitive]。", "此模块不提供全盘扫描、内容读取或执行入口。"],
+      badge: "目录扫描"
+    };
+  }
+
   const moduleName = VIEW_LABELS[activeView];
   const promptCopyHint =
     activeView === "skills" || activeView === "legacy"

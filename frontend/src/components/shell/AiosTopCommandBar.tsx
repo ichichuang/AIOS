@@ -20,7 +20,7 @@ interface AiosTopCommandBarProps {
 
 export function AiosTopCommandBar({ activeView, inventory, query, shownCount, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
   const activeModuleLabel = VIEW_LABELS[activeView];
-  const boundaryLabel = "本地只读 · 无全盘扫描";
+  const boundaryLabel = "本地只读 · 指定目录扫描 · 全盘扫描禁用";
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter") return;

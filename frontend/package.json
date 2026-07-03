@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
-    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts",
+    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/customDirectoryScan.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json",
     "preview": "vite preview --host 127.0.0.1"
   },
@@ -16,6 +16,7 @@
     "@gsap/react": "2.1.2",
     "@mui/icons-material": "9.1.1",
     "@mui/material": "9.1.2",
+    "@tauri-apps/api": "2.11.1",
     "gsap": "3.15.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",

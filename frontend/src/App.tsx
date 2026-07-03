@@ -2,6 +2,7 @@ import { Box, Typography } from "@mui/material";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
 import { DashboardModule } from "./components/modules/DashboardModule";
+import { CustomScanModule } from "./components/modules/CustomScanModule";
 import { LegacyModule } from "./components/modules/LegacyModule";
 import { McpModule } from "./components/modules/McpModule";
 import { PoliciesModule } from "./components/modules/PoliciesModule";
@@ -144,6 +145,8 @@ function renderModule(activeView: ResourceView, moduleProps: AiosModuleProps) {
   switch (activeView) {
     case "dashboard":
       return <DashboardModule {...moduleProps} />;
+    case "custom-scan":
+      return <CustomScanModule {...moduleProps} />;
     case "skills":
       return <SkillsModule {...moduleProps} />;
     case "mcp":

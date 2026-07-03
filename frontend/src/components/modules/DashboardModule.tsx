@@ -22,7 +22,7 @@ import SearchOffRounded from "@mui/icons-material/SearchOffRounded";
 import StorageRounded from "@mui/icons-material/StorageRounded";
 import FolderOffRounded from "@mui/icons-material/FolderOffRounded";
 
-const quickViews: ResourceView[] = ["skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
+const quickViews: ResourceView[] = ["custom-scan", "skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
 const capabilityEntries = [
   {
@@ -72,7 +72,7 @@ const capabilityEntries = [
 const desktopStatusChips: AiosUsageChip[] = [
   { label: "本地运行", className: "status-chip status-ok" },
   { label: "默认只读", className: "status-chip status-ok" },
-  { label: "桌面壳 MVP", variant: "outlined" },
+  { label: "指定目录扫描 MVP", variant: "outlined" },
   { label: "不做全盘扫描", className: "status-chip status-disabled" }
 ];
 
@@ -93,11 +93,11 @@ const desktopBoundaryCards: Array<{
   },
   {
     title: "扫描引擎",
-    purpose: "Rust 扫描引擎尚未实现；当前继续读取现有 snapshot，不发起扫描任务。",
+    purpose: "已提供用户选择单个目录后的有界元数据扫描；不读取文件内容。",
     icon: <SearchOffRounded fontSize="small" />,
     chips: [
-      { label: "未实现", className: "status-chip status-warn", variant: "filled" },
-      { label: "未来 Phase 2" }
+      { label: "MVP", className: "status-chip status-ok", variant: "filled" },
+      { label: "Phase 2A" }
     ]
   },
   {
@@ -157,7 +157,7 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
           <Box className="dashboard-status-copy">
             <Typography component="strong">桌面产品状态</Typography>
             <Typography color="text.secondary" variant="body2">
-              当前仅展示 repo-local snapshot 和现有清单；不执行脚本、MCP、扫描任务或全盘遍历。
+              当前展示 repo-local snapshot，并支持用户显式选择一个目录执行只读元数据扫描；不执行脚本、MCP 或全盘遍历。
             </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
@@ -169,7 +169,7 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
       </Box>
 
       <AiosSection className="desktop-boundary-section">
-        <AiosSectionHeader title="桌面能力边界" summary="Phase 1.5 只做产品状态表达，不改变后端能力。" />
+        <AiosSectionHeader title="桌面能力边界" summary="Phase 2A 增加指定目录只读扫描，静态清单继续保留。" />
         <Box className="quick-entry-grid desktop-boundary-grid">
           {desktopBoundaryCards.map((entry) => (
             <AiosUsageCard className="dashboard-boundary-card" chips={entry.chips} icon={entry.icon} key={entry.title} purpose={entry.purpose} title={entry.title} />

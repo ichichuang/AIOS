@@ -5,6 +5,7 @@ import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
 
 export type ResourceView =
   | "dashboard"
+  | "custom-scan"
   | "skills"
   | "mcp"
   | "scripts"
@@ -16,6 +17,7 @@ export type ResourceView =
 
 export const VIEW_LABELS: Record<ResourceView, string> = {
   dashboard: zhCN.views.dashboard,
+  "custom-scan": zhCN.views["custom-scan"],
   skills: zhCN.views.skills,
   mcp: zhCN.views.mcp,
   scripts: zhCN.views.scripts,
@@ -39,6 +41,7 @@ const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
 
 export function belongsToView(resource: AiosResource, view: ResourceView): boolean {
   if (view === "dashboard") return true;
+  if (view === "custom-scan") return false;
   if (view === "legacy") return resource.toolType === "legacy" || resource.capabilityType === "usage-prompt";
   const capabilities = capabilityByView[view];
   return capabilities ? capabilities.includes(resource.capabilityType) : true;
@@ -93,6 +96,7 @@ export function buildResourceDisplayMap(resources: AiosResource[]): Map<string, 
 export function buildResourcesByView(resources: AiosResource[]): Record<ResourceView, AiosResource[]> {
   return {
     dashboard: resources,
+    "custom-scan": [],
     skills: resources.filter((resource) => belongsToView(resource, "skills")),
     mcp: resources.filter((resource) => belongsToView(resource, "mcp")),
     scripts: resources.filter((resource) => belongsToView(resource, "scripts")),

@@ -77,20 +77,28 @@ AIOS Desktop 扫描器用于发现和解释本地 AI 能力资源。它默认只
 
 ### Custom Folder
 
+Phase 2A 状态：
+
+- 已实现最小 MVP：用户通过 Tauri 系统目录选择器选择一个目录。
+- Rust 侧只执行 metadata-only traversal，不读取文件内容。
+- 扫描结果只保存在当前前端内存中，不写入 SQLite，不保留扫描历史。
+- 每次扫描只使用一个用户选择目录，不支持多根目录批量扫描。
+
 范围：
 
 - 用户通过系统目录选择器显式选择的目录。
 
 目标：
 
-- 建立用户授权目录下的本地 AI 资源索引。
-- 提供扫描历史、跳过原因、风险汇总和资源质量报告。
+- 建立用户授权目录下的临时本地 AI 资源视图。
+- 提供跳过原因、风险汇总和资源分类结果。
 
 限制：
 
 - 每个 custom root 都必须记录授权来源和 policy decision。
 - 默认继承强 exclude、metadata-first 和 redaction 规则。
-- 用户可以删除 profile 和本地索引。
+- Phase 2A 不保存 profile，不保存本地索引，不提供扫描历史。
+- SQLite、scan history、profile 管理和 diff view 仍是未来阶段。
 
 ## 全盘扫描策略
 
@@ -170,6 +178,17 @@ Redaction 输出必须显示：
 - project profile 尊重 ignore 文件。
 - explicit AIOS roots 可以读取隐藏目录 metadata。
 - custom profile 只扫用户授权 root。
+- Phase 2A custom profile 默认只使用 L0 路径 metadata，不解析 manifest 字段。
+
+Phase 2A custom profile 边界：
+
+- `max_depth = 6`。
+- `max_entries = 2000`。
+- `max_file_size_bytes = 10 MiB`，仅用于元数据大小阈值判断。
+- 尊重 `.ignore`、`.gitignore` 和标准 ignore 规则。
+- 不跟随 symlink。
+- 不读取文件内容，不执行脚本，不启动 MCP，不连接远程服务。
+- 拒绝 `/`、用户 home root、`/Users`、`/Volumes`、`/System`、`/Library`、`/Applications`、`/private`、`/tmp`、Windows drive root 等整机或系统边界目录。
 
 默认跳过：
 
@@ -187,6 +206,20 @@ Redaction 输出必须显示：
 - 聊天数据库
 - 照片库
 - credential、auth、session、keychain 相关路径
+
+Phase 2A custom profile 额外强 exclude：
+
+- `.git`
+- `.next`
+- `.nuxt`
+- `.turbo`
+- `.venv`
+- `venv`
+- `__pycache__`
+- package manager cache paths such as `.pnpm-store`、`.pnpm`、`.yarn`、`.npm`
+- Rust/tool cache paths such as `.cargo`、`.rustup`
+
+若路径或文件名包含 `secret`、`token`、`credential`、`auth`、`session`、`cookie`、`.env`、private key 等敏感特征，Phase 2A 只返回 redacted path segment，并标记 `sensitive-path-redacted`。
 
 ## 扫描结果安全模型
 

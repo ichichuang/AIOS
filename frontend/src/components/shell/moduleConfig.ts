@@ -2,6 +2,7 @@ import ArticleRounded from "@mui/icons-material/ArticleRounded";
 import DashboardRounded from "@mui/icons-material/DashboardRounded";
 import ExtensionRounded from "@mui/icons-material/ExtensionRounded";
 import FactCheckRounded from "@mui/icons-material/FactCheckRounded";
+import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import HistoryRounded from "@mui/icons-material/HistoryRounded";
 import HubRounded from "@mui/icons-material/HubRounded";
 import Inventory2Rounded from "@mui/icons-material/Inventory2Rounded";
@@ -10,7 +11,7 @@ import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import type { SvgIconComponent } from "@mui/icons-material";
 import type { ResourceView } from "../../lib/filtering";
 
-export const consoleViews: ResourceView[] = ["dashboard", "skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
+export const consoleViews: ResourceView[] = ["dashboard", "custom-scan", "skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
 export interface NavigationGroup {
   key: "overview" | "inventory" | "operations" | "governance" | "legacy";
@@ -23,8 +24,8 @@ export const navigationGroups: NavigationGroup[] = [
   {
     key: "overview",
     title: "总览",
-    summary: "桌面工作台入口与产品边界。",
-    views: ["dashboard"]
+    summary: "桌面工作台入口、产品边界与指定目录扫描。",
+    views: ["dashboard", "custom-scan"]
   },
   {
     key: "inventory",
@@ -54,6 +55,7 @@ export const navigationGroups: NavigationGroup[] = [
 
 export const moduleIcons: Record<ResourceView, SvgIconComponent> = {
   dashboard: DashboardRounded,
+  "custom-scan": FolderOpenRounded,
   skills: ExtensionRounded,
   mcp: HubRounded,
   scripts: TerminalRounded,
