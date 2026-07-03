@@ -1,0 +1,22 @@
+[package]
+name = "aios-desktop"
+version = "0.1.0"
+description = "AIOS Desktop read-only shell"
+authors = ["AIOS"]
+edition = "2021"
+rust-version = "1.77.2"
+default-run = "aios-desktop"
+
+[lib]
+name = "aios_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "aios-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+tauri = { version = "2" }

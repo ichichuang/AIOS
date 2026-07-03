@@ -5,6 +5,8 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+src-tauri/gen/
+src-tauri/target/
 .env
 .env.*
 !.env.example

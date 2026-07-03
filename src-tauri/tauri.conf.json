@@ -1,0 +1,32 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "AIOS Desktop",
+  "version": "0.1.0",
+  "identifier": "com.ichichuang.aios.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @aios-control/frontend dev",
+    "beforeBuildCommand": "pnpm --filter @aios-control/frontend build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AIOS Desktop",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

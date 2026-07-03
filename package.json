@@ -9,9 +9,15 @@
     "build": "pnpm inventory:generate && pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "inventory:generate": "pnpm --filter @aios-control/server inventory:generate",
-    "validate": "pnpm typecheck && pnpm build"
+    "validate": "pnpm typecheck && pnpm build",
+    "tauri": "tauri",
+    "desktop:dev": "pnpm tauri dev",
+    "desktop:build": "pnpm tauri build"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
   }
 }

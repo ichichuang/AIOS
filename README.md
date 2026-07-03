@@ -17,6 +17,8 @@ pnpm inventory:generate
 pnpm typecheck
 pnpm build
 pnpm --filter @aios-control/frontend dev
+pnpm desktop:dev
+pnpm desktop:build
 ```
 
 ## Safety model
@@ -31,11 +33,13 @@ See:
 - `docs/SAFETY.zh-CN.md`
 - `docs/ROADMAP.zh-CN.md`
 
-## Desktop / Tauri Phase 0
+## Desktop / Tauri
 
-AIOS Desktop 的产品化方向记录在以下 Phase 0 文档中。它们只定义架构、扫描安全策略和迁移计划，不表示当前仓库已经引入 Tauri 运行时：
+AIOS Desktop 的产品化方向记录在以下 Phase 0 文档中。当前仓库已进入 Phase 1：仅添加最小 Tauri v2 桌面壳，继续复用现有 Material Console 前端。
 
 - `docs/DESKTOP_PRODUCT_RFC.zh-CN.md`
 - `docs/DESKTOP_ARCHITECTURE.zh-CN.md`
 - `docs/SCANNER_POLICY.zh-CN.md`
 - `docs/TAURI_MIGRATION_PLAN.zh-CN.md`
+
+当前桌面壳仅承载现有 Material Console 前端，不包含 Rust 扫描器、SQLite、文件系统插件、Shell 插件、MCP 执行或全盘扫描。
