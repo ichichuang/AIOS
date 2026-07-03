@@ -1,4 +1,4 @@
-import { Box, ButtonBase, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { Box, ButtonBase, Chip, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import BrightnessAutoRounded from "@mui/icons-material/BrightnessAutoRounded";
 import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
 import LightModeRounded from "@mui/icons-material/LightModeRounded";
@@ -9,7 +9,7 @@ import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import { useNavIndicatorMotion } from "../../lib/useAiosMotion";
 import type { AiosThemePreference } from "../../theme/designTokens";
 import { useAiosThemeMode } from "../../theme/AiosThemeProvider";
-import { consoleViews, moduleIcons } from "./moduleConfig";
+import { moduleIcons, navigationGroups } from "./moduleConfig";
 import labelIcon from "../../assets/image/label.png";
 
 interface AiosNavigationRailProps {
@@ -27,12 +27,48 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
       <Box className="rail-brand" aria-label="AIOS Material 控制台">
         <Box className="rail-brand-logo" component="img" src={labelIcon} alt="AIOS Logo" />
         <Typography component="strong">AIOS</Typography>
-        <Typography component="span">控制台</Typography>
+        <Typography component="span">Desktop</Typography>
+      </Box>
+      <Box className="rail-desktop-status" aria-label="桌面产品边界">
+        <Chip className="status-chip status-ok" label="本地" size="small" />
+        <Chip className="status-chip status-ok" label="只读" size="small" />
+        <Typography className="rail-status-copy" component="span">
+          壳 MVP · 无全盘扫描
+        </Typography>
       </Box>
       <Box className="rail-items" data-nav-track>
         <Box className="rail-selected-pill" data-nav-indicator aria-hidden="true" />
-        {consoleViews.map((view) => {
-          return <AiosNavigationItem key={view} active={view === activeView} count={viewCounts[view]} icon={moduleIcons[view]} view={view} onChange={onChange} />;
+        {navigationGroups.map((group) => {
+          const activeInGroup = group.views.includes(activeView);
+          return (
+            <Box className={activeInGroup ? "rail-group active" : "rail-group"} key={group.key} aria-label={`${group.title}：${group.summary}`}>
+              <Box className="rail-group-heading">
+                <Typography className="rail-group-title" component="span">
+                  {group.title}
+                </Typography>
+                {activeInGroup && (
+                  <Typography className="rail-group-active" component="span">
+                    当前
+                  </Typography>
+                )}
+              </Box>
+              <Box className="rail-group-items">
+                {group.views.map((view) => {
+                  return (
+                    <AiosNavigationItem
+                      key={view}
+                      active={view === activeView}
+                      count={viewCounts[view]}
+                      groupSummary={group.summary}
+                      icon={moduleIcons[view]}
+                      view={view}
+                      onChange={onChange}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+          );
         })}
       </Box>
       <ThemeActionDock />
@@ -43,18 +79,20 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
 interface AiosNavigationItemProps {
   active: boolean;
   count: number;
+  groupSummary: string;
   icon: SvgIconComponent;
   view: ResourceView;
   onChange: (view: ResourceView) => void;
 }
 
-const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, icon: Icon, view, onChange }: AiosNavigationItemProps) {
+const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, groupSummary, icon: Icon, view, onChange }: AiosNavigationItemProps) {
+  const moduleSummary = zhCN.moduleSummaries[view];
   return (
-    <Tooltip title={`${VIEW_LABELS[view]} · ${count} 项`} placement="right">
+    <Tooltip title={`${VIEW_LABELS[view]} · ${moduleSummary} · ${groupSummary}`} placement="right">
       <ButtonBase
         className={active ? "rail-item active" : "rail-item"}
         aria-current={active ? "page" : undefined}
-        aria-label={`${VIEW_LABELS[view]}，${count} 项`}
+        aria-label={`${VIEW_LABELS[view]}，${moduleSummary}，${count} 项`}
         aria-pressed={active}
         data-nav-active={active ? "true" : undefined}
         onClick={() => onChange(view)}
@@ -63,6 +101,9 @@ const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, ico
         <Typography className="rail-label" component="span">
           {VIEW_LABELS[view]}
         </Typography>
+        <Typography className="rail-helper" component="span">
+          {getModuleHelper(view)}
+        </Typography>
         <Typography className="rail-count" component="span">
           {count}
         </Typography>
@@ -70,6 +111,31 @@ const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, ico
     </Tooltip>
   );
 });
+
+function getModuleHelper(view: ResourceView): string {
+  switch (view) {
+    case "dashboard":
+      return "状态";
+    case "skills":
+      return "能力";
+    case "mcp":
+      return "元数据";
+    case "scripts":
+      return "不执行";
+    case "reports":
+      return "时间线";
+    case "project-packs":
+      return "项目";
+    case "policies":
+      return "守卫";
+    case "validators":
+      return "观察";
+    case "legacy":
+      return "兼容";
+    default:
+      return "模块";
+  }
+}
 
 function ThemeActionDock() {
   const { mode, modeLabel, setMode } = useAiosThemeMode();
