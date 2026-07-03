@@ -25,7 +25,7 @@ export function useModuleSwapMotion(scope: RefObject<HTMLElement>, dependency: u
     () => {
       if (reduced || !scope.current) return;
       const header = scope.current.querySelector<HTMLElement>(".module-header");
-      const rows = gsap.utils.toArray<HTMLElement>("[data-motion='compact-skill-row'], [data-motion='resource-card']", scope.current).slice(0, 8);
+      const rows = gsap.utils.toArray<HTMLElement>("[data-motion='resource-card']", scope.current).slice(0, 8);
       const targets = [header, ...rows].filter((target): target is HTMLElement => Boolean(target));
       if (!targets.length) return;
       targets.forEach((target) => (target.style.willChange = "opacity, transform"));
@@ -92,23 +92,6 @@ export function useNavIndicatorMotion(scope: RefObject<HTMLElement>, dependency:
   );
 }
 
-export function useVisibleCardRevealMotion(scope: RefObject<HTMLElement>, dependency: unknown, selector = "[data-motion='resource-card']"): void {
-  const reduced = usePrefersReducedMotion();
-
-  useGSAP(
-    () => {
-      if (reduced || !scope.current) return;
-      const cards = gsap.utils.toArray<HTMLElement>(selector, scope.current).slice(0, 12);
-      if (!cards.length) return;
-      cards.forEach((card) => (card.style.willChange = "opacity, transform"));
-      gsap
-        .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(cards, { autoAlpha: 0, y: 6, force3D: true }, { autoAlpha: 1, force3D: true, stagger: 0.012, y: 0, onComplete: () => cards.forEach((card) => (card.style.willChange = "")) });
-    },
-    { dependencies: [dependency, reduced, selector], scope }
-  );
-}
-
 export function useInspectorMotion(scope: RefObject<HTMLElement>, dependency: unknown): void {
   const reduced = usePrefersReducedMotion();
 
@@ -118,7 +101,7 @@ export function useInspectorMotion(scope: RefObject<HTMLElement>, dependency: un
       scope.current.style.willChange = "opacity, transform";
       gsap
         .timeline({ defaults: { duration: 0.18, ease: "power2.out", overwrite: "auto" } })
-        .fromTo(scope.current, { autoAlpha: 0, x: 8, force3D: true }, { autoAlpha: 1, force3D: true, x: 0, onComplete: () => scope.current && (scope.current.style.willChange = "") });
+        .fromTo(scope.current, { autoAlpha: 0, force3D: true, y: 6 }, { autoAlpha: 1, force3D: true, onComplete: () => scope.current && (scope.current.style.willChange = ""), y: 0 });
     },
     { dependencies: [dependency, reduced], scope }
   );

@@ -1,8 +1,7 @@
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import { memo, useCallback, type CSSProperties, type KeyboardEvent, type ReactElement } from "react";
 import type { RowComponentProps } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
-import { zhCN } from "../../i18n/zh-CN";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import { buildSkillDisplayEnrichment, getSkillQualityChipLabel, shouldShowSkillQualityChip } from "../../lib/skillDisplayEnrichment";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
@@ -51,17 +50,8 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
     }
   }
 
-  // Use-case/capability chips (limit to 2 use cases or 1 capability)
-  const chipsToShow: string[] = [];
-  if (enrichment.inferredUseCases && enrichment.inferredUseCases.length > 0) {
-    chipsToShow.push(...enrichment.inferredUseCases.slice(0, 2));
-  } else if (skillCapability) {
-    chipsToShow.push(skillCapability.primaryCategory.title);
-  }
-
-  if (selected) {
-    chipsToShow.push(display.zhToolType || resource.toolType);
-  }
+  const secondaryChip = getSecondaryChip();
+  const visibleChips = [{ label: sourceLabel, className: "source-chip" }, ...(secondaryChip ? [secondaryChip] : [])].slice(0, 2);
 
   return (
     <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties}>
@@ -74,38 +64,41 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
         onClick={handleSelect}
         onKeyDown={handleKeyDown}
       >
-        <Box className="compact-skill-main" sx={{ display: "flex", flexDirection: "column", gap: 0.5, minWidth: 0, flexGrow: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-            <Typography className="resource-title" component="h3" sx={{ fontSize: "14px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", m: 0 }}>
+        <Box className="compact-skill-main">
+          <Box className="compact-skill-title-line">
+            <Typography className="resource-title compact-skill-title" component="h3">
               {enrichment.displayNameZh}
             </Typography>
-            <Box className="code-pill resource-technical-name" component="code" sx={{ fontSize: "11px", px: 0.75, py: 0.25, backgroundColor: "var(--aios-outline)", borderRadius: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
+            <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code">
               {display.technicalName}
             </Box>
           </Box>
-          <Typography className="resource-description" color="text.secondary" variant="body2" sx={{ fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", m: 0 }}>
+          <Typography className="resource-description compact-skill-description" color="text.secondary" variant="body2">
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
         </Box>
 
-        <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end", flexShrink: 0 }}>
-          <Chip className="source-chip" label={sourceLabel} variant="outlined" />
-          {chipsToShow.slice(0, selected ? 3 : 2).map((chipText) => (
-            <Chip className="capability-chip" key={chipText} label={chipText} variant="outlined" />
+        <Box className="compact-skill-state">
+          {visibleChips.map((chip) => (
+            <Chip className={chip.className} key={chip.label} label={chip.label} variant="outlined" />
           ))}
-          {shouldShowSkillQualityChip(enrichment) && (
-            <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getSkillQualityChipLabel(enrichment)} variant="outlined" color="warning" />
-          )}
-          {resource.status !== "ok" && resource.status !== "active" && resource.status !== "available" && (
-            <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
-          )}
-          {resource.risk !== "low" && (
-            <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
-          )}
-        </Stack>
+        </Box>
       </Box>
     </Box>
   );
+
+  function getSecondaryChip(): { label: string; className: string } | null {
+    if (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available") {
+      return { label: display.zhStatus, className: `status-chip status-${resource.status}` };
+    }
+    if (resource.risk !== "low") return { label: display.zhRisk, className: `risk-chip risk-${resource.risk}` };
+    if (shouldShowSkillQualityChip(enrichment)) {
+      return { label: getSkillQualityChipLabel(enrichment), className: `quality-chip quality-${enrichment.qualityLevel}` };
+    }
+    if (enrichment.inferredUseCases.length > 0) return { label: enrichment.inferredUseCases[0], className: "capability-chip" };
+    if (skillCapability) return { label: skillCapability.primaryCategory.title, className: "capability-chip" };
+    return { label: display.zhCapability, className: "capability-chip" };
+  }
 }
 
 export const CompactSkillRow = memo(CompactSkillRowComponent) as (props: RowComponentProps<CompactSkillRowProps>) => ReactElement | null;

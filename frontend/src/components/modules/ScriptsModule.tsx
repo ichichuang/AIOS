@@ -1,11 +1,11 @@
-import { Box, Chip } from "@mui/material";
+import { Chip } from "@mui/material";
 import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
+import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { makeGroups, moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
-import { ModuleHeader } from "./ModuleHeader";
 
 export function ScriptsModule({ resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(
@@ -25,14 +25,17 @@ export function ScriptsModule({ resources, selectedId, onSelect }: AiosModulePro
   );
 
   return (
-    <Box className="module-surface" component="section" aria-label={moduleAriaLabel("scripts")}>
-      <ModuleHeader view="scripts" summary={zhCN.moduleSummaries.scripts} count={resources.length}>
+    <AiosModuleFrame
+      view="scripts"
+      summary={zhCN.moduleSummaries.scripts}
+      count={resources.length}
+      ariaLabel={moduleAriaLabel("scripts")}
+      actions={
         <Chip label="清单记录，不执行" variant="outlined" />
-      </ModuleHeader>
-      <Box className="module-scroll">
-        {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="script" onSelect={onSelect} />)}
-      </Box>
-    </Box>
+      }
+    >
+      {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="script" onSelect={onSelect} />)}
+    </AiosModuleFrame>
   );
 }
 

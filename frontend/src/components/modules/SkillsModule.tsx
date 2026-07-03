@@ -1,4 +1,4 @@
-import { Box, Button, ButtonBase, Chip, Collapse, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Chip, Popover, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import { memo, useCallback, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { List } from "react-window";
@@ -9,10 +9,10 @@ import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type Sk
 import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import { buildSkillIdentityRows, buildSkillSourceRows, filterSkillIdentityRows, type SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
+import { AiosModuleFrame, AiosPillRail } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
-import { ModuleHeader } from "./ModuleHeader";
 
 type SkillGroupingMode = "capability" | "source";
 type SkillSourceViewMode = "merged" | "source";
@@ -175,17 +175,30 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     setRenderedGroupKey(null);
   }, [normalizedQuery]);
 
-  const [showOptions, setShowOptions] = useState<boolean>(false);
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const handleToggleOptions = (event: MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleCloseOptions = () => {
+    setAnchorEl(null);
+  };
+  const showOptions = Boolean(anchorEl);
 
   return (
-    <Box className="module-surface skills-module" component="section" aria-label={moduleAriaLabel("skills")}>
-      <ModuleHeader view="skills" summary={zhCN.moduleSummaries.skills} count={visibleRows.length}>
+    <AiosModuleFrame
+      className="skills-module"
+      contentClassName="skills-module-scroll"
+      view="skills"
+      summary={zhCN.moduleSummaries.skills}
+      count={visibleRows.length}
+      ariaLabel={moduleAriaLabel("skills")}
+      actions={
+        <>
         {qualityFilterMode === "needs-work" && (
           <Chip
             color="warning"
             label="仅看需补全"
             variant="filled"
-            sx={{ fontWeight: 800, height: 26, fontSize: "11px" }}
             onDelete={() => {
               markAiosPerf("skills-quality-filter-request", { mode: "all" });
               setQualityFilterMode("all");
@@ -198,58 +211,88 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
           />
         )}
         <Button
+          className="module-option-button"
           size="small"
           variant="outlined"
           startIcon={<TuneRounded fontSize="small" />}
-          onClick={() => setShowOptions(!showOptions)}
-          sx={{ borderRadius: 999 }}
+          onClick={handleToggleOptions}
         >
           视图选项
         </Button>
-      </ModuleHeader>
-      <Box className="module-scroll skills-module-scroll">
+        </>
+      }
+    >
         {groups.length === 0 ? (
           <ModuleEmptyState />
         ) : (
           <>
-            <Collapse in={showOptions} sx={{ width: "100%" }}>
-              <Stack className="skill-group-toolbar" direction="row" sx={{ alignItems: "center", gap: 2, mb: 1, flexWrap: "wrap", p: 1, border: "1px solid var(--aios-outline)", borderRadius: "14px", backgroundColor: "var(--aios-surface)" }}>
-                <ToggleButtonGroup
-                  aria-label="技能分组模式"
-                  className="skill-grouping-switch"
-                  exclusive
-                  size="small"
-                  value={groupingMode}
-                  onChange={handleGroupingModeChange}
-                >
-                  <ToggleButton value="capability">按能力</ToggleButton>
-                  <ToggleButton value="source">按来源</ToggleButton>
-                </ToggleButtonGroup>
-                <ToggleButtonGroup
-                  aria-label="技能来源显示模式"
-                  className="skill-grouping-switch"
-                  exclusive
-                  size="small"
-                  value={sourceViewMode}
-                  onChange={handleSourceViewModeChange}
-                >
-                  <ToggleButton value="merged">合并来源</ToggleButton>
-                  <ToggleButton value="source">显示入口视图</ToggleButton>
-                </ToggleButtonGroup>
-                <ToggleButtonGroup
-                  aria-label="技能质量筛选"
-                  className="skill-grouping-switch"
-                  exclusive
-                  size="small"
-                  value={qualityFilterMode}
-                  onChange={handleQualityFilterChange}
-                >
-                  <ToggleButton value="all">显示全部质量</ToggleButton>
-                  <ToggleButton value="needs-work">需补全</ToggleButton>
-                </ToggleButtonGroup>
-              </Stack>
-            </Collapse>
-            <Box className="skill-group-index horizontal-rail" role="tablist" aria-label={groupingMode === "capability" ? "技能能力分组" : "技能来源分组"}>
+            <Popover
+              open={showOptions}
+              anchorEl={anchorEl}
+              onClose={handleCloseOptions}
+              anchorOrigin={{
+                vertical: "bottom",
+                horizontal: "right",
+              }}
+              transformOrigin={{
+                vertical: "top",
+                horizontal: "right",
+              }}
+              slotProps={{
+                paper: {
+                  className: "skill-options-popover-paper"
+                }
+              }}
+            >
+              <Box className="skill-group-toolbar">
+                <Box className="skill-option-field">
+                  <Typography variant="caption" color="text.secondary">分组模式</Typography>
+                  <ToggleButtonGroup
+                    aria-label="技能分组模式"
+                    className="skill-grouping-switch"
+                    exclusive
+                    size="small"
+                    value={groupingMode}
+                    onChange={handleGroupingModeChange}
+                    fullWidth
+                  >
+                    <ToggleButton value="capability">按能力</ToggleButton>
+                    <ToggleButton value="source">按来源</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+                <Box className="skill-option-field">
+                  <Typography variant="caption" color="text.secondary">来源显示</Typography>
+                  <ToggleButtonGroup
+                    aria-label="技能来源显示模式"
+                    className="skill-grouping-switch"
+                    exclusive
+                    size="small"
+                    value={sourceViewMode}
+                    onChange={handleSourceViewModeChange}
+                    fullWidth
+                  >
+                    <ToggleButton value="merged">合并来源</ToggleButton>
+                    <ToggleButton value="source">显示入口视图</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+                <Box className="skill-option-field">
+                  <Typography variant="caption" color="text.secondary">质量筛选</Typography>
+                  <ToggleButtonGroup
+                    aria-label="技能质量筛选"
+                    className="skill-grouping-switch"
+                    exclusive
+                    size="small"
+                    value={qualityFilterMode}
+                    onChange={handleQualityFilterChange}
+                    fullWidth
+                  >
+                    <ToggleButton value="all">全部</ToggleButton>
+                    <ToggleButton value="needs-work">需补全</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+              </Box>
+            </Popover>
+            <AiosPillRail className="skill-group-index horizontal-rail" label={groupingMode === "capability" ? "技能能力分组" : "技能来源分组"}>
               {groups.map((group) => (
                 <SkillGroupButton
                   key={group.key}
@@ -261,15 +304,15 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
                   onSelect={handleGroupChange}
                 />
               ))}
-            </Box>
+            </AiosPillRail>
             {activeGroup && (
-              <Box className="selected-category-summary-row" sx={{ pb: 0.5 }}>
-                <Typography color="text.secondary" variant="body2" sx={{ fontSize: "12px", pl: 0.5 }} noWrap>
+              <Box className="selected-category-summary-row">
+                <Typography color="text.secondary" variant="body2" noWrap>
                   {activeGroup.summary || "探索本地只读技能元数据。"}
                 </Typography>
               </Box>
             )}
-            <Box className="compact-skill-list-shell" sx={{ mt: 0.5 }}>
+            <Box className="compact-skill-list-shell">
               {visibleRows.length === 0 ? (
                 <ModuleEmptyState />
               ) : (
@@ -287,8 +330,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
             </Box>
           </>
         )}
-      </Box>
-    </Box>
+    </AiosModuleFrame>
   );
 });
 
@@ -307,8 +349,8 @@ const SkillGroupButton = memo(function SkillGroupButton({ active, filteredCount,
 
   return (
     <ButtonBase className={["skill-group-button", mode, active ? "active" : ""].filter(Boolean).join(" ")} role="tab" aria-selected={active} onClick={handleClick}>
-      <Typography component="strong" sx={{ fontSize: "13px", fontWeight: 700 }}>{group.title}</Typography>
-      <Chip label={countLabel} variant={active ? "filled" : "outlined"} size="small" sx={{ height: 18, fontSize: "10px", pointerEvents: "none" }} />
+      <Typography component="strong">{group.title}</Typography>
+      <Chip className="skill-group-count" label={countLabel} variant={active ? "filled" : "outlined"} size="small" />
     </ButtonBase>
   );
 });

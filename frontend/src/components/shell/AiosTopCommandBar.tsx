@@ -1,4 +1,4 @@
-import { Box, Chip, InputAdornment, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, InputAdornment, TextField, Tooltip, Typography } from "@mui/material";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import TuneRounded from "@mui/icons-material/TuneRounded";
@@ -7,6 +7,7 @@ import { formatSnapshotDate, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosInventory } from "../../types/inventory";
 import { consoleViews } from "./moduleConfig";
+import labelIcon from "../../assets/image/label.png";
 
 interface AiosTopCommandBarProps {
   activeView: ResourceView;
@@ -28,12 +29,13 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
 
   return (
     <Box className="aios-top-command-bar">
-      <Stack className="command-title" direction="row" spacing={1} sx={{ alignItems: "center" }}>
+      <Box className="command-title">
+        <Box className="command-title-logo" component="img" src={labelIcon} alt="AIOS Logo" />
         <Typography component="h1" variant="h2">
           AIOS 控制中心
         </Typography>
         <Chip className="status-chip status-ok" label="本地只读" />
-      </Stack>
+      </Box>
 
       <Box className="command-search-wrap">
         <TextField
@@ -64,7 +66,7 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
         />
       </Box>
 
-      <Stack className="command-status" direction="row" sx={{ alignItems: "center", gap: 1, justifyContent: "flex-end" }}>
+      <Box className="command-status">
         <Box className="command-meta">
           <Typography className="caption" component="p">
             {zhCN.app.generatedAt}
@@ -84,7 +86,7 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
             <TuneRounded className="command-safe-icon" fontSize="small" />
           </Box>
         </Tooltip>
-      </Stack>
+      </Box>
     </Box>
   );
 }

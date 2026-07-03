@@ -1,11 +1,11 @@
-import { Box, Chip } from "@mui/material";
+import { Chip } from "@mui/material";
 import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
+import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { makeGroups, moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
-import { ModuleHeader } from "./ModuleHeader";
 
 export function LegacyModule({ resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(
@@ -22,13 +22,16 @@ export function LegacyModule({ resources, selectedId, onSelect }: AiosModuleProp
   );
 
   return (
-    <Box className="module-surface" component="section" aria-label={moduleAriaLabel("legacy")}>
-      <ModuleHeader view="legacy" summary={zhCN.moduleSummaries.legacy} count={resources.length}>
+    <AiosModuleFrame
+      view="legacy"
+      summary={zhCN.moduleSummaries.legacy}
+      count={resources.length}
+      ariaLabel={moduleAriaLabel("legacy")}
+      actions={
         <Chip label="兼容说明，不恢复" variant="outlined" />
-      </ModuleHeader>
-      <Box className="module-scroll">
-        {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="legacy" onSelect={onSelect} />)}
-      </Box>
-    </Box>
+      }
+    >
+      {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="legacy" onSelect={onSelect} />)}
+    </AiosModuleFrame>
   );
 }

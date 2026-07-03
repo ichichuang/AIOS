@@ -10,6 +10,7 @@ import { useNavIndicatorMotion } from "../../lib/useAiosMotion";
 import type { AiosThemePreference } from "../../theme/designTokens";
 import { useAiosThemeMode } from "../../theme/AiosThemeProvider";
 import { consoleViews, moduleIcons } from "./moduleConfig";
+import labelIcon from "../../assets/image/label.png";
 
 interface AiosNavigationRailProps {
   activeView: ResourceView;
@@ -24,6 +25,7 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
   return (
     <Box className="aios-navigation-rail" component="nav" ref={railRef} aria-label="AIOS 模块导航">
       <Box className="rail-brand" aria-label="AIOS Material 控制台">
+        <Box className="rail-brand-logo" component="img" src={labelIcon} alt="AIOS Logo" />
         <Typography component="strong">AIOS</Typography>
         <Typography component="span">控制台</Typography>
       </Box>

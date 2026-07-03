@@ -1,10 +1,7 @@
-import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from "@mui/material";
 import { memo } from "react";
 import { getMcpRiskLabels, getResourceDisplay } from "../../i18n/resourceText";
-import { zhCN } from "../../i18n/zh-CN";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
-import { ResourceChips } from "./ResourceChips";
-import { ResourceMetaRow } from "./ResourceMetaRow";
+import { AiosTimelineRow, AiosUsageCard, type AiosUsageChip } from "../ui/AiosUiPrimitives";
 
 export type ResourceCardVariant = "default" | "skill" | "mcp" | "script" | "report" | "project-pack" | "policy" | "validator" | "legacy";
 
@@ -19,78 +16,80 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
   const display = getResourceDisplay(resource);
   const server = getMcpServer(resource);
 
-  // Compute at most 2 chips systematically
-  const chipsToShow: string[] = [];
-  if (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available") {
-    chipsToShow.push(display.zhStatus);
+  if (variant === "report") {
+    return (
+      <AiosTimelineRow
+        chips={getUsageChips(resource, server, variant, display)}
+        className={`resource-card ${variant}`}
+        filename={display.technicalName}
+        selected={selected}
+        summary={display.zhDescription}
+        timestamp={formatDate(resource.updatedAt)}
+        title={display.zhName}
+        onClick={() => onSelect(resource)}
+      />
+    );
   }
-  if (resource.risk !== "low") {
-    chipsToShow.push(display.zhRisk);
-  }
-  const extras = getExtraChips(resource, server, variant);
-  for (const ext of extras) {
-    if (chipsToShow.length < 2) {
-      chipsToShow.push(ext);
-    }
-  }
-  if (chipsToShow.length < 2) {
-    chipsToShow.push(display.zhCapability);
-  }
-  if (chipsToShow.length < 2 && display.zhToolType) {
-    chipsToShow.push(display.zhToolType);
-  }
-  const finalChips = chipsToShow.slice(0, 2);
 
   return (
-    <Card className={selected ? `resource-card material-card ${variant} selected` : `resource-card material-card ${variant}`} data-motion="resource-card">
-      <CardActionArea aria-pressed={selected} data-resource-id={resource.id} onClick={() => onSelect(resource)}>
-        <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-          <Stack className="resource-card-top" direction="row" sx={{ alignItems: "center", gap: 1.5, justifyContent: "space-between", mb: 1 }}>
-            <Box className="resource-card-title" sx={{ minWidth: 0 }}>
-              <Typography className="resource-title" component="h3" sx={{ fontSize: "14px", fontWeight: 700, m: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {display.zhName}
-              </Typography>
-              <Box className="code-pill resource-technical-name" component="code" sx={{ fontSize: "11px", px: 0.75, py: 0.25, backgroundColor: "var(--aios-outline)", borderRadius: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", mt: 0.5 }}>
-                {display.technicalName}
-              </Box>
-            </Box>
-            <Stack className="resource-chip-row" direction="row" sx={{ gap: 0.75, flexShrink: 0, alignItems: "center" }}>
-              {finalChips.map((chipText) => {
-                const isStatus = chipText === display.zhStatus;
-                const isRisk = chipText === display.zhRisk;
-                let className = "outlined-chip";
-                if (isStatus) className = `status-chip status-${resource.status}`;
-                else if (isRisk) className = `risk-chip risk-${resource.risk}`;
-
-                return (
-                  <Chip
-                    className={className}
-                    key={chipText}
-                    label={chipText}
-                    variant={(isStatus && resource.status !== "ok") || (isRisk && resource.risk !== "low") ? "filled" : "outlined"}
-                    size="small"
-                    sx={{ height: 22, fontSize: "10px" }}
-                  />
-                );
-              })}
-            </Stack>
-          </Stack>
-
-          <Typography className="resource-description" color="text.secondary" variant="body2" sx={{ fontSize: "12px", m: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {display.zhDescription}
-          </Typography>
-        </CardContent>
-      </CardActionArea>
-    </Card>
+    <AiosUsageCard
+      chips={getUsageChips(resource, server, variant, display)}
+      className={`resource-card ${variant}`}
+      purpose={getUsagePurpose(resource, server, variant, display)}
+      selected={selected}
+      technicalName={display.technicalName}
+      title={getUsageTitle(server, variant, display)}
+      onClick={() => onSelect(resource)}
+    />
   );
 });
 
+function getUsageChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): AiosUsageChip[] {
+  const chips: AiosUsageChip[] = [];
+  if (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available") {
+    chips.push({ label: display.zhStatus, className: `status-chip status-${resource.status}`, variant: "filled" });
+  }
+  if (resource.risk !== "low") {
+    chips.push({ label: display.zhRisk, className: `risk-chip risk-${resource.risk}`, variant: "filled" });
+  }
+
+  const extras = getExtraChips(resource, server, variant);
+  for (const label of extras) {
+    if (chips.length >= 2) break;
+    chips.push({ label, variant: "outlined" });
+  }
+
+  if (chips.length < 2) chips.push({ label: display.zhCapability, variant: "outlined" });
+  if (chips.length < 2 && display.zhToolType) chips.push({ label: display.zhToolType, variant: "outlined" });
+  return chips.slice(0, 2);
+}
+
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
-  if (variant === "mcp" && server) return [server.transport, zhCN.mcp.localRemoteRisk[server.localRemoteRisk]];
+  if (variant === "mcp" && server) return [server.transport, ...getMcpRiskLabels(server)];
   if (variant === "skill") return [getSkillRuntimeLabel(resource)];
-  if (variant === "script") return [getScriptKind(resource)];
+  if (variant === "script") return [getScriptKind(resource), "只读清单"];
+  if (variant === "report") return ["只读"];
+  if (variant === "project-pack") return [getProjectPackArea(resource)];
+  if (variant === "policy") return ["守卫"];
+  if (variant === "validator") return ["观察"];
   if (variant === "legacy") return ["兼容入口"];
   return [];
+}
+
+function getUsageTitle(server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): string {
+  if (variant === "mcp" && server) return server.name;
+  return display.zhName;
+}
+
+function getUsagePurpose(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): string {
+  if (variant === "mcp" && server) return `MCP ${server.transport} 服务；${getMcpRiskLabels(server)[0]}，仅查看用途与风险摘要，不启动或连接。`;
+  if (variant === "script") return `本地只读工具；${display.zhDescription} 执行需要用户显式命令。`;
+  if (variant === "report") return `${formatDate(resource.updatedAt)} · ${display.zhDescription}`;
+  if (variant === "project-pack") return `${getProjectPackArea(resource)}资源包；查看用途和归属，完整源路径在检查器中。`;
+  if (variant === "policy") return `保护本地 AIOS 边界；仅展示守卫元数据，不读取或修改策略内容。`;
+  if (variant === "validator") return `观察型检查项；查看状态和用途，运行需要用户显式命令。`;
+  if (variant === "legacy") return `兼容入口说明；用于识别迁移边界，不作为主要工作流。`;
+  return display.zhDescription;
 }
 
 function getSkillRuntimeLabel(resource: AiosResource): string {
@@ -113,6 +112,13 @@ function getScriptKind(resource: AiosResource): string {
   if (haystack.includes("router") || haystack.includes("route")) return "路由";
   if (haystack.includes("report")) return "报告";
   return "本地脚本";
+}
+
+function getProjectPackArea(resource: AiosResource): string {
+  const root = getMetadataString(resource, "root") ?? resource.path ?? "";
+  if (root.includes("/AIOS")) return "AIOS 应用";
+  if (root.includes("/.ai")) return "本地 AI";
+  return "项目本地";
 }
 
 function getMcpServer(resource: AiosResource): McpServerRecord | null {

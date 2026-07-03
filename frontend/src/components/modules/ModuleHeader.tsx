@@ -1,4 +1,4 @@
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 
@@ -12,18 +12,18 @@ interface ModuleHeaderProps {
 export function ModuleHeader({ view, summary, count, children }: ModuleHeaderProps) {
   return (
     <Box className="module-header">
-      <Stack className="module-header-title" spacing={0.2}>
+      <Box className="module-header-title">
         <Typography component="h2" variant="h2">
           {VIEW_LABELS[view]}
         </Typography>
         <Typography color="text.secondary" variant="body2">
           {summary}
         </Typography>
-      </Stack>
-      <Stack direction="row" sx={{ alignItems: "center", flexWrap: "wrap", gap: 1, justifyContent: "flex-end" }}>
+      </Box>
+      <Box className="module-header-actions">
         <Chip color="primary" label={`${count} 项可见`} />
         {children}
-      </Stack>
+      </Box>
     </Box>
   );
 }

@@ -126,13 +126,26 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           "--aios-shell-padding": `${designTokens.shell.viewportPadding}px`,
           "--aios-module-header": `${designTokens.shell.moduleHeaderHeight}px`,
           "--aios-summary-band": `${designTokens.shell.summaryBandHeight}px`,
+          "--aios-controls-rail-height": `${designTokens.shell.controlsRailHeight}px`,
           "--aios-toolbar-height": `${designTokens.shell.compactToolbarHeight}px`,
           "--aios-category-rail-height": `${designTokens.shell.categoryRailHeight}px`,
           "--aios-standard-row-height": `${designTokens.shell.standardRowHeight}px`,
+          "--aios-card-height": `${designTokens.shell.compactCardHeight}px`,
           "--aios-card-min-height": `${designTokens.shell.compactCardMinHeight}px`,
+          "--aios-scroll-padding": `${designTokens.shell.internalScrollPadding}px`,
           "--aios-inspector-summary-max-height": `${designTokens.shell.inspectorFirstScreenSummaryMaxHeight}px`,
           "--aios-motion-fast": `${designTokens.motion.durationFast}s`,
-          "--aios-motion-base": `${designTokens.motion.durationBase}s`
+          "--aios-motion-base": `${designTokens.motion.durationBase}s`,
+          "--aios-module-content-padding": "16px",
+          "--aios-card-padding-x": "16px",
+          "--aios-card-padding-y": "14px",
+          "--aios-row-min-height": "86px",
+          "--aios-report-row-min-height": "76px",
+          "--aios-card-gap": "10px",
+          "--aios-section-gap": "14px",
+          "--aios-row-padding": "var(--aios-card-padding-y) var(--aios-card-padding-x)",
+          "--aios-report-row-height": "var(--aios-report-row-min-height)",
+          "--aios-view-options-popover-width": "240px"
         },
         "*": {
           boxSizing: "border-box"

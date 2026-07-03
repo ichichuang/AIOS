@@ -1,13 +1,14 @@
-import { Box, ButtonBase, Chip, Stack, Typography, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
-import { useMemo, useState } from "react";
+import { Box, Chip, Typography } from "@mui/material";
+import logoLarge from "../../assets/image/logo.png";
+import { useMemo, type CSSProperties } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
+import { AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { riskCounts, sortByUpdatedAt } from "./moduleUtils";
-import { ModuleHeader } from "./ModuleHeader";
 
 import WebRounded from "@mui/icons-material/WebRounded";
 import PhoneAndroidRounded from "@mui/icons-material/PhoneAndroidRounded";
@@ -16,7 +17,6 @@ import AutoAwesomeRounded from "@mui/icons-material/AutoAwesomeRounded";
 import CameraAltRounded from "@mui/icons-material/CameraAltRounded";
 import AutoStoriesRounded from "@mui/icons-material/AutoStoriesRounded";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
-import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
 
 const quickViews: ResourceView[] = ["skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
@@ -77,172 +77,106 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
   };
 
   return (
-    <Box className="module-surface dashboard-module" component="section" aria-label="总览模块">
-      <ModuleHeader view="dashboard" summary="本地 AIOS 共享技能库与运行边界只读视图。" count={allResources.length}>
+    <AiosModuleFrame
+      className="dashboard-module"
+      contentClassName="dashboard-scroll"
+      view="dashboard"
+      summary="本地 AIOS 共享技能库与运行边界只读视图。"
+      count={allResources.length}
+      actions={
+        <>
         <Chip className="status-chip status-ok" label="本地只读" />
         <Chip label={formatSnapshotDate(baseline.generatedAt)} variant="outlined" />
-      </ModuleHeader>
-
-      <Box className="dashboard-scroll" sx={{ display: "flex", flexDirection: "column", gap: 2.5, p: 1.5, overflowY: "auto", height: "100%" }}>
-
-        {/* User-Task Oriented Capability Entries */}
-        <Box className="dashboard-section">
-          <Typography component="h3" variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
-            常用能力库
+        </>
+      }
+    >
+      <Box className="dashboard-brand-card">
+        <Box className="dashboard-brand-logo" component="img" src={logoLarge} alt="AIOS Logo" />
+        <Box className="dashboard-brand-copy">
+          <Typography variant="h3">AIOS Engine</Typography>
+          <Typography variant="body2" color="text.secondary">
+            本地可信智能体操作系统 · 只读控制面板
           </Typography>
-          <Box className="quick-entry-grid" sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 1 }}>
+        </Box>
+      </Box>
+
+      <AiosSection>
+          <AiosSectionHeader title="常用能力库" />
+          <Box className="quick-entry-grid capability-launcher">
             {capabilityEntries.map((entry) => {
               const Icon = entry.icon;
               return (
-                <ButtonBase
+                <AiosUsageCard
+                  chips={[{ label: "进入技能库" }]}
                   className="quick-entry"
                   key={entry.title}
+                  icon={<Icon fontSize="small" />}
+                  purpose={entry.description}
+                  technicalName={entry.query}
+                  title={entry.title}
                   onClick={() => handleCapabilityClick(entry.query)}
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: "36px minmax(0, 1fr)",
-                    gap: 1.5,
-                    p: 1.5,
-                    border: "1px solid var(--aios-outline)",
-                    borderRadius: "16px",
-                    backgroundColor: "var(--aios-surface)",
-                    textAlign: "left",
-                    alignItems: "center",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      borderColor: "var(--aios-selected-outline)",
-                      backgroundColor: "var(--aios-primary-soft)"
-                    }
-                  }}
-                >
-                  <Icon sx={{ color: "var(--aios-primary)", fontSize: "24px" }} />
-                  <Box>
-                    <Typography component="strong" sx={{ display: "block", fontSize: "14px", fontWeight: 700 }}>
-                      {entry.title}
-                    </Typography>
-                    <Typography color="text.secondary" sx={{ fontSize: "11px", display: "block", mt: 0.25 }}>
-                      {entry.description}
-                    </Typography>
-                  </Box>
-                </ButtonBase>
+                />
               );
             })}
           </Box>
-        </Box>
+        </AiosSection>
 
-        {/* Quick entry for all views */}
-        <Box className="dashboard-section">
-          <Typography component="h3" variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
-            全部类别入口
-          </Typography>
-          <Box className="quick-entry-grid" sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 1 }}>
+        <AiosSection>
+          <AiosSectionHeader title="全部类别入口" />
+          <Box className="quick-entry-grid module-launcher">
             {quickViews.map((view) => {
               const Icon = moduleIcons[view];
               return (
-                <ButtonBase
+                <AiosUsageCard
+                  chips={[{ label: `${viewCounts[view]} 项` }]}
                   className="quick-entry"
                   key={view}
+                  icon={<Icon fontSize="small" />}
+                  purpose={zhCN.moduleSummaries[view]}
+                  technicalName={view}
+                  title={VIEW_LABELS[view]}
                   onClick={() => onViewChange(view)}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 0.75,
-                    p: 1.5,
-                    minHeight: "72px",
-                    border: "1px solid var(--aios-outline)",
-                    borderRadius: "14px",
-                    backgroundColor: "var(--aios-surface)",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      borderColor: "var(--aios-selected-outline)",
-                      backgroundColor: "var(--aios-primary-soft)"
-                    }
-                  }}
-                >
-                  <Icon fontSize="small" sx={{ color: "var(--aios-primary)" }} />
-                  <Typography component="strong" sx={{ fontSize: "12px", fontWeight: 700 }}>
-                    {VIEW_LABELS[view]}
-                  </Typography>
-                  <Typography color="text.secondary" component="span" sx={{ fontSize: "10px" }}>
-                    {viewCounts[view]} 项
-                  </Typography>
-                </ButtonBase>
+                />
               );
             })}
           </Box>
-        </Box>
+        </AiosSection>
 
-        {/* Collapsible System Status Section */}
-        <Accordion disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
-          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 40, "& .MuiAccordionSummary-content": { my: 1 } }}>
-            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>系统状态与安全审计</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 2 }}>
-            <Box className="dashboard-summary" sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1 }}>
-              <SummaryItem label={zhCN.app.total} value={`${formatCount(allResources.length)} 项`} />
-              <SummaryItem label={zhCN.dashboardMetrics.policyHash} value={shortHash(baseline.policyHash)} code />
-              <SummaryItem label={zhCN.dashboardMetrics.router} value={baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用"} />
-              <SummaryItem label={zhCN.dashboardMetrics.codexAutomations} value={formatAutomationState(baseline.codexAutomationDirectoryState)} />
-            </Box>
+        <AiosInspectorSection title="系统状态与安全审计">
+            <AiosTechnicalDetails
+              rows={[
+                { label: zhCN.app.total, value: `${formatCount(allResources.length)} 项` },
+                { label: zhCN.dashboardMetrics.policyHash, value: shortHash(baseline.policyHash), code: true },
+                { label: zhCN.dashboardMetrics.router, value: baseline.customSkillRouterCodex && baseline.customSkillRouterAgents ? "Codex + Agents" : "部分启用" },
+                { label: zhCN.dashboardMetrics.codexAutomations, value: formatAutomationState(baseline.codexAutomationDirectoryState) }
+              ]}
+            />
 
             <Box className="risk-band">
-              <Typography component="strong" sx={{ display: "block", fontSize: "12px", fontWeight: 700, mb: 1 }}>
+              <Typography component="strong">
                 风险分布
               </Typography>
-              <Box className="risk-meter" sx={{ display: "flex", height: "32px", borderRadius: "8px", overflow: "hidden" }}>
+              <Box className="risk-meter compact">
                 {(["low", "medium", "high"] as RiskLevel[]).map((risk) => (
-                  <Box className={`risk-meter-segment risk-${risk}`} key={risk} style={{ flexGrow: Math.max(risks[risk], 1) }} sx={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minWidth: "40px" }}>
-                    <Typography component="strong" sx={{ fontSize: "12px", fontWeight: 800 }}>{risks[risk]}</Typography>
-                    <Typography component="span" sx={{ fontSize: "9px" }}>{zhCN.risks[risk]}</Typography>
+                  <Box className={`risk-meter-segment risk-${risk}`} key={risk} style={{ "--risk-count": Math.max(risks[risk], 1) } as CSSProperties}>
+                    <Typography component="strong">{risks[risk]}</Typography>
+                    <Typography component="span">{zhCN.risks[risk]}</Typography>
                   </Box>
                 ))}
               </Box>
             </Box>
-          </AccordionDetails>
-        </Accordion>
+        </AiosInspectorSection>
 
-        {/* Recent Reports */}
         {recentReports.length > 0 && (
-          <Box className="dashboard-section">
-            <Typography component="h3" variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
-              近期报告
-            </Typography>
-            <Box className="resource-card-grid timeline" sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 1 }}>
+          <AiosSection>
+            <AiosSectionHeader title="近期报告" />
+            <Box className="resource-card-grid timeline">
               {recentReports.map((resource: AiosResource) => (
                 <ResourceCard key={resource.id} resource={resource} selected={resource.id === selectedId} variant="report" onSelect={onSelect} />
               ))}
             </Box>
-          </Box>
+          </AiosSection>
         )}
-
-      </Box>
-    </Box>
-  );
-}
-
-interface SummaryItemProps {
-  label: string;
-  value: string;
-  code?: boolean;
-}
-
-function SummaryItem({ label, value, code }: SummaryItemProps) {
-  return (
-    <Box className="dashboard-summary-item" sx={{ p: 1, border: "1px solid var(--aios-outline)", borderRadius: "10px", backgroundColor: "var(--aios-surface)" }}>
-      <Typography className="caption" component="p" sx={{ fontSize: "10px", color: "text.secondary", m: 0 }}>
-        {label}
-      </Typography>
-      {code ? (
-        <Box className="code-pill" component="code" sx={{ fontSize: "11px", display: "inline-block", mt: 0.5 }}>
-          {value}
-        </Box>
-      ) : (
-        <Typography component="strong" sx={{ fontSize: "13px", fontWeight: 700, display: "block", mt: 0.5 }}>{value}</Typography>
-      )}
-    </Box>
+    </AiosModuleFrame>
   );
 }

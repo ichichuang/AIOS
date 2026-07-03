@@ -1,11 +1,9 @@
-import { Box, Divider, IconButton, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { Box, Divider, IconButton, Typography, useMediaQuery, useTheme } from "@mui/material";
 import Drawer from "@mui/material/Drawer";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import { useRef } from "react";
-import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
-import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { useInspectorMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
@@ -59,8 +57,8 @@ function InspectorBody({ resource, skillIdentity, skillCapability, showClose = f
 
   return (
     <Box className="inspector-body" ref={bodyRef}>
-      <Stack className="inspector-header" direction="row" sx={{ alignItems: "center", gap: 1.5, justifyContent: "space-between" }}>
-        <Typography className="eyebrow" component="p" sx={{ m: 0, fontWeight: 700 }}>
+      <Box className="inspector-header">
+        <Typography className="eyebrow" component="p">
           {zhCN.app.detailPanel}
         </Typography>
         {showClose && onClose && (
@@ -68,7 +66,7 @@ function InspectorBody({ resource, skillIdentity, skillCapability, showClose = f
             <CloseRounded fontSize="small" />
           </IconButton>
         )}
-      </Stack>
+      </Box>
       <Divider />
       <Box className="inspector-scroll">
         <ResourceInspector resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} />
