@@ -32,7 +32,7 @@ interface SkillGroup {
   rows: SkillIdentityRow[];
 }
 
-const ROW_HEIGHT = 90;
+const ROW_HEIGHT = 108;
 const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
   { key: "active-entrypoints", title: "活跃入口", summary: "Codex、Agents、Claude 当前可见入口元数据。", predicate: (row) => hasAnySourceBadge(row, ["codex", "agents", "claude"]) },
   { key: "distilled-skills", title: "蒸馏技能", summary: "女娲、persona 或 perspective 相关技能元数据。", predicate: hasDistillationSignal },

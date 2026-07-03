@@ -7,17 +7,21 @@ interface ResourceMetaRowProps {
 }
 
 export function ResourceMetaRow({ label, value, code }: ResourceMetaRowProps) {
+  const formattedValue = String(value);
+
   return (
     <Box className="resource-meta-row">
       <Typography color="text.secondary" component="span">
         {label}
       </Typography>
       {code ? (
-        <Box className="code-pill resource-meta-code" component="code">
+        <Box className="code-pill resource-meta-code" component="code" title={formattedValue}>
           {value}
         </Box>
       ) : (
-        <Typography component="strong">{value}</Typography>
+        <Typography component="strong" title={formattedValue}>
+          {value}
+        </Typography>
       )}
     </Box>
   );

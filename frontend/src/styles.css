@@ -563,7 +563,7 @@
 .aios-usage-action,
 .aios-usage-action.MuiButtonBase-root {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 136px);
+  grid-template-columns: minmax(0, 1fr) fit-content(148px);
   gap: var(--aios-card-gap, 10px);
   align-items: flex-start;
   width: 100%;
@@ -581,7 +581,7 @@
 }
 
 .aios-usage-card:has(.aios-usage-icon) .aios-usage-action {
-  grid-template-columns: 34px minmax(0, 1fr) minmax(112px, 136px);
+  grid-template-columns: 34px minmax(0, 1fr);
 }
 
 .aios-usage-icon {
@@ -625,9 +625,16 @@
 
 .aios-usage-title-line .resource-technical-name {
   flex: 0 1 100%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.aios-usage-card:has(.aios-usage-icon) .resource-chip-row {
+  grid-column: 2;
+  justify-self: start;
+  justify-content: flex-start;
 }
 
 .aios-usage-row {
@@ -891,6 +898,7 @@
   color: inherit;
   text-align: left;
   justify-items: stretch;
+  overflow: hidden;
 }
 
 .aios-capability-launcher-icon {
@@ -936,6 +944,9 @@
   flex: 0 1 auto;
   max-width: 132px;
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aios-capability-launcher-description {
@@ -1011,7 +1022,7 @@
 
 .resource-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr));
   gap: var(--aios-card-gap, 10px);
   min-width: 0;
 }
@@ -1164,17 +1175,20 @@
 }
 
 .compact-skill-row {
+  box-sizing: border-box;
   min-width: 0;
   padding: 3px 0;
 }
 
 .compact-skill-row-inner {
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, auto);
+  gap: 12px;
   align-items: center;
   height: 100%;
   min-width: 0;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 14px;
   background: var(--aios-surface);
@@ -1210,7 +1224,8 @@
 
 .compact-skill-main {
   display: grid;
-  gap: 4px;
+  gap: 5px;
+  align-content: center;
 }
 
 .compact-skill-path {
@@ -1220,23 +1235,30 @@
 .compact-skill-title-line {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
 
 .compact-skill-title {
+  display: -webkit-box;
+  flex: 1 1 180px;
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 .compact-skill-technical-name {
-  flex: 0 1 auto;
+  flex: 0 1 min(240px, 52%);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1247,7 +1269,7 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1257,6 +1279,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: nowrap;
   min-width: 0;
   overflow: hidden;
   color: var(--aios-muted);
@@ -1270,6 +1293,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compact-skill-meta-line .MuiTypography-root {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: 0;
 }
 
 .compact-skill-meta-line span:not(:last-child)::after {
@@ -1290,17 +1321,18 @@
 
 .compact-skill-state {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: center;
   justify-content: flex-end;
-  gap: 6px;
-  max-width: 220px;
-  max-height: 28px;
-  overflow: hidden;
+  gap: 5px;
+  max-width: 132px;
+  overflow: visible;
 }
 
 .compact-skill-state .MuiChip-root {
-  max-width: 104px;
+  flex: 0 1 auto;
+  max-width: 100%;
   height: 22px;
   font-size: 10px;
 }
@@ -1507,7 +1539,8 @@
 .timeline-row-title-line .resource-technical-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .timeline-row-title-line .resource-title {
@@ -1518,16 +1551,18 @@
 .timeline-row-title-line .resource-technical-name {
   flex: 0 1 auto;
   max-width: 100%;
+  white-space: nowrap;
 }
 
 .timeline-row-summary {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 6px;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.35;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .timeline-row-date {
@@ -1581,32 +1616,41 @@
 
 .resource-title {
   color: var(--aios-text);
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 800;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
+.resource-title.MuiTypography-root {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
 .resource-technical-name {
+  color: var(--aios-muted);
   font-size: 11px;
+  font-weight: 700;
 }
 
 .resource-chip-row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  flex: 0 0 136px;
-  width: 136px;
-  max-width: 136px;
-  max-height: 28px;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(100%, 148px);
   justify-content: flex-end;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .resource-chip-row .MuiChip-root {
-  flex: 0 1 65px;
-  max-width: 65px;
+  flex: 0 1 auto;
+  max-width: 92px;
   height: 22px;
   font-size: 10px;
 }
@@ -1621,27 +1665,35 @@
   display: -webkit-box;
   overflow: hidden;
   min-height: 18px;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
+.resource-description.MuiTypography-root {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
 .inventory-meta-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(84px, 1fr));
   gap: 6px;
   min-width: 0;
 }
 
 .inventory-meta-item {
-  display: flex;
-  gap: 4px;
-  align-items: center;
+  display: grid;
+  gap: 2px;
+  align-content: start;
   min-width: 0;
   border-radius: 8px;
   background: var(--aios-surface-muted);
-  padding: 3px 6px;
+  padding: 4px 6px;
 }
 
 .inventory-meta-item span {
@@ -1655,8 +1707,8 @@
 .inventory-meta-item strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--aios-text);
-  font-size: 11px;
+  color: var(--aios-muted);
+  font-size: 10.5px;
   font-weight: 800;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -1886,9 +1938,9 @@
 }
 
 .inspector-primary-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 10px;
   min-width: 0;
 }
@@ -1900,13 +1952,17 @@
 }
 
 .inspector-primary-title h3 {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--aios-text);
   font-size: 16px;
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .inspector-summary-block {
@@ -1940,6 +1996,23 @@
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+}
+
+.inspector-primary-actions {
+  justify-content: flex-end;
+  max-width: 132px;
+}
+
+.inspector-primary-actions .MuiChip-root {
+  max-width: 100%;
+  height: 24px;
+  font-size: 11px;
+}
+
+.inspector-primary-actions .MuiChip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inspector-boundary-chip-row {
@@ -2067,11 +2140,10 @@
 
 .inspector-use-case-chips {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
-  max-height: 28px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .inspector-use-case-chips .MuiChip-root {
@@ -2310,6 +2382,7 @@
 }
 
 .capability-chip-values .MuiChip-root {
+  max-width: 100%;
   font-size: 11px;
 }
 
@@ -2611,9 +2684,9 @@
 
   .compact-skill-row-inner {
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
+    gap: 7px;
     align-content: center;
-    min-height: 86px;
+    min-height: 0;
   }
 
   .compact-skill-path {
@@ -2622,6 +2695,16 @@
 
   .compact-skill-state {
     justify-content: flex-start !important;
+    max-width: 100%;
+  }
+
+  .compact-skill-title {
+    flex: 0 1 auto;
+  }
+
+  .compact-skill-technical-name {
+    flex-basis: auto;
+    max-width: min(100%, 210px);
   }
 
   .resource-card .MuiCardContent-root {
@@ -2638,6 +2721,10 @@
     width: auto;
     justify-content: flex-start;
     max-width: 100%;
+  }
+
+  .resource-chip-row .MuiChip-root {
+    max-width: 112px;
   }
 
   .inventory-meta-strip {
@@ -2658,11 +2745,15 @@
   }
 
   .inspector-context-grid,
-  .inspector-boundary-callout {
+  .inspector-boundary-callout,
+  .inspector-primary-heading {
     grid-template-columns: 1fr;
   }
 
+  .inspector-primary-actions,
   .inspector-boundary-callout .MuiChip-root {
     justify-self: start;
+    justify-content: flex-start;
+    max-width: 100%;
   }
 }
