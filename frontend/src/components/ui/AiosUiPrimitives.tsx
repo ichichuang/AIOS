@@ -125,22 +125,24 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
     <>
       {icon && <Box className="aios-usage-icon">{icon}</Box>}
       <Box className="aios-usage-main">
-        <Box className="aios-usage-title-line">
+        <Box className="resource-header-row">
           <Typography className="resource-title" component="h3" title={title}>
             {title}
           </Typography>
-          {technicalName && (
+          <AiosChipZone chips={chips} />
+        </Box>
+        {technicalName && (
+          <Box className="resource-secondary-row">
             <Box className="code-pill resource-technical-name" component="code" title={technicalName}>
               {technicalName}
             </Box>
-          )}
-        </Box>
+          </Box>
+        )}
         <Typography className="resource-description" color="text.secondary" title={purpose} variant="body2">
           {purpose}
         </Typography>
-        {meta}
+        {meta && <Box className="resource-footer-row">{meta}</Box>}
       </Box>
-      <AiosChipZone chips={chips} />
     </>
   );
 
@@ -232,14 +234,19 @@ export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [
   const body = (
     <>
       <Box className="timeline-row-main">
-        <Box className="timeline-row-title-line">
+        <Box className="resource-header-row">
           <Typography className="resource-title" component="h3" title={title}>
             {title}
           </Typography>
-          <Box className="code-pill resource-technical-name" component="code" title={filename}>
-            {filename}
-          </Box>
+          <AiosChipZone chips={chips} />
         </Box>
+        {filename && (
+          <Box className="resource-secondary-row">
+            <Box className="code-pill resource-technical-name" component="code" title={filename}>
+              {filename}
+            </Box>
+          </Box>
+        )}
         <Typography className="timeline-row-summary" color="text.secondary" title={`${timestamp} · ${summary}`} variant="body2">
           <Box component="span" className="timeline-row-date">
             {timestamp}
@@ -251,9 +258,8 @@ export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [
             {summary}
           </Box>
         </Typography>
-        {meta}
+        {meta && <Box className="resource-footer-row">{meta}</Box>}
       </Box>
-      <AiosChipZone chips={chips} className="timeline-row-chips" />
     </>
   );
 

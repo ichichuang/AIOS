@@ -7,6 +7,7 @@ import { buildSkillDisplayEnrichment, getSkillQualityChipLabel, shouldShowSkillQ
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource } from "../../types/inventory";
 import type { ResourceSelectionContext } from "../modules/moduleUtils";
+import { AiosChipZone } from "../ui/AiosUiPrimitives";
 
 export interface CompactSkillRowProps {
   rows: SkillIdentityRow[];
@@ -66,14 +67,19 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
         onKeyDown={handleKeyDown}
       >
         <Box className="compact-skill-main">
-          <Box className="compact-skill-title-line">
+          <Box className="resource-header-row">
             <Typography className="resource-title compact-skill-title" component="h3" title={enrichment.displayNameZh}>
               {enrichment.displayNameZh}
             </Typography>
-            <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code" title={display.technicalName}>
-              {display.technicalName}
-            </Box>
+            <AiosChipZone chips={visibleChips} />
           </Box>
+          {display.technicalName && (
+            <Box className="resource-secondary-row">
+              <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code" title={display.technicalName}>
+                {display.technicalName}
+              </Box>
+            </Box>
+          )}
           <Typography className="resource-description compact-skill-description" color="text.secondary" title={enrichment.shortPurposeZh || enrichment.displayDescriptionZh} variant="body2">
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
@@ -88,12 +94,6 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
               {boundaryLabel}
             </Typography>
           </Box>
-        </Box>
-
-        <Box className="compact-skill-state">
-          {visibleChips.map((chip) => (
-            <Chip className={chip.className} key={chip.label} label={chip.label} title={chip.label} variant="outlined" />
-          ))}
         </Box>
       </Box>
     </Box>

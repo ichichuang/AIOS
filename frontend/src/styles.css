@@ -563,17 +563,14 @@
 .aios-usage-action,
 .aios-usage-action.MuiButtonBase-root {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) fit-content(148px);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--aios-card-gap, 10px);
-  align-items: flex-start;
+  align-items: stretch;
   width: 100%;
   min-height: var(--aios-row-min-height, 104px);
-  padding: var(--aios-row-padding, 12px 14px);
+  padding: var(--aios-row-padding, 12px 16px);
   color: inherit;
   text-align: left;
-  align-content: center;
-  justify-content: stretch;
-  justify-items: stretch;
 }
 
 .aios-usage-action.static {
@@ -582,6 +579,39 @@
 
 .aios-usage-card:has(.aios-usage-icon) .aios-usage-action {
   grid-template-columns: 34px minmax(0, 1fr);
+  align-items: flex-start;
+}
+
+.resource-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  gap: 12px;
+}
+
+.resource-secondary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 1px;
+  margin-bottom: 2px;
+}
+
+.resource-secondary-row .code-pill {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--aios-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+
+.resource-chip-row .MuiChip-outlined,
+.compact-skill-main .MuiChip-outlined {
+  border-color: var(--aios-outline);
+  background: transparent;
+  color: var(--aios-muted);
 }
 
 .aios-usage-icon {
@@ -1183,9 +1213,9 @@
 .compact-skill-row-inner {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, auto);
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
   height: 100%;
   min-width: 0;
   overflow: hidden;
@@ -1193,7 +1223,7 @@
   border-radius: 14px;
   background: var(--aios-surface);
   cursor: pointer;
-  padding: var(--aios-row-padding, 12px 14px);
+  padding: var(--aios-row-padding, 12px 16px);
   transition:
     background-color var(--aios-motion-fast) ease,
     border-color var(--aios-motion-fast) ease;
@@ -1504,17 +1534,14 @@
 .timeline-row-action,
 .timeline-row-action.MuiButtonBase-root {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--aios-card-gap, 10px);
-  align-items: flex-start;
+  align-items: stretch;
   width: 100%;
   min-height: var(--aios-report-row-min-height, 76px);
-  padding: 12px var(--aios-card-padding-x, 16px);
+  padding: 12px 16px;
   color: inherit;
   text-align: left;
-  align-content: center;
-  justify-content: stretch;
-  justify-items: stretch;
 }
 
 .timeline-row-action.static {
@@ -1680,39 +1707,49 @@
 }
 
 .inventory-meta-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(84px, 1fr));
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
   min-width: 0;
+  margin-top: 4px;
 }
 
 .inventory-meta-item {
-  display: grid;
-  gap: 2px;
-  align-content: start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
-  border-radius: 8px;
-  background: var(--aios-surface-muted);
-  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .inventory-meta-item span {
   flex: 0 0 auto;
   color: var(--aios-muted);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 1.2;
 }
 
 .inventory-meta-item strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--aios-muted);
-  font-size: 10.5px;
-  font-weight: 800;
+  color: var(--aios-text-secondary, var(--aios-muted));
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.inventory-meta-item:not(:last-child)::after {
+  content: "·";
+  margin-left: 12px;
+  color: var(--aios-subtle);
+  font-weight: normal;
 }
 
 .resource-meta-grid,
@@ -2042,13 +2079,14 @@
 }
 
 .inspector-context-item {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
-  border: 1px solid var(--aios-outline);
-  border-radius: 10px;
-  background: var(--aios-surface-muted);
-  padding: 7px 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .inspector-context-item span {
@@ -2728,7 +2766,7 @@
   }
 
   .inventory-meta-strip {
-    grid-template-columns: 1fr;
+    column-gap: 8px;
   }
 
   .timeline-row-summary {
