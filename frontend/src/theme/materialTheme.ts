@@ -126,6 +126,11 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           "--aios-shell-padding": `${designTokens.shell.viewportPadding}px`,
           "--aios-module-header": `${designTokens.shell.moduleHeaderHeight}px`,
           "--aios-summary-band": `${designTokens.shell.summaryBandHeight}px`,
+          "--aios-toolbar-height": `${designTokens.shell.compactToolbarHeight}px`,
+          "--aios-category-rail-height": `${designTokens.shell.categoryRailHeight}px`,
+          "--aios-standard-row-height": `${designTokens.shell.standardRowHeight}px`,
+          "--aios-card-min-height": `${designTokens.shell.compactCardMinHeight}px`,
+          "--aios-inspector-summary-max-height": `${designTokens.shell.inspectorFirstScreenSummaryMaxHeight}px`,
           "--aios-motion-fast": `${designTokens.motion.durationFast}s`,
           "--aios-motion-base": `${designTokens.motion.durationBase}s`
         },

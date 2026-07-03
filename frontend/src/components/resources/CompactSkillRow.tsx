@@ -25,7 +25,6 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
   const enrichment = buildSkillDisplayEnrichment(row, display);
   const skillCapability = showCapability ? skillCapabilityById.get(resource.id) : undefined;
   const sourceBadges = row.sourceBadges;
-  const visibleSourceBadges = sourceBadges.slice(0, 3);
   const selected = resource.id === selectedId;
   const handleSelect = useCallback(() => onSelect(resource, { skillIdentity: row }), [onSelect, resource, row]);
   const handleKeyDown = useCallback(
@@ -36,6 +35,33 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
     },
     [onSelect, resource, row]
   );
+
+  // Compute compact source summary badge
+  let sourceLabel = "本地";
+  if (sourceBadges.length > 1) {
+    sourceLabel = "多来源";
+  } else if (sourceBadges.length === 1) {
+    const key = sourceBadges[0].key;
+    if (["codex", "agents", "claude"].includes(key)) {
+      sourceLabel = "入口";
+    } else if (key === "filesystem") {
+      sourceLabel = "本地";
+    } else {
+      sourceLabel = sourceBadges[0].label;
+    }
+  }
+
+  // Use-case/capability chips (limit to 2 use cases or 1 capability)
+  const chipsToShow: string[] = [];
+  if (enrichment.inferredUseCases && enrichment.inferredUseCases.length > 0) {
+    chipsToShow.push(...enrichment.inferredUseCases.slice(0, 2));
+  } else if (skillCapability) {
+    chipsToShow.push(skillCapability.primaryCategory.title);
+  }
+
+  if (selected) {
+    chipsToShow.push(display.zhToolType || resource.toolType);
+  }
 
   return (
     <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties}>
@@ -48,37 +74,34 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
         onClick={handleSelect}
         onKeyDown={handleKeyDown}
       >
-        <Box className="compact-skill-main">
-          <Typography className="resource-title" component="h3">
-            {enrichment.displayNameZh}
-          </Typography>
-          <Box className="code-pill resource-technical-name" component="code">
-            {display.technicalName}
+        <Box className="compact-skill-main" sx={{ display: "flex", flexDirection: "column", gap: 0.5, minWidth: 0, flexGrow: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+            <Typography className="resource-title" component="h3" sx={{ fontSize: "14px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", m: 0 }}>
+              {enrichment.displayNameZh}
+            </Typography>
+            <Box className="code-pill resource-technical-name" component="code" sx={{ fontSize: "11px", px: 0.75, py: 0.25, backgroundColor: "var(--aios-outline)", borderRadius: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {display.technicalName}
+            </Box>
           </Box>
-          <Typography className="resource-description" color="text.secondary" variant="body2">
+          <Typography className="resource-description" color="text.secondary" variant="body2" sx={{ fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", m: 0 }}>
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
         </Box>
 
-        <Box className="compact-skill-path">
-          <Typography className="caption" component="p">
-            {zhCN.app.pathPreview}
-          </Typography>
-          <Box className="code-pill compact-path-code" component="code">
-            {display.pathPreview}
-          </Box>
-        </Box>
-
-        <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end" }}>
-          {row.mode === "source" && <Chip className="source-chip source-view-mode" label={resource.capabilityType === "runtime-view" ? "入口视图" : "来源视图"} variant="outlined" />}
-          {visibleSourceBadges.map((badge) => (
-            <Chip className={`source-chip source-${badge.key}`} key={badge.key} label={badge.label} variant="outlined" />
+        <Stack className="compact-skill-state" direction="row" sx={{ alignItems: "center", gap: 0.75, justifyContent: "flex-end", flexShrink: 0 }}>
+          <Chip className="source-chip" label={sourceLabel} variant="outlined" />
+          {chipsToShow.slice(0, selected ? 3 : 2).map((chipText) => (
+            <Chip className="capability-chip" key={chipText} label={chipText} variant="outlined" />
           ))}
-          {sourceBadges.length > visibleSourceBadges.length && <Chip className="source-chip" label={`+${sourceBadges.length - visibleSourceBadges.length}`} variant="outlined" />}
-          {shouldShowSkillQualityChip(enrichment) && <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getSkillQualityChipLabel(enrichment)} variant="outlined" />}
-          {skillCapability && <Chip className="capability-chip" label={skillCapability.primaryCategory.title} variant="outlined" />}
-          <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
-          <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
+          {shouldShowSkillQualityChip(enrichment) && (
+            <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getSkillQualityChipLabel(enrichment)} variant="outlined" color="warning" />
+          )}
+          {resource.status !== "ok" && resource.status !== "active" && resource.status !== "available" && (
+            <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
+          )}
+          {resource.risk !== "low" && (
+            <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
+          )}
         </Stack>
       </Box>
     </Box>

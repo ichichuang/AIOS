@@ -144,7 +144,12 @@ export const designTokens = {
     gap: 12,
     viewportPadding: 12,
     moduleHeaderHeight: 58,
-    summaryBandHeight: 72
+    summaryBandHeight: 72,
+    compactToolbarHeight: 38,
+    categoryRailHeight: 48,
+    standardRowHeight: 90,
+    compactCardMinHeight: 72,
+    inspectorFirstScreenSummaryMaxHeight: 180
   },
   density: {
     panelPadding: 14,

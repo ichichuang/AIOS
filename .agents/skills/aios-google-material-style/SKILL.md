@@ -15,16 +15,18 @@ Use Material UI as the primary React UI framework for this repository. Build AIO
 - Keep the navigation rail in the 72px to 84px range on desktop so labels remain readable without stealing workspace width.
 - Do not render floating suggestion chips in the top bar. Search can switch modules, but it should not create a second visual command row.
 - Dashboard is a compact landing page only. Do not render dashboard summaries inside every module, and keep dashboard content inside the module scroll region.
-- Keep the contextual inspector collapsed by default. Open it only after explicit resource selection or inspector toggle.
-- Skills must use a group index plus compact rows, render only the active skill group, and keep prompt copy actions inside the inspector instead of per-row buttons.
-- Skills should default to local capability-based classification, while preserving source-based grouping as a compact alternate mode.
-- Skills must render merged identity rows by default, not raw runtime/source resources. Keep raw entrypoint/source rows behind an explicit debug toggle.
-- Skills identity rows must show source badges for provenance, including index, Registry, filesystem, Codex, Agents, Claude, and project-local package sources.
+- Keep the contextual inspector collapsed by default. Open it only after explicit resource selection or inspector toggle. The default view of the inspector should be usage-first (showing displayName, short description, suitability, and copy prompts), while technical provenance, metadata quality, safety, token pressure, and paths must be hidden under collapsed secondary disclosures (accordions).
+- Skills must use a compact horizontal category rail (height 44-52px) with horizontal scrolling, and render only the selected group's summary in a single compact line below the rail.
+- Skills grouping/source/quality toggles must be placed under a collapsible secondary "视图选项" toolbar rather than occupying the main top workspace.
+- Skills row height must be fixed (84-96px) and show enriched display name, original name as a small code pill, one concise purpose line, up to 2 use-case chips, and a single compact source summary badge (e.g. 多来源, Registry, 本地, 入口). Default rows must hide full paths and full source badges.
 - Distilled skill families must support frontend family alias inheritance so child/example identities remain searchable by parent terms such as huashu, nuwa/nvwa, persona, perspective, 女娲, and 蒸馏.
 - Skills rows and inspectors must use the local enriched display name, enriched description, and metadata quality status when source metadata is weak, while keeping original technical names and paths visible.
-- Skills, MCP, Scripts, Reports, Project Packs, Policies, Validators, and Legacy need specialized module layouts rather than one generic card wall.
+- Skills, MCP, Scripts, Reports, Project Packs, Policies, Validators, and Legacy must all follow the same visual consistency rules and layout rhythm: predicting row/card heights, using the 8px spacing grid, and keeping visible UI copy in Simplified Chinese.
+- All non-Skills resource cards (MCP, Scripts, Reports, Project Packs, Policies, Validators, and Legacy) must be simplified: show only the user-facing title, the technical name as a small code pill, a single-line purpose description, and at most 2 chips (combining status/risk warnings and extra metadata), with selected states clearly marked. Remove dense metadata grids and path previews from default card bodies, and move them into the universal inspector.
 - Keep user-facing UI copy in Simplified Chinese except original technical names such as `Codex`, `Claude`, `MCP`, package names, file paths, and command names.
 - Show Chinese capability titles beside original technical names for skills and resources.
+
+
 
 ## Theme And Tokens
 

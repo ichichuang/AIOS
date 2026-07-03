@@ -50,7 +50,7 @@ export const zhCN = {
   },
   views: {
     dashboard: "总览",
-    skills: "技能",
+    skills: "技能库",
     mcp: "MCP",
     scripts: "脚本",
     reports: "报告",
@@ -61,7 +61,7 @@ export const zhCN = {
   },
   moduleSummaries: {
     dashboard: "汇总本地 AIOS 资源、基线守卫、只读边界与风险分布。",
-    skills: "查看活跃入口、索引技能、Registry 技能与文件系统发现技能，保持原始技能名不变。",
+    skills: "探索本地可用 AI 技能，查看其功能并快速复制提示词进行使用。",
     mcp: "按本地、远程、npx 拉取和凭据需求检查 MCP 元数据。",
     scripts: "仅展示脚本与验证器元数据；执行需要显式命令。",
     reports: "按时间线查看本地报告摘要，不写入全局状态。",

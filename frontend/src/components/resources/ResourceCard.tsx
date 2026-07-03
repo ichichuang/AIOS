@@ -1,4 +1,4 @@
-import { Box, Card, CardActionArea, CardContent, Stack, Typography } from "@mui/material";
+import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from "@mui/material";
 import { memo } from "react";
 import { getMcpRiskLabels, getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
@@ -19,59 +19,66 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
   const display = getResourceDisplay(resource);
   const server = getMcpServer(resource);
 
+  // Compute at most 2 chips systematically
+  const chipsToShow: string[] = [];
+  if (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available") {
+    chipsToShow.push(display.zhStatus);
+  }
+  if (resource.risk !== "low") {
+    chipsToShow.push(display.zhRisk);
+  }
+  const extras = getExtraChips(resource, server, variant);
+  for (const ext of extras) {
+    if (chipsToShow.length < 2) {
+      chipsToShow.push(ext);
+    }
+  }
+  if (chipsToShow.length < 2) {
+    chipsToShow.push(display.zhCapability);
+  }
+  if (chipsToShow.length < 2 && display.zhToolType) {
+    chipsToShow.push(display.zhToolType);
+  }
+  const finalChips = chipsToShow.slice(0, 2);
+
   return (
     <Card className={selected ? `resource-card material-card ${variant} selected` : `resource-card material-card ${variant}`} data-motion="resource-card">
       <CardActionArea aria-pressed={selected} data-resource-id={resource.id} onClick={() => onSelect(resource)}>
-        <CardContent>
-          <Stack className="resource-card-top" direction="row" sx={{ alignItems: "flex-start", gap: 1.5, justifyContent: "space-between" }}>
-            <Box className="resource-card-title">
-              <Typography className="resource-title" component="h3">
+        <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+          <Stack className="resource-card-top" direction="row" sx={{ alignItems: "center", gap: 1.5, justifyContent: "space-between", mb: 1 }}>
+            <Box className="resource-card-title" sx={{ minWidth: 0 }}>
+              <Typography className="resource-title" component="h3" sx={{ fontSize: "14px", fontWeight: 700, m: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {display.zhName}
               </Typography>
-              <Box className="code-pill resource-technical-name" component="code">
+              <Box className="code-pill resource-technical-name" component="code" sx={{ fontSize: "11px", px: 0.75, py: 0.25, backgroundColor: "var(--aios-outline)", borderRadius: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", mt: 0.5 }}>
                 {display.technicalName}
               </Box>
             </Box>
-            <ResourceChips resource={resource} extra={getExtraChips(resource, server, variant)} />
+            <Stack className="resource-chip-row" direction="row" sx={{ gap: 0.75, flexShrink: 0, alignItems: "center" }}>
+              {finalChips.map((chipText) => {
+                const isStatus = chipText === display.zhStatus;
+                const isRisk = chipText === display.zhRisk;
+                let className = "outlined-chip";
+                if (isStatus) className = `status-chip status-${resource.status}`;
+                else if (isRisk) className = `risk-chip risk-${resource.risk}`;
+
+                return (
+                  <Chip
+                    className={className}
+                    key={chipText}
+                    label={chipText}
+                    variant={(isStatus && resource.status !== "ok") || (isRisk && resource.risk !== "low") ? "filled" : "outlined"}
+                    size="small"
+                    sx={{ height: 22, fontSize: "10px" }}
+                  />
+                );
+              })}
+            </Stack>
           </Stack>
 
-          <Typography className="resource-description" color="text.secondary" variant="body2">
+          <Typography className="resource-description" color="text.secondary" variant="body2" sx={{ fontSize: "12px", m: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {display.zhDescription}
           </Typography>
-
-          <Box className="resource-meta-grid">
-            {variant === "mcp" && server ? (
-              <>
-                <ResourceMetaRow label={zhCN.mcp.command} value={server.command} code />
-                <ResourceMetaRow label={zhCN.mcp.transport} value={server.transport} />
-                <ResourceMetaRow label="环境变量名" value={`${server.envVarNames.length} 个`} />
-                <ResourceMetaRow label={zhCN.mcp.source} value={server.sourcePath} code />
-              </>
-            ) : variant === "script" ? (
-              <>
-                <ResourceMetaRow label="清单类型" value={getScriptKind(resource)} />
-                <ResourceMetaRow label="执行策略" value="仅清单，不执行" />
-                <ResourceMetaRow label={zhCN.app.pathPreview} value={display.pathPreview} code />
-              </>
-            ) : variant === "report" ? (
-              <>
-                <ResourceMetaRow label="原始文件名" value={resource.name} code />
-                <ResourceMetaRow label="更新时间" value={formatDate(resource.updatedAt)} />
-                <ResourceMetaRow label={zhCN.app.pathPreview} value={display.pathPreview} code />
-              </>
-            ) : variant === "project-pack" ? (
-              <>
-                <ResourceMetaRow label="资源根" value={getMetadataString(resource, "root") ?? display.pathPreview} code />
-                <ResourceMetaRow label="清单时间" value={formatDate(resource.updatedAt)} />
-                <ResourceMetaRow label="边界" value="项目本地只读展示" />
-              </>
-            ) : (
-              <>
-                <ResourceMetaRow label="能力" value={display.zhCapability} />
-                <ResourceMetaRow label={zhCN.app.pathPreview} value={display.pathPreview} code />
-              </>
-            )}
-          </Box>
         </CardContent>
       </CardActionArea>
     </Card>
@@ -79,7 +86,7 @@ export const ResourceCard = memo(function ResourceCard({ resource, selected, var
 });
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
-  if (variant === "mcp" && server) return getMcpRiskLabels(server);
+  if (variant === "mcp" && server) return [server.transport, zhCN.mcp.localRemoteRisk[server.localRemoteRisk]];
   if (variant === "skill") return [getSkillRuntimeLabel(resource)];
   if (variant === "script") return [getScriptKind(resource)];
   if (variant === "legacy") return ["兼容入口"];

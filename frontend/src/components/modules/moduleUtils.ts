@@ -24,6 +24,7 @@ export interface AiosModuleProps {
   onClearSelection: () => void;
   onSelect: (resource: AiosResource, context?: ResourceSelectionContext) => void;
   onViewChange: (view: ResourceView) => void;
+  onQueryChange?: (query: string) => void;
 }
 
 export function sortByUpdatedAt(resources: AiosResource[]): AiosResource[] {

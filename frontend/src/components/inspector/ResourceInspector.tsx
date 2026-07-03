@@ -1,6 +1,7 @@
-import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Box, Chip, Divider, Stack, Typography, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
 import { memo } from "react";
-import { getResourceDisplay } from "../../i18n/resourceText";
+import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import {
@@ -14,6 +15,7 @@ import { getDiscoveryBooleanLabel, getMetadataString as getDiscoveryMetadataStri
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { ResourceMetaRow } from "../resources/ResourceMetaRow";
+import { PromptCopyButton } from "../PromptCopyButton";
 
 interface ResourceInspectorProps {
   resource: AiosResource | null;
@@ -37,147 +39,194 @@ export const ResourceInspector = memo(function ResourceInspector({ resource, ski
   const enrichment = buildSkillDisplayEnrichment(skillIdentity ?? resource, display);
   const metadataRows = getMetadataRows(resource);
 
+  // Prompt actions
+  const codexPrompt = resource.prompts.find((prompt) => prompt.target === "codex");
+  const claudePrompt = resource.prompts.find((prompt) => prompt.target === "claude");
+
   return (
-    <Box className="inspector-panel">
-      <Stack direction="row" sx={{ alignItems: "flex-start", gap: 1, justifyContent: "space-between" }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography className="caption" component="p">
-            {display.zhCategory}
-          </Typography>
-          <Typography component="h3" variant="h3">
-            {enrichment.displayNameZh}
-          </Typography>
-        </Box>
-        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, justifyContent: "flex-end" }}>
-          <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getQualityLevelLabel(enrichment.qualityLevel)} variant="outlined" />
-          {(enrichment.enrichmentSource === "inferred" || enrichment.enrichmentSource === "fallback") && <Chip className="quality-chip quality-inferred" label="自动推断" variant="outlined" />}
-          <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} />
-          <Chip className={`risk-chip risk-${resource.risk}`} label={display.zhRisk} />
-        </Stack>
-      </Stack>
-      <Typography color="text.secondary" variant="body2">
-        {enrichment.displayDescriptionZh}
-      </Typography>
-      <Divider />
-      <CapabilityClassificationSection classification={skillCapability} />
-      <MetadataQualitySection enrichment={enrichment} originalName={display.technicalName} />
-      <SkillIdentityProvenanceSection identity={skillIdentity} />
-      <Box className="inspector-meta-grid">
-        {display.technicalName !== enrichment.displayNameZh ? (
-          <>
-            <ResourceMetaRow label="原始名称" value={display.technicalName} code />
-            <ResourceMetaRow label="显示名称" value={enrichment.displayNameZh} />
-          </>
-        ) : (
-          <ResourceMetaRow label={zhCN.app.preservedName} value={display.technicalName} code />
-        )}
-        <ResourceMetaRow label="工具类型" value={display.zhToolType} />
-        <ResourceMetaRow label="能力类型" value={display.zhCapability} />
-        <ResourceMetaRow label="风险解释" value={display.zhRiskDescription} />
-        <ResourceMetaRow label={zhCN.safetyFields.readOnly} value={resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no} />
-        <ResourceMetaRow label={zhCN.safetyFields.executionRisk} value={zhCN.risks[resource.safetyProfile.executionRisk]} />
-        <ResourceMetaRow label={zhCN.tokenFields.estimatedTokens} value={resource.tokenPressure.estimatedTokens} />
-        {metadataRows.map((row) => (
-          <ResourceMetaRow key={row.label} label={row.label} value={row.value} code={row.code} />
-        ))}
-      </Box>
-      <Box className="inspector-path-list">
-        <Typography component="h4" variant="h3">
-          {zhCN.app.pathPreview}
-        </Typography>
-        {resource.paths.length > 0 ? (
-          resource.paths.map((path) => (
-            <Box className="code-pill path-detail" component="code" key={path}>
-              {path}
+    <Box className="inspector-panel" sx={{ border: "none", backgroundColor: "transparent", p: 0, display: "flex", flexDirection: "column", gap: 1.5 }}>
+      {/* Top Section: Usage First */}
+      <Box className="inspector-panel" sx={{ p: 1.5 }}>
+        <Stack direction="row" sx={{ alignItems: "flex-start", gap: 1, justifyContent: "space-between", mb: 0.5 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography className="caption" component="p" sx={{ fontSize: "11px", color: "text.secondary", m: 0 }}>
+              {display.zhCategory}
+            </Typography>
+            <Typography component="h3" variant="h3" sx={{ fontSize: "16px", fontWeight: 700, mt: 0.25, mb: 0.5 }}>
+              {enrichment.displayNameZh}
+            </Typography>
+            <Box className="code-pill inspector-code" component="code" sx={{ fontSize: "11px", px: 0.75, py: 0.25, backgroundColor: "var(--aios-outline)", borderRadius: "4px" }}>
+              {display.technicalName}
             </Box>
-          ))
-        ) : (
-          <Typography color="text.secondary">{zhCN.app.noPath}</Typography>
+          </Box>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, justifyContent: "flex-end" }}>
+            <Chip className={`quality-chip quality-${enrichment.qualityLevel}`} label={getQualityLevelLabel(enrichment.qualityLevel)} variant="outlined" size="small" />
+            <Chip className={`status-chip status-${resource.status}`} label={display.zhStatus} size="small" />
+          </Stack>
+        </Stack>
+
+        <Typography color="text.secondary" variant="body2" sx={{ fontSize: "13px", my: 1 }}>
+          {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
+        </Typography>
+
+        {enrichment.inferredUseCases.length > 0 && (
+          <Box sx={{ mt: 1.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, fontSize: "12px" }}>适合用于</Typography>
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+              {enrichment.inferredUseCases.map((useCase) => (
+                <Chip key={useCase} label={useCase} size="small" variant="outlined" sx={{ fontSize: "11px" }} />
+              ))}
+            </Stack>
+          </Box>
         )}
       </Box>
+
+      {/* Accordions */}
+      <Stack spacing={1} sx={{ width: "100%" }}>
+        {/* 如何使用 (Default Expanded - Only if prompts exist) */}
+        {resource.prompts.length > 0 && (
+          <Accordion defaultExpanded disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>如何使用</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 1.5, display: "grid", gap: 1 }}>
+              <Stack spacing={1}>
+                <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                  <PromptCopyButton prompt={codexPrompt} target="codex" />
+                  <PromptCopyButton prompt={claudePrompt} target="claude" />
+                </Stack>
+                <Typography color="text.secondary" variant="body2" sx={{ fontSize: "11px" }}>
+                  {zhCN.app.promptBodyEnglish}
+                </Typography>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* 概览 (Default Expanded) */}
+        <Accordion defaultExpanded disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>概览</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 1.5 }}>
+            <Box className="inspector-meta-grid" sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+              <ResourceMetaRow label="工具类型" value={display.zhToolType} />
+              <ResourceMetaRow label="能力类型" value={display.zhCapability} />
+              <ResourceMetaRow label="风险等级" value={display.zhRisk} />
+              <ResourceMetaRow label="风险解释" value={display.zhRiskDescription} />
+              {skillCapability && (
+                <>
+                  <ResourceMetaRow label="主分类" value={skillCapability.primaryCategory.title} />
+                  <ResourceMetaRow label="可信度" value={getSkillCapabilityConfidenceLabel(skillCapability.confidence)} />
+                </>
+              )}
+              <ResourceMetaRow label={zhCN.safetyFields.readOnly} value={resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no} />
+              <ResourceMetaRow label={zhCN.safetyFields.writesGlobalState} value={resource.safetyProfile.writesGlobalState ? zhCN.booleans.yes : zhCN.booleans.no} />
+              <ResourceMetaRow label={zhCN.tokenFields.estimatedTokens} value={resource.tokenPressure.estimatedTokens} />
+              {metadataRows.map((row) => (
+                <ResourceMetaRow key={row.label} label={row.label} value={row.value} code={row.code} />
+              ))}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* 元数据质量 (Default Collapsed) */}
+        <Accordion disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>元数据质量</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 1.5, display: "grid", gap: 1.5 }}>
+            <Box className="inspector-meta-grid" sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+              <ResourceMetaRow label="质量等级" value={getQualityLevelLabel(enrichment.qualityLevel)} />
+              <ResourceMetaRow label="展示说明来源" value={ENRICHMENT_SOURCE_LABELS[enrichment.enrichmentSource]} code />
+            </Box>
+            <CapabilityChipLine label="质量原因" values={enrichment.qualityReasons.length > 0 ? enrichment.qualityReasons : ["未记录额外原因。"]} />
+            <CapabilityChipLine label="推断标签" values={enrichment.inferredTags.length > 0 ? enrichment.inferredTags : ["无"]} />
+            <CapabilityChipLine label="建议补充" values={enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]).length > 0 ? enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]) : ["无"]} code={enrichment.suggestedFields.length > 0} />
+          </AccordionDetails>
+        </Accordion>
+
+        {/* 来源与路径 (Default Collapsed) */}
+        <Accordion disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>来源与路径</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 1.5, display: "grid", gap: 1.5 }}>
+            {skillIdentity && (
+              <Box className="inspector-meta-grid" sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, mb: 1 }}>
+                <ResourceMetaRow label="来源" value={getSkillIdentityProvenance(skillIdentity).sourceLabels || "未记录"} />
+                <ResourceMetaRow label="活跃入口" value={getSkillIdentityProvenance(skillIdentity).activeEntrypoints || "无"} code={Boolean(getSkillIdentityProvenance(skillIdentity).activeEntrypoints)} />
+                <ResourceMetaRow label="Registry 记录" value={getSkillIdentityProvenance(skillIdentity).registryRecords || "无"} code={Boolean(getSkillIdentityProvenance(skillIdentity).registryRecords)} />
+                <ResourceMetaRow label="文件系统发现" value={getSkillIdentityProvenance(skillIdentity).filesystemRecords || "无"} code={Boolean(getSkillIdentityProvenance(skillIdentity).filesystemRecords)} />
+                {getSkillIdentityProvenance(skillIdentity).canonicalPaths && <ResourceMetaRow label="canonical path" value={getSkillIdentityProvenance(skillIdentity).canonicalPaths} code />}
+              </Box>
+            )}
+            <Box className="inspector-path-list">
+              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, fontSize: "12px" }}>路径详情</Typography>
+              {resource.paths.length > 0 ? (
+                resource.paths.slice(0, 3).map((path) => (
+                  <Box className="code-pill path-detail" component="code" key={path} sx={{ display: "block", fontSize: "11px", p: 0.75, backgroundColor: "var(--aios-outline)", borderRadius: "4px", overflowWrap: "anywhere", whiteSpace: "normal" }}>
+                    {path}
+                  </Box>
+                ))
+              ) : (
+                <Typography color="text.secondary" variant="body2">{zhCN.app.noPath}</Typography>
+              )}
+              {resource.paths.length > 3 && (
+                <Typography color="text.secondary" variant="body2" sx={{ fontSize: "11px", fontStyle: "italic" }}>
+                  还有 {resource.paths.length - 3} 个路径已省略...
+                </Typography>
+              )}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* 安全与风险 (Default Collapsed) */}
+        <Accordion disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>安全与风险</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 1.5, display: "grid", gap: 1 }}>
+            <Box className="inspector-meta-grid" sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+              <ResourceMetaRow label={zhCN.safetyFields.readOnly} value={resource.safetyProfile.readOnly ? zhCN.booleans.yes : zhCN.booleans.no} />
+              <ResourceMetaRow label={zhCN.safetyFields.writesGlobalState} value={resource.safetyProfile.writesGlobalState ? zhCN.booleans.yes : zhCN.booleans.no} />
+              <ResourceMetaRow label={zhCN.safetyFields.secretExposureRisk} value={zhCN.risks[resource.safetyProfile.secretExposureRisk]} />
+              <ResourceMetaRow label={zhCN.safetyFields.executionRisk} value={zhCN.risks[resource.safetyProfile.executionRisk]} />
+            </Box>
+            {resource.safetyProfile.notes.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, fontSize: "12px" }}>安全说明</Typography>
+                <Box className="note-list" component="ul" sx={{ pl: 2, m: 0 }}>
+                  {resource.safetyProfile.notes.map((note) => (
+                    <li key={note} style={{ fontSize: "12px" }}>{translateSafetyNote(note)}</li>
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Token 压力 (Default Collapsed) */}
+        <Accordion disableGutters elevation={0} variant="outlined" sx={{ borderRadius: "14px", border: "1px solid var(--aios-outline)", overflow: "hidden", "&:before": { display: "none" } }}>
+          <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ backgroundColor: "var(--aios-surface-muted)", minHeight: 38, "& .MuiAccordionSummary-content": { my: 0.75 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "13px" }}>Token 压力</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 1.5, display: "grid", gap: 1 }}>
+            <Box className="inspector-meta-grid" sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+              <ResourceMetaRow label={zhCN.tokenFields.level} value={zhCN.risks[resource.tokenPressure.level]} />
+              <ResourceMetaRow label={zhCN.tokenFields.estimatedTokens} value={resource.tokenPressure.estimatedTokens} />
+            </Box>
+            {resource.tokenPressure.reason && (
+              <Typography color="text.secondary" variant="body2" sx={{ fontSize: "12px", mt: 0.5 }}>
+                {translateTokenReason(resource.tokenPressure.reason)}
+              </Typography>
+            )}
+          </AccordionDetails>
+        </Accordion>
+      </Stack>
     </Box>
   );
 });
-
-interface MetadataQualitySectionProps {
-  enrichment: SkillDisplayEnrichment;
-  originalName: string;
-}
-
-function MetadataQualitySection({ enrichment, originalName }: MetadataQualitySectionProps) {
-  const suggestedFields = enrichment.suggestedFields.map((field) => SUGGESTED_FIELD_LABELS[field]);
-  const reasonValues = enrichment.qualityReasons.length > 0 ? enrichment.qualityReasons : ["未记录额外原因。"];
-  const inferredTags = enrichment.inferredTags.length > 0 ? enrichment.inferredTags : ["无"];
-  const inferredUseCases = enrichment.inferredUseCases.length > 0 ? enrichment.inferredUseCases : ["无"];
-
-  return (
-    <Box className="metadata-quality-section">
-      <Typography component="h4" variant="h3">
-        元数据质量
-      </Typography>
-      <Box className="inspector-meta-grid">
-        <ResourceMetaRow label="质量等级" value={getQualityLevelLabel(enrichment.qualityLevel)} />
-        <ResourceMetaRow label="展示说明来源" value={ENRICHMENT_SOURCE_LABELS[enrichment.enrichmentSource]} code />
-        {originalName !== enrichment.displayNameZh && <ResourceMetaRow label="显示名称" value={enrichment.displayNameZh} />}
-      </Box>
-      <CapabilityChipLine label="质量原因" values={reasonValues} />
-      <CapabilityChipLine label="推断标签" values={inferredTags} />
-      <CapabilityChipLine label="适用场景" values={inferredUseCases} />
-      <CapabilityChipLine label="建议补充" values={suggestedFields.length > 0 ? suggestedFields : ["无"]} code={suggestedFields.length > 0} />
-    </Box>
-  );
-}
-
-interface SkillIdentityProvenanceSectionProps {
-  identity: SkillIdentityRow | null;
-}
-
-function SkillIdentityProvenanceSection({ identity }: SkillIdentityProvenanceSectionProps) {
-  if (!identity) return null;
-  const provenance = getSkillIdentityProvenance(identity);
-
-  return (
-    <Box className="source-provenance-section">
-      <Typography component="h4" variant="h3">
-        技能身份
-      </Typography>
-      <Box className="inspector-meta-grid">
-        <ResourceMetaRow label="来源" value={provenance.sourceLabels || "未记录"} />
-        <ResourceMetaRow label="活跃入口" value={provenance.activeEntrypoints || "无"} code={Boolean(provenance.activeEntrypoints)} />
-        <ResourceMetaRow label="索引记录" value={provenance.indexRecords || "无"} code={Boolean(provenance.indexRecords)} />
-        <ResourceMetaRow label="Registry 记录" value={provenance.registryRecords || "无"} code={Boolean(provenance.registryRecords)} />
-        <ResourceMetaRow label="文件系统发现" value={provenance.filesystemRecords || "无"} code={Boolean(provenance.filesystemRecords)} />
-        <ResourceMetaRow label="manifest path" value={provenance.manifestPaths || "无"} code={Boolean(provenance.manifestPaths)} />
-        {provenance.canonicalPaths && <ResourceMetaRow label="canonical path" value={provenance.canonicalPaths} code />}
-        {provenance.discoveryRoots && <ResourceMetaRow label="discovery root" value={provenance.discoveryRoots} code />}
-        <ResourceMetaRow label="merged source count" value={identity.sources.length} />
-      </Box>
-    </Box>
-  );
-}
-
-interface CapabilityClassificationSectionProps {
-  classification: SkillCapabilityClassification | null;
-}
-
-function CapabilityClassificationSection({ classification }: CapabilityClassificationSectionProps) {
-  if (!classification) return null;
-  const secondaryLabels = classification.secondaryCategories.map((category) => category.title);
-
-  return (
-    <Box className="capability-inspector-section">
-      <Typography component="h4" variant="h3">
-        能力分类
-      </Typography>
-      <Box className="inspector-meta-grid">
-        <ResourceMetaRow label="主分类" value={classification.primaryCategory.title} />
-        <ResourceMetaRow label="可信度" value={getSkillCapabilityConfidenceLabel(classification.confidence)} />
-      </Box>
-      <CapabilityChipLine label="关联能力" values={secondaryLabels.length > 0 ? secondaryLabels : ["无"]} />
-      <CapabilityChipLine label="匹配依据" values={classification.evidenceKeywords.length > 0 ? classification.evidenceKeywords : ["无"]} code />
-    </Box>
-  );
-}
 
 interface CapabilityChipLineProps {
   label: string;
@@ -187,13 +236,13 @@ interface CapabilityChipLineProps {
 
 function CapabilityChipLine({ label, values, code }: CapabilityChipLineProps) {
   return (
-    <Box className="capability-chip-line">
-      <Typography color="text.secondary" component="span">
+    <Box className="capability-chip-line" sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+      <Typography color="text.secondary" component="span" sx={{ fontSize: "12px", fontWeight: 700 }}>
         {label}
       </Typography>
       <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75, minWidth: 0 }}>
         {values.map((value) => (
-          <Chip className={code ? "capability-chip evidence" : "capability-chip"} key={value} label={value} variant="outlined" />
+          <Chip className={code ? "capability-chip evidence" : "capability-chip"} key={value} label={value} variant="outlined" size="small" sx={{ fontSize: "11px" }} />
         ))}
       </Stack>
     </Box>

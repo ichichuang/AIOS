@@ -115,7 +115,8 @@ export default function App() {
     viewCounts: viewCounts ?? countResourcesByView(buildResourcesByView([])),
     onClearSelection: clearSelection,
     onSelect: selectResource,
-    onViewChange: handleViewChange
+    onViewChange: handleViewChange,
+    onQueryChange: handleQueryChange
   };
 
   return (

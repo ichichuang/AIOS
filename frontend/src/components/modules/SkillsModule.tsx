@@ -1,4 +1,5 @@
-import { Box, ButtonBase, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Chip, Collapse, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import TuneRounded from "@mui/icons-material/TuneRounded";
 import { memo, useCallback, useEffect, useMemo, useState, useTransition, type MouseEvent } from "react";
 import { List } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
@@ -31,7 +32,7 @@ interface SkillGroup {
   rows: SkillIdentityRow[];
 }
 
-const ROW_HEIGHT = 104;
+const ROW_HEIGHT = 90;
 const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
   { key: "active-entrypoints", title: "活跃入口", summary: "Codex、Agents、Claude 当前可见入口元数据。", predicate: (row) => hasAnySourceBadge(row, ["codex", "agents", "claude"]) },
   { key: "distilled-skills", title: "蒸馏技能", summary: "女娲、persona 或 perspective 相关技能元数据。", predicate: hasDistillationSignal },
@@ -174,55 +175,81 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     setRenderedGroupKey(null);
   }, [normalizedQuery]);
 
+  const [showOptions, setShowOptions] = useState<boolean>(false);
+
   return (
     <Box className="module-surface skills-module" component="section" aria-label={moduleAriaLabel("skills")}>
       <ModuleHeader view="skills" summary={zhCN.moduleSummaries.skills} count={visibleRows.length}>
-        <Chip label="仅显示元数据" variant="outlined" />
-        <Chip label={sourceViewMode === "merged" ? "技能身份行" : "入口来源视图"} variant="outlined" />
-        <Chip label={qualityFilterMode === "needs-work" ? "仅看需补全" : "显示全部质量"} variant="outlined" />
-        <Chip label="提示词在检查器复制" variant="outlined" />
+        {qualityFilterMode === "needs-work" && (
+          <Chip
+            color="warning"
+            label="仅看需补全"
+            variant="filled"
+            sx={{ fontWeight: 800, height: 26, fontSize: "11px" }}
+            onDelete={() => {
+              markAiosPerf("skills-quality-filter-request", { mode: "all" });
+              setQualityFilterMode("all");
+              setActiveGroupKey(null);
+              onClearSelection();
+              startGroupTransition(() => {
+                setRenderedGroupKey(null);
+              });
+            }}
+          />
+        )}
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<TuneRounded fontSize="small" />}
+          onClick={() => setShowOptions(!showOptions)}
+          sx={{ borderRadius: 999 }}
+        >
+          视图选项
+        </Button>
       </ModuleHeader>
       <Box className="module-scroll skills-module-scroll">
         {groups.length === 0 ? (
           <ModuleEmptyState />
         ) : (
           <>
-            <Stack className="skill-group-toolbar" direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
-              <ToggleButtonGroup
-                aria-label="技能分组模式"
-                className="skill-grouping-switch"
-                exclusive
-                size="small"
-                value={groupingMode}
-                onChange={handleGroupingModeChange}
-              >
-                <ToggleButton value="capability">按能力</ToggleButton>
-                <ToggleButton value="source">按来源</ToggleButton>
-              </ToggleButtonGroup>
-              <ToggleButtonGroup
-                aria-label="技能来源显示模式"
-                className="skill-grouping-switch"
-                exclusive
-                size="small"
-                value={sourceViewMode}
-                onChange={handleSourceViewModeChange}
-              >
-                <ToggleButton value="merged">合并来源</ToggleButton>
-                <ToggleButton value="source">显示入口视图</ToggleButton>
-              </ToggleButtonGroup>
-              <ToggleButtonGroup
-                aria-label="技能质量筛选"
-                className="skill-grouping-switch"
-                exclusive
-                size="small"
-                value={qualityFilterMode}
-                onChange={handleQualityFilterChange}
-              >
-                <ToggleButton value="all">全部</ToggleButton>
-                <ToggleButton value="needs-work">需补全</ToggleButton>
-              </ToggleButtonGroup>
-            </Stack>
-            <Box className={`skill-group-index ${groupingMode}`} role="tablist" aria-label={groupingMode === "capability" ? "技能能力分组" : "技能来源分组"}>
+            <Collapse in={showOptions} sx={{ width: "100%" }}>
+              <Stack className="skill-group-toolbar" direction="row" sx={{ alignItems: "center", gap: 2, mb: 1, flexWrap: "wrap", p: 1, border: "1px solid var(--aios-outline)", borderRadius: "14px", backgroundColor: "var(--aios-surface)" }}>
+                <ToggleButtonGroup
+                  aria-label="技能分组模式"
+                  className="skill-grouping-switch"
+                  exclusive
+                  size="small"
+                  value={groupingMode}
+                  onChange={handleGroupingModeChange}
+                >
+                  <ToggleButton value="capability">按能力</ToggleButton>
+                  <ToggleButton value="source">按来源</ToggleButton>
+                </ToggleButtonGroup>
+                <ToggleButtonGroup
+                  aria-label="技能来源显示模式"
+                  className="skill-grouping-switch"
+                  exclusive
+                  size="small"
+                  value={sourceViewMode}
+                  onChange={handleSourceViewModeChange}
+                >
+                  <ToggleButton value="merged">合并来源</ToggleButton>
+                  <ToggleButton value="source">显示入口视图</ToggleButton>
+                </ToggleButtonGroup>
+                <ToggleButtonGroup
+                  aria-label="技能质量筛选"
+                  className="skill-grouping-switch"
+                  exclusive
+                  size="small"
+                  value={qualityFilterMode}
+                  onChange={handleQualityFilterChange}
+                >
+                  <ToggleButton value="all">显示全部质量</ToggleButton>
+                  <ToggleButton value="needs-work">需补全</ToggleButton>
+                </ToggleButtonGroup>
+              </Stack>
+            </Collapse>
+            <Box className="skill-group-index horizontal-rail" role="tablist" aria-label={groupingMode === "capability" ? "技能能力分组" : "技能来源分组"}>
               {groups.map((group) => (
                 <SkillGroupButton
                   key={group.key}
@@ -235,18 +262,14 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
                 />
               ))}
             </Box>
-            <Box className="compact-skill-list-shell">
-              <Stack className="active-skill-group-heading" direction="row" sx={{ alignItems: "center", gap: 1, justifyContent: "space-between" }}>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography component="h2" variant="h3">
-                    {activeGroup?.title ?? "技能分组"}
-                  </Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    {activeGroup?.summary ?? "仅展示本地只读技能元数据。"}
-                  </Typography>
-                </Box>
-                <Chip label={`${visibleRows.length} / ${activeGroup?.rows.length ?? 0} 项`} variant="outlined" />
-              </Stack>
+            {activeGroup && (
+              <Box className="selected-category-summary-row" sx={{ pb: 0.5 }}>
+                <Typography color="text.secondary" variant="body2" sx={{ fontSize: "12px", pl: 0.5 }} noWrap>
+                  {activeGroup.summary || "探索本地只读技能元数据。"}
+                </Typography>
+              </Box>
+            )}
+            <Box className="compact-skill-list-shell" sx={{ mt: 0.5 }}>
               {visibleRows.length === 0 ? (
                 <ModuleEmptyState />
               ) : (
@@ -280,15 +303,12 @@ interface SkillGroupButtonProps {
 
 const SkillGroupButton = memo(function SkillGroupButton({ active, filteredCount, group, mode, queryActive, onSelect }: SkillGroupButtonProps) {
   const handleClick = useCallback(() => onSelect(group.key), [group.key, onSelect]);
-  const countLabel = queryActive ? `${filteredCount} / ${group.rows.length} 项` : `${group.rows.length} 项`;
+  const countLabel = queryActive ? `${filteredCount} / ${group.rows.length}` : `${group.rows.length}`;
 
   return (
     <ButtonBase className={["skill-group-button", mode, active ? "active" : ""].filter(Boolean).join(" ")} role="tab" aria-selected={active} onClick={handleClick}>
-      <Typography component="strong">{group.title}</Typography>
-      <Typography color="text.secondary" component="span">
-        {group.summary}
-      </Typography>
-      <Chip label={countLabel} variant={active ? "filled" : "outlined"} />
+      <Typography component="strong" sx={{ fontSize: "13px", fontWeight: 700 }}>{group.title}</Typography>
+      <Chip label={countLabel} variant={active ? "filled" : "outlined"} size="small" sx={{ height: 18, fontSize: "10px", pointerEvents: "none" }} />
     </ButtonBase>
   );
 });

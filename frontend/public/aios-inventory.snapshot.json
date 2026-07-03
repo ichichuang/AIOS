@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T09:49:31.087Z",
+  "generatedAt": "2026-07-03T02:58:55.186Z",
   "roots": {
     "aiosRoot": "/Users/cc/.ai",
     "appSourcePath": "/Users/cc/.ai/AIOS"
@@ -8,7 +8,7 @@
   "baseline": {
     "aiosRoot": "/Users/cc/.ai",
     "appSourcePath": "/Users/cc/.ai/AIOS",
-    "generatedAt": "2026-07-02T09:49:31.087Z",
+    "generatedAt": "2026-07-03T02:58:55.186Z",
     "policyHash": "742abe0a9a9d5c920716aa1a25fd6e99886973039dff3ccfcc51407067fb09d6",
     "canonicalSkillCount": 69,
     "codexTopLevelCount": 20,
