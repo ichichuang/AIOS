@@ -1,0 +1,85 @@
+name: AIOS Desktop internal build artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-artifacts:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon unsigned app/dmg
+            runner: macos-latest
+            platform: macos
+            arch: arm64
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            tauri_args: --target aarch64-apple-darwin --bundles app,dmg --no-sign
+          - name: macOS Intel unsigned app/dmg
+            runner: macos-15-intel
+            platform: macos
+            arch: x64
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            tauri_args: --target x86_64-apple-darwin --bundles app,dmg --no-sign
+          - name: Windows x64 unsigned nsis/msi
+            runner: windows-latest
+            platform: windows
+            arch: x64
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+            tauri_args: --target x86_64-pc-windows-msvc --bundles nsis,msi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Cargo check
+        working-directory: src-tauri
+        run: cargo check --target "${{ matrix.target }}"
+
+      - name: Build Tauri artifacts
+        uses: tauri-apps/tauri-action@v1
+        with:
+          tauriScript: pnpm tauri
+          args: ${{ matrix.tauri_args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: aios-desktop-[version]-[platform]-[arch]-[bundle]
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
