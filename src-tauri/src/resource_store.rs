@@ -1,12 +1,12 @@
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 
 const DATABASE_FILE_NAME: &str = "aios-resource-library.sqlite3";
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Clone, Debug)]
 pub struct ResourceStoreState {
@@ -39,6 +39,7 @@ pub struct ResourceStoreCommandError {
 #[derive(Debug)]
 pub enum ResourceStoreError {
     Io(std::io::Error),
+    InvalidInput(String),
     Path(String),
     Sql(rusqlite::Error),
     Json(serde_json::Error),
@@ -66,6 +67,9 @@ impl std::fmt::Display for ResourceStoreError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ResourceStoreError::Io(error) => write!(formatter, "resource store IO error: {error}"),
+            ResourceStoreError::InvalidInput(error) => {
+                write!(formatter, "resource store invalid input: {error}")
+            }
             ResourceStoreError::Path(error) => {
                 write!(formatter, "resource store path error: {error}")
             }
@@ -88,6 +92,10 @@ impl From<ResourceStoreError> for ResourceStoreCommandError {
                 code: "resource_store_io_error",
                 message: format!("本地资源库文件初始化失败：{error}"),
             },
+            ResourceStoreError::InvalidInput(error) => Self {
+                code: "resource_store_invalid_input",
+                message: error,
+            },
             ResourceStoreError::Path(error) => Self {
                 code: "resource_store_path_error",
                 message: format!("无法解析 AIOS 应用数据目录：{error}"),
@@ -106,11 +114,13 @@ impl From<ResourceStoreError> for ResourceStoreCommandError {
 
 #[derive(Clone, Debug)]
 pub struct PersistScanSourceInput {
+    pub id: Option<String>,
     pub display_name: String,
     pub root_path: String,
     pub root_display_path: String,
     pub profile_id: String,
     pub source_kind: String,
+    pub project_label: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -173,6 +183,7 @@ pub struct ResourceStoreStatus {
     pub database_ready: bool,
     pub schema_version: i64,
     pub source_count: u64,
+    pub enabled_source_count: u64,
     pub job_count: u64,
     pub resource_count: u64,
     pub metadata_only: bool,
@@ -187,12 +198,16 @@ pub struct PersistedScanSource {
     pub root_display_path: String,
     pub profile_id: String,
     pub source_kind: String,
+    pub project_label: Option<String>,
     pub enabled: bool,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub last_scan_job_id: Option<String>,
     pub last_scan_status: Option<String>,
     pub last_scan_finished_at_ms: Option<u64>,
+    pub resource_count: u64,
+    pub skipped_entries: u64,
+    pub error_count: u64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -224,11 +239,15 @@ pub struct ResourceKindCount {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceLibrarySummary {
     pub source_count: u64,
+    pub enabled_source_count: u64,
     pub job_count: u64,
     pub resource_count: u64,
     pub location_count: u64,
     pub latest_job: Option<PersistedScanJob>,
+    pub latest_successful_scan: Option<PersistedScanJob>,
     pub counts_by_kind: Vec<ResourceKindCount>,
+    pub skipped_entry_total: u64,
+    pub error_total: u64,
     pub metadata_only: bool,
     pub content_storage_enabled: bool,
 }
@@ -252,6 +271,40 @@ pub struct PersistedResource {
     pub sensitive_path_redacted: bool,
     pub scan_source_id: Option<String>,
     pub scan_job_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateScanSourceInput {
+    pub id: String,
+    pub display_name: Option<String>,
+    pub profile_id: Option<String>,
+    pub project_label: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Clone, Debug)]
+pub struct UpsertScanSourceInput {
+    pub id: Option<String>,
+    pub display_name: String,
+    pub root_path: String,
+    pub root_display_path: String,
+    pub profile_id: String,
+    pub source_kind: String,
+    pub project_label: Option<String>,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredScanSource {
+    pub id: String,
+    pub display_name: String,
+    pub root_path: String,
+    pub root_display_path: String,
+    pub profile_id: String,
+    pub source_kind: String,
+    pub project_label: Option<String>,
+    pub enabled: bool,
 }
 
 #[tauri::command]
@@ -299,10 +352,152 @@ pub fn clear_resource_library(
     clear_resource_library_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
 }
 
+#[tauri::command]
+pub fn update_scan_source(
+    state: State<'_, ResourceStoreState>,
+    input: UpdateScanSourceInput,
+) -> Result<PersistedScanSource, ResourceStoreCommandError> {
+    update_scan_source_for_path(&state.db_path, input).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn remove_scan_source(
+    state: State<'_, ResourceStoreState>,
+    source_id: String,
+) -> Result<ResourceLibrarySummary, ResourceStoreCommandError> {
+    remove_scan_source_for_path(&state.db_path, &source_id).map_err(ResourceStoreCommandError::from)
+}
+
 pub fn initialize_database(db_path: &Path) -> Result<(), ResourceStoreError> {
     let conn = open_raw_connection(db_path)?;
     migrate_v1(&conn)?;
+    migrate_v2(&conn)?;
     Ok(())
+}
+
+pub fn upsert_scan_source_for_path(
+    db_path: &Path,
+    input: UpsertScanSourceInput,
+) -> Result<PersistedScanSource, ResourceStoreError> {
+    validate_source_input(
+        input.display_name.as_str(),
+        input.root_path.as_str(),
+        input.root_display_path.as_str(),
+        input.profile_id.as_str(),
+        input.source_kind.as_str(),
+    )?;
+    let mut conn = open_initialized_connection(db_path)?;
+    let tx = conn.transaction()?;
+    let now = current_time_ms();
+    let source_id = scan_source_id_for_input(&tx, input.id.as_deref(), &input)?;
+    let project_label = normalized_optional_text(input.project_label.as_deref());
+
+    upsert_scan_source_tx(
+        &tx,
+        &source_id,
+        &input.display_name,
+        &input.root_path,
+        &input.root_display_path,
+        &input.profile_id,
+        &input.source_kind,
+        project_label.as_deref(),
+        input.enabled,
+        now,
+        None,
+    )?;
+    upsert_project_scope_tx(
+        &tx,
+        &input.source_kind,
+        &input.root_path,
+        project_label.as_deref().unwrap_or(&input.display_name),
+        &input.root_display_path,
+        &input.profile_id,
+        now,
+    )?;
+    tx.commit()?;
+
+    get_scan_source_for_path(db_path, &source_id)
+}
+
+pub fn update_scan_source_for_path(
+    db_path: &Path,
+    input: UpdateScanSourceInput,
+) -> Result<PersistedScanSource, ResourceStoreError> {
+    let source_id = normalized_required_text("扫描来源 ID", &input.id)?;
+    let mut conn = open_initialized_connection(db_path)?;
+    let tx = conn.transaction()?;
+    let existing = stored_scan_source_by_id(&tx, &source_id)?
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到要更新的扫描来源。".to_string()))?;
+    let display_name =
+        normalized_optional_text(input.display_name.as_deref()).unwrap_or(existing.display_name);
+    let profile_id =
+        normalized_optional_text(input.profile_id.as_deref()).unwrap_or(existing.profile_id);
+    let project_label = normalized_optional_text(input.project_label.as_deref())
+        .or_else(|| existing.project_label.clone());
+    let enabled = input.enabled.unwrap_or(existing.enabled);
+    let now = current_time_ms();
+
+    validate_source_input(
+        &display_name,
+        &existing.root_path,
+        &existing.root_display_path,
+        &profile_id,
+        &existing.source_kind,
+    )?;
+    upsert_scan_source_tx(
+        &tx,
+        &source_id,
+        &display_name,
+        &existing.root_path,
+        &existing.root_display_path,
+        &profile_id,
+        &existing.source_kind,
+        project_label.as_deref(),
+        enabled,
+        now,
+        None,
+    )?;
+    upsert_project_scope_tx(
+        &tx,
+        &existing.source_kind,
+        &existing.root_path,
+        project_label.as_deref().unwrap_or(&display_name),
+        &existing.root_display_path,
+        &profile_id,
+        now,
+    )?;
+    tx.commit()?;
+
+    get_scan_source_for_path(db_path, &source_id)
+}
+
+pub fn remove_scan_source_for_path(
+    db_path: &Path,
+    source_id: &str,
+) -> Result<ResourceLibrarySummary, ResourceStoreError> {
+    let source_id = normalized_required_text("扫描来源 ID", source_id)?;
+    let mut conn = open_initialized_connection(db_path)?;
+    let tx = conn.transaction()?;
+    let existing = stored_scan_source_by_id(&tx, &source_id)?
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到要删除的扫描来源。".to_string()))?;
+    let job_ids = source_job_ids(&tx, &source_id)?;
+
+    for job_id in job_ids {
+        tx.execute("DELETE FROM scan_jobs WHERE id = ?1", params![job_id])?;
+    }
+    tx.execute("DELETE FROM scan_sources WHERE id = ?1", params![source_id])?;
+    tx.execute(
+        "DELETE FROM resources
+        WHERE id NOT IN (SELECT DISTINCT resource_id FROM resource_locations)",
+        [],
+    )?;
+    tx.execute(
+        "DELETE FROM project_scopes WHERE root_path = ?1 AND profile_id = ?2",
+        params![existing.root_path, existing.profile_id],
+    )?;
+    tx.commit()?;
+
+    get_library_summary_for_path(db_path)
 }
 
 pub fn persist_scan_job_for_path(
@@ -312,67 +507,40 @@ pub fn persist_scan_job_for_path(
     let mut conn = open_initialized_connection(db_path)?;
     let tx = conn.transaction()?;
     let now = current_time_ms();
-    let source_id = stable_id(
-        "scan-source",
-        &[
-            &input.source.source_kind,
-            &input.source.profile_id,
-            &input.source.root_path,
-        ],
-    );
-    let project_scope_id = stable_id(
-        "project-scope",
-        &[
-            &input.source.source_kind,
-            &input.source.profile_id,
-            &input.source.root_path,
-        ],
-    );
+    validate_source_input(
+        &input.source.display_name,
+        &input.source.root_path,
+        &input.source.root_display_path,
+        &input.source.profile_id,
+        &input.source.source_kind,
+    )?;
+    let source_id = scan_source_id_for_persist_input(&tx, &input.source)?;
+    let project_label = normalized_optional_text(input.source.project_label.as_deref());
 
     tx.execute("DELETE FROM scan_jobs WHERE id = ?1", params![input.id])?;
-    tx.execute(
-        "INSERT INTO scan_sources (
-            id, display_name, root_path, root_display_path, profile_id, source_kind,
-            enabled, created_at, updated_at, last_scan_job_id
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, ?8)
-        ON CONFLICT(id) DO UPDATE SET
-            display_name = excluded.display_name,
-            root_path = excluded.root_path,
-            root_display_path = excluded.root_display_path,
-            profile_id = excluded.profile_id,
-            source_kind = excluded.source_kind,
-            enabled = 1,
-            updated_at = excluded.updated_at,
-            last_scan_job_id = excluded.last_scan_job_id",
-        params![
-            source_id,
-            input.source.display_name,
-            input.source.root_path,
-            input.source.root_display_path,
-            input.source.profile_id,
-            input.source.source_kind,
-            now,
-            input.id
-        ],
+    upsert_scan_source_tx(
+        &tx,
+        &source_id,
+        &input.source.display_name,
+        &input.source.root_path,
+        &input.source.root_display_path,
+        &input.source.profile_id,
+        &input.source.source_kind,
+        project_label.as_deref(),
+        true,
+        now,
+        Some(&input.id),
     )?;
-    tx.execute(
-        "INSERT INTO project_scopes (
-            id, name, root_path, root_display_path, profile_id, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
-        ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            root_path = excluded.root_path,
-            root_display_path = excluded.root_display_path,
-            profile_id = excluded.profile_id,
-            updated_at = excluded.updated_at",
-        params![
-            project_scope_id,
-            input.source.display_name,
-            input.source.root_path,
-            input.source.root_display_path,
-            input.source.profile_id,
-            now
-        ],
+    upsert_project_scope_tx(
+        &tx,
+        &input.source.source_kind,
+        &input.source.root_path,
+        project_label
+            .as_deref()
+            .unwrap_or(input.source.display_name.as_str()),
+        &input.source.root_display_path,
+        &input.source.profile_id,
+        now,
     )?;
     tx.execute(
         "INSERT INTO scan_jobs (
@@ -539,6 +707,10 @@ pub fn store_status_for_path(db_path: &Path) -> Result<ResourceStoreStatus, Reso
         database_ready: true,
         schema_version: schema_version(&conn)?,
         source_count: count_rows(&conn, "scan_sources")?,
+        enabled_source_count: scalar_count(
+            &conn,
+            "SELECT COUNT(*) FROM scan_sources WHERE enabled = 1",
+        )?,
         job_count: count_rows(&conn, "scan_jobs")?,
         resource_count: count_rows(&conn, "resources")?,
         metadata_only: true,
@@ -553,7 +725,11 @@ pub fn list_scan_sources_for_path(
     let mut stmt = conn.prepare(
         "SELECT
             s.id, s.display_name, s.root_display_path, s.profile_id, s.source_kind, s.enabled,
-            s.created_at, s.updated_at, s.last_scan_job_id, j.status, j.finished_at
+            s.created_at, s.updated_at, s.last_scan_job_id, j.status, j.finished_at,
+            s.project_label,
+            (SELECT COUNT(DISTINCT l.resource_id) FROM resource_locations l WHERE l.scan_source_id = s.id),
+            COALESCE((SELECT SUM(count) FROM scan_skips sk WHERE sk.scan_source_id = s.id), 0),
+            COALESCE((SELECT COUNT(*) FROM scan_errors se WHERE se.scan_source_id = s.id), 0)
         FROM scan_sources s
         LEFT JOIN scan_jobs j ON j.id = s.last_scan_job_id
         ORDER BY s.updated_at DESC, s.display_name ASC",
@@ -571,6 +747,10 @@ pub fn list_scan_sources_for_path(
             last_scan_job_id: row.get(8)?,
             last_scan_status: row.get(9)?,
             last_scan_finished_at_ms: row.get::<_, Option<i64>>(10)?.map(i64_to_u64),
+            project_label: row.get(11)?,
+            resource_count: i64_to_u64(row.get(12)?),
+            skipped_entries: i64_to_u64(row.get(13)?),
+            error_count: i64_to_u64(row.get(14)?),
         })
     })?;
 
@@ -603,15 +783,23 @@ pub fn get_library_summary_for_path(
 ) -> Result<ResourceLibrarySummary, ResourceStoreError> {
     let conn = open_initialized_connection(db_path)?;
     let latest_job = latest_scan_job(&conn)?;
+    let latest_successful_scan = latest_successful_scan_job(&conn)?;
     let counts_by_kind = resource_kind_counts(&conn)?;
 
     Ok(ResourceLibrarySummary {
         source_count: count_rows(&conn, "scan_sources")?,
+        enabled_source_count: scalar_count(
+            &conn,
+            "SELECT COUNT(*) FROM scan_sources WHERE enabled = 1",
+        )?,
         job_count: count_rows(&conn, "scan_jobs")?,
         resource_count: count_rows(&conn, "resources")?,
         location_count: count_rows(&conn, "resource_locations")?,
         latest_job,
+        latest_successful_scan,
         counts_by_kind,
+        skipped_entry_total: scalar_count(&conn, "SELECT COALESCE(SUM(count), 0) FROM scan_skips")?,
+        error_total: scalar_count(&conn, "SELECT COUNT(*) FROM scan_errors")?,
         metadata_only: true,
         content_storage_enabled: false,
     })
@@ -664,6 +852,42 @@ pub fn list_persisted_resources_for_path(
     collect_rows(rows)
 }
 
+pub fn get_scan_source_for_path(
+    db_path: &Path,
+    source_id: &str,
+) -> Result<PersistedScanSource, ResourceStoreError> {
+    let sources = list_scan_sources_for_path(db_path)?;
+    sources
+        .into_iter()
+        .find(|source| source.id == source_id)
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到扫描来源。".to_string()))
+}
+
+pub fn list_stored_scan_sources_for_path(
+    db_path: &Path,
+    source_ids: &[String],
+) -> Result<Vec<StoredScanSource>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let mut sources = Vec::new();
+    for source_id in source_ids {
+        let normalized_id = normalized_required_text("扫描来源 ID", source_id)?;
+        if let Some(source) = stored_scan_source_by_id(&conn, &normalized_id)? {
+            sources.push(source);
+        }
+    }
+    Ok(sources)
+}
+
+pub fn list_enabled_stored_scan_sources_for_path(
+    db_path: &Path,
+    source_ids: &[String],
+) -> Result<Vec<StoredScanSource>, ResourceStoreError> {
+    Ok(list_stored_scan_sources_for_path(db_path, source_ids)?
+        .into_iter()
+        .filter(|source| source.enabled)
+        .collect())
+}
+
 pub fn clear_resource_library_for_path(
     db_path: &Path,
 ) -> Result<ResourceLibrarySummary, ResourceStoreError> {
@@ -696,6 +920,7 @@ fn open_raw_connection(db_path: &Path) -> Result<Connection, ResourceStoreError>
 fn open_initialized_connection(db_path: &Path) -> Result<Connection, ResourceStoreError> {
     let conn = open_raw_connection(db_path)?;
     migrate_v1(&conn)?;
+    migrate_v2(&conn)?;
     Ok(conn)
 }
 
@@ -720,6 +945,7 @@ fn migrate_v1(conn: &Connection) -> Result<(), ResourceStoreError> {
             root_display_path TEXT NOT NULL,
             profile_id TEXT NOT NULL,
             source_kind TEXT NOT NULL,
+            project_label TEXT,
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -828,6 +1054,7 @@ fn migrate_v1(conn: &Connection) -> Result<(), ResourceStoreError> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_scan_jobs_started_at ON scan_jobs(started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_scan_sources_root_kind ON scan_sources(root_path, source_kind);
         CREATE INDEX IF NOT EXISTS idx_resources_kind ON resources(resource_kind);
         CREATE INDEX IF NOT EXISTS idx_resource_locations_resource ON resource_locations(resource_id);
         CREATE INDEX IF NOT EXISTS idx_resource_locations_job ON resource_locations(scan_job_id);
@@ -837,9 +1064,39 @@ fn migrate_v1(conn: &Connection) -> Result<(), ResourceStoreError> {
     )?;
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+        params![1_i64, u64_to_i64(current_time_ms())],
+    )?;
+    Ok(())
+}
+
+fn migrate_v2(conn: &Connection) -> Result<(), ResourceStoreError> {
+    if !column_exists(conn, "scan_sources", "project_label")? {
+        conn.execute("ALTER TABLE scan_sources ADD COLUMN project_label TEXT", [])?;
+    }
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scan_sources_root_kind ON scan_sources(root_path, source_kind)",
+        [],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
         params![SCHEMA_VERSION, u64_to_i64(current_time_ms())],
     )?;
     Ok(())
+}
+
+fn column_exists(
+    conn: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, ResourceStoreError> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table_name})"))?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for row in rows {
+        if row? == column_name {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn latest_scan_job(conn: &Connection) -> Result<Option<PersistedScanJob>, ResourceStoreError> {
@@ -857,6 +1114,190 @@ fn latest_scan_job(conn: &Connection) -> Result<Option<PersistedScanJob>, Resour
     )
     .optional()
     .map_err(ResourceStoreError::from)
+}
+
+fn latest_successful_scan_job(
+    conn: &Connection,
+) -> Result<Option<PersistedScanJob>, ResourceStoreError> {
+    conn.query_row(
+        "SELECT
+            j.id, j.status, j.profile_id, j.started_at, j.finished_at, j.elapsed_ms,
+            j.requested_by, j.total_entries, j.matched_resources, j.skipped_entries,
+            j.error_count, j.cancelled, COALESCE(js.root_display_path, '')
+        FROM scan_jobs j
+        LEFT JOIN scan_job_sources js ON js.scan_job_id = j.id
+        WHERE j.status = 'completed'
+        ORDER BY j.finished_at DESC, j.started_at DESC
+        LIMIT 1",
+        [],
+        row_to_scan_job,
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
+fn upsert_scan_source_tx(
+    conn: &Connection,
+    source_id: &str,
+    display_name: &str,
+    root_path: &str,
+    root_display_path: &str,
+    profile_id: &str,
+    source_kind: &str,
+    project_label: Option<&str>,
+    enabled: bool,
+    now: u64,
+    last_scan_job_id: Option<&str>,
+) -> Result<(), ResourceStoreError> {
+    let existing_created_at = conn
+        .query_row(
+            "SELECT created_at FROM scan_sources WHERE id = ?1",
+            params![source_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+        .map(i64_to_u64)
+        .unwrap_or(now);
+    conn.execute(
+        "INSERT INTO scan_sources (
+            id, display_name, root_path, root_display_path, profile_id, source_kind,
+            project_label, enabled, created_at, updated_at, last_scan_job_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ON CONFLICT(id) DO UPDATE SET
+            display_name = excluded.display_name,
+            root_path = excluded.root_path,
+            root_display_path = excluded.root_display_path,
+            profile_id = excluded.profile_id,
+            source_kind = excluded.source_kind,
+            project_label = excluded.project_label,
+            enabled = excluded.enabled,
+            updated_at = excluded.updated_at,
+            last_scan_job_id = COALESCE(excluded.last_scan_job_id, scan_sources.last_scan_job_id)",
+        params![
+            source_id,
+            display_name,
+            root_path,
+            root_display_path,
+            profile_id,
+            source_kind,
+            project_label,
+            bool_to_i64(enabled),
+            u64_to_i64(existing_created_at),
+            u64_to_i64(now),
+            last_scan_job_id,
+        ],
+    )?;
+    Ok(())
+}
+
+fn upsert_project_scope_tx(
+    conn: &Connection,
+    source_kind: &str,
+    root_path: &str,
+    name: &str,
+    root_display_path: &str,
+    profile_id: &str,
+    now: u64,
+) -> Result<(), ResourceStoreError> {
+    let project_scope_id = stable_id("project-scope", &[source_kind, root_path]);
+    conn.execute(
+        "INSERT INTO project_scopes (
+            id, name, root_path, root_display_path, profile_id, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            root_path = excluded.root_path,
+            root_display_path = excluded.root_display_path,
+            profile_id = excluded.profile_id,
+            updated_at = excluded.updated_at",
+        params![
+            project_scope_id,
+            name,
+            root_path,
+            root_display_path,
+            profile_id,
+            u64_to_i64(now)
+        ],
+    )?;
+    Ok(())
+}
+
+fn scan_source_id_for_persist_input(
+    conn: &Connection,
+    input: &PersistScanSourceInput,
+) -> Result<String, ResourceStoreError> {
+    if let Some(source_id) = normalized_optional_text(input.id.as_deref()) {
+        return Ok(source_id);
+    }
+    source_id_for_root(conn, &input.root_path, &input.source_kind).map(|existing| {
+        existing
+            .unwrap_or_else(|| stable_id("scan-source", &[&input.source_kind, &input.root_path]))
+    })
+}
+
+fn scan_source_id_for_input(
+    conn: &Connection,
+    requested_id: Option<&str>,
+    input: &UpsertScanSourceInput,
+) -> Result<String, ResourceStoreError> {
+    if let Some(source_id) = normalized_optional_text(requested_id) {
+        return Ok(source_id);
+    }
+    source_id_for_root(conn, &input.root_path, &input.source_kind).map(|existing| {
+        existing
+            .unwrap_or_else(|| stable_id("scan-source", &[&input.source_kind, &input.root_path]))
+    })
+}
+
+fn source_id_for_root(
+    conn: &Connection,
+    root_path: &str,
+    source_kind: &str,
+) -> Result<Option<String>, ResourceStoreError> {
+    conn.query_row(
+        "SELECT id FROM scan_sources
+        WHERE root_path = ?1 AND source_kind = ?2
+        ORDER BY updated_at DESC
+        LIMIT 1",
+        params![root_path, source_kind],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
+fn stored_scan_source_by_id(
+    conn: &Connection,
+    source_id: &str,
+) -> Result<Option<StoredScanSource>, ResourceStoreError> {
+    conn.query_row(
+        "SELECT id, display_name, root_path, root_display_path, profile_id, source_kind,
+            project_label, enabled
+        FROM scan_sources
+        WHERE id = ?1",
+        params![source_id],
+        |row| {
+            Ok(StoredScanSource {
+                id: row.get(0)?,
+                display_name: row.get(1)?,
+                root_path: row.get(2)?,
+                root_display_path: row.get(3)?,
+                profile_id: row.get(4)?,
+                source_kind: row.get(5)?,
+                project_label: row.get(6)?,
+                enabled: int_to_bool(row.get(7)?),
+            })
+        },
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
+fn source_job_ids(conn: &Connection, source_id: &str) -> Result<Vec<String>, ResourceStoreError> {
+    let mut stmt =
+        conn.prepare("SELECT scan_job_id FROM scan_job_sources WHERE scan_source_id = ?1")?;
+    let rows = stmt.query_map(params![source_id], |row| row.get::<_, String>(0))?;
+    collect_rows(rows)
 }
 
 fn row_to_scan_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PersistedScanJob> {
@@ -913,6 +1354,39 @@ fn count_rows(conn: &Connection, table_name: &str) -> Result<u64, ResourceStoreE
     conn.query_row(sql, [], |row| row.get::<_, i64>(0))
         .map(i64_to_u64)
         .map_err(ResourceStoreError::from)
+}
+
+fn scalar_count(conn: &Connection, sql: &str) -> Result<u64, ResourceStoreError> {
+    conn.query_row(sql, [], |row| row.get::<_, i64>(0))
+        .map(i64_to_u64)
+        .map_err(ResourceStoreError::from)
+}
+
+fn validate_source_input(
+    display_name: &str,
+    root_path: &str,
+    root_display_path: &str,
+    profile_id: &str,
+    source_kind: &str,
+) -> Result<(), ResourceStoreError> {
+    normalized_required_text("扫描来源名称", display_name)?;
+    normalized_required_text("扫描来源路径", root_path)?;
+    normalized_required_text("扫描来源显示路径", root_display_path)?;
+    normalized_required_text("扫描模板", profile_id)?;
+    normalized_required_text("扫描来源类型", source_kind)?;
+    Ok(())
+}
+
+fn normalized_required_text(label: &str, value: &str) -> Result<String, ResourceStoreError> {
+    normalized_optional_text(Some(value))
+        .ok_or_else(|| ResourceStoreError::InvalidInput(format!("{label}不能为空。")))
+}
+
+fn normalized_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn findings_for_resource(resource: &PersistScanResourceInput) -> Vec<ResourceFindingInput> {
@@ -1039,6 +1513,7 @@ pub fn debug_all_text_values_for_path(db_path: &Path) -> Result<String, Resource
                 "root_display_path",
                 "profile_id",
                 "source_kind",
+                "project_label",
             ],
         ),
         (
@@ -1148,10 +1623,13 @@ fn debug_text_values_for_table(
 mod tests {
     use super::{
         clear_resource_library_for_path, debug_all_text_values_for_path,
-        get_library_summary_for_path, initialize_database, list_persisted_resources_for_path,
+        get_library_summary_for_path, initialize_database,
+        list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
         list_scan_jobs_for_path, list_scan_sources_for_path, persist_scan_job_for_path,
-        store_status_for_path, PersistScanErrorInput, PersistScanJobInput,
+        remove_scan_source_for_path, store_status_for_path, update_scan_source_for_path,
+        upsert_scan_source_for_path, PersistScanErrorInput, PersistScanJobInput,
         PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
+        UpdateScanSourceInput, UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1169,7 +1647,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 1);
+        assert_eq!(status.schema_version, 2);
         assert_eq!(status.resource_count, 0);
         assert!(status.metadata_only);
         assert!(!status.content_storage_enabled);
@@ -1191,13 +1669,26 @@ mod tests {
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].last_scan_job_id.as_deref(), Some("job-2"));
         assert_eq!(sources[0].root_display_path, "~/custom-scan-basic");
+        assert_eq!(sources[0].project_label.as_deref(), Some("Fixture Project"));
+        assert_eq!(sources[0].resource_count, 2);
+        assert_eq!(sources[0].skipped_entries, 2);
 
         let summary = get_library_summary_for_path(&db_path).expect("summary should load");
         assert_eq!(summary.source_count, 1);
+        assert_eq!(summary.enabled_source_count, 1);
         assert_eq!(summary.job_count, 2);
         assert_eq!(summary.resource_count, 2);
+        assert_eq!(summary.skipped_entry_total, 2);
+        assert_eq!(summary.error_total, 0);
         assert_eq!(
             summary.latest_job.as_ref().map(|job| job.id.as_str()),
+            Some("job-2")
+        );
+        assert_eq!(
+            summary
+                .latest_successful_scan
+                .as_ref()
+                .map(|job| job.id.as_str()),
             Some("job-2")
         );
 
@@ -1277,7 +1768,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should still load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 1);
+        assert_eq!(status.schema_version, 2);
 
         cleanup_db(db_path);
     }
@@ -1300,6 +1791,91 @@ mod tests {
                 "resource store must not persist fixture content marker {forbidden}"
             );
         }
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn adds_updates_and_removes_scan_sources_without_user_file_deletes() {
+        let db_path = temp_db_path("source-management");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let source = upsert_scan_source_for_path(&db_path, sample_upsert_source(None, true))
+            .expect("source should upsert");
+        assert_eq!(source.profile_id, "project-root");
+        assert_eq!(source.project_label.as_deref(), Some("Workspace A"));
+
+        let updated = update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: source.id.clone(),
+                display_name: Some("Renamed Fixture".to_string()),
+                profile_id: Some("skills-prompts-workspace".to_string()),
+                project_label: Some("Workspace B".to_string()),
+                enabled: Some(false),
+            },
+        )
+        .expect("source should update");
+        assert_eq!(updated.display_name, "Renamed Fixture");
+        assert_eq!(updated.profile_id, "skills-prompts-workspace");
+        assert!(!updated.enabled);
+        assert_eq!(updated.project_label.as_deref(), Some("Workspace B"));
+
+        let enabled = list_enabled_stored_scan_sources_for_path(&db_path, &[source.id.clone()])
+            .expect("enabled source list should load");
+        assert!(enabled.is_empty(), "disabled source must be excluded");
+
+        let summary =
+            remove_scan_source_for_path(&db_path, &source.id).expect("source should remove");
+        assert_eq!(summary.source_count, 0);
+        assert_eq!(summary.resource_count, 0);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn duplicate_source_additions_reuse_root_source_record() {
+        let db_path = temp_db_path("duplicate-source");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let first = upsert_scan_source_for_path(&db_path, sample_upsert_source(None, true))
+            .expect("first source should upsert");
+        let second = upsert_scan_source_for_path(
+            &db_path,
+            UpsertScanSourceInput {
+                profile_id: "docs-reports-workspace".to_string(),
+                project_label: Some("Workspace B".to_string()),
+                ..sample_upsert_source(None, true)
+            },
+        )
+        .expect("duplicate source should update");
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.profile_id, "docs-reports-workspace");
+        assert_eq!(second.project_label.as_deref(), Some("Workspace B"));
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        assert_eq!(sources.len(), 1);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn source_removal_deletes_associated_jobs_and_locations_only_from_store() {
+        let db_path = temp_db_path("source-delete-semantics");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(&db_path, sample_completed_job("job-1", 1))
+            .expect("job should persist");
+        let source = list_scan_sources_for_path(&db_path)
+            .expect("sources should load")
+            .remove(0);
+
+        let summary =
+            remove_scan_source_for_path(&db_path, &source.id).expect("source should remove");
+        assert_eq!(summary.source_count, 0);
+        assert_eq!(summary.job_count, 0);
+        assert_eq!(summary.resource_count, 0);
+        assert_eq!(summary.location_count, 0);
 
         cleanup_db(db_path);
     }
@@ -1423,11 +1999,26 @@ mod tests {
 
     fn sample_source() -> PersistScanSourceInput {
         PersistScanSourceInput {
+            id: None,
             display_name: "custom-scan-basic".to_string(),
             root_path: "/Users/example/custom-scan-basic".to_string(),
             root_display_path: "~/custom-scan-basic".to_string(),
             profile_id: "custom-folder".to_string(),
             source_kind: "custom-directory".to_string(),
+            project_label: Some("Fixture Project".to_string()),
+        }
+    }
+
+    fn sample_upsert_source(id: Option<String>, enabled: bool) -> UpsertScanSourceInput {
+        UpsertScanSourceInput {
+            id,
+            display_name: "custom-scan-basic".to_string(),
+            root_path: "/Users/example/custom-scan-basic".to_string(),
+            root_display_path: "~/custom-scan-basic".to_string(),
+            profile_id: "project-root".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: Some("Workspace A".to_string()),
+            enabled,
         }
     }
 

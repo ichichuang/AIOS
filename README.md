@@ -8,7 +8,7 @@ Local-only AIOS Desktop MVP for understanding local AIOS resources without expan
 - React + TypeScript + Vite dashboard under `frontend/`.
 - Generated snapshot at `frontend/public/aios-inventory.snapshot.json`.
 - Tauri v2 desktop shell under `src-tauri/`.
-- Controlled custom directory scan MVP: choose a static scan profile template, then one user-selected directory, Rust-side metadata-only traversal, in-memory job progress/cancel state, and Rust-owned SQLite persistence for safe scan metadata.
+- Controlled scan management center: save user-approved directories as scan sources, assign profiles/project labels, run manual sequential metadata-only batches, cancel active batches, and persist safe scan metadata in Rust-owned SQLite.
 - No Electron, no MCP execution, no global skill writes, no Tauri SQL/filesystem/shell plugins, and no full-disk scanning.
 
 ## Commands
@@ -29,7 +29,7 @@ pnpm desktop:build
 
 The static inventory scanner reads safe metadata from AIOS paths, Codex/Agents/Claude skill entrypoints, recent reports, local scripts, bounded project-pack roots, and Codex MCP configuration. It never executes MCP servers and stores only MCP env var names, not values.
 
-AIOS Desktop also provides a Phase 2A/2B/2C custom directory scan surface plus the Phase 3A local resource library foundation. The desktop app asks the user to choose a scan profile template, then choose one directory through the system picker. Rust scans only metadata with bounded depth, bounded entry count, strong excludes, no symlink following, no file-content reads, and no script/MCP execution. Completed, cancelled, and failed scan jobs write safe metadata summaries to a Rust-owned SQLite database in the app data directory. Profiles are guidance templates only; they do not auto-scan global tool directories, home, system, disk roots, or project roots.
+AIOS Desktop also provides a scan management surface built on the Phase 2 scanner and Phase 3 SQLite resource store. The desktop app lets the user add one or more directories through the system picker, assign each saved source a scan profile and project label, then manually scan selected enabled sources sequentially. Rust scans only metadata with bounded depth, bounded entry count, strong excludes, no symlink following, no file-content reads, and no script/MCP execution. Completed, cancelled, and failed scan jobs write safe metadata summaries to a Rust-owned SQLite database in the app data directory. Profiles are guidance templates only; they do not auto-scan global tool directories, home, system, disk roots, or project roots.
 
 See:
 
@@ -47,4 +47,4 @@ AIOS Desktop 的产品化方向记录在以下 Phase 0 文档中。当前仓库�
 - `docs/TAURI_MIGRATION_PLAN.zh-CN.md`
 - `docs/DESKTOP_CUSTOM_SCAN_SMOKE.zh-CN.md`
 
-当前桌面壳承载现有 Material Console 前端，并包含指定目录只读扫描 MVP、静态扫描模板、当前运行时内的进度与取消能力，以及 Rust-owned SQLite 本地资源库基础。静态 Skills/MCP/Scripts/Reports/Policies/Validators/Legacy 模块仍使用 snapshot 数据；Tauri SQL、文件系统、Shell 插件、MCP 执行和全盘扫描仍未启用。
+当前桌面壳承载现有 Material Console 前端，并包含多目录扫描管理、静态扫描模板、当前运行时内的批次进度与取消能力，以及 Rust-owned SQLite 本地资源库基础。静态 Skills/MCP/Scripts/Reports/Policies/Validators/Legacy 模块仍使用 snapshot 数据；Tauri SQL、文件系统、Shell 插件、MCP 执行和全盘扫描仍未启用。

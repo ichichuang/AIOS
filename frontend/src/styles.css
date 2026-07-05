@@ -834,6 +834,7 @@
 .scan-first-use-section,
 .scan-control-section,
 .scan-library-section,
+.scan-sources-section,
 .scan-progress-section,
 .scan-result-section,
 .scan-skipped-summary-section,
@@ -1186,6 +1187,109 @@
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.scan-source-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scan-source-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1.2fr) minmax(160px, 0.75fr) minmax(150px, 0.75fr) minmax(210px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  padding: 10px;
+}
+
+.scan-source-row.disabled {
+  background: var(--aios-surface-muted);
+}
+
+.scan-source-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.scan-source-main strong {
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-source-main p {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-source-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scan-source-chip-row .MuiChip-root {
+  max-width: 140px;
+  height: 22px;
+  font-size: 11px;
+}
+
+.scan-source-row .MuiTextField-root {
+  min-width: 0;
+}
+
+.scan-source-row .MuiInputBase-root {
+  min-height: 38px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.scan-source-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.scan-source-metrics .scan-progress-metric {
+  padding: 7px 8px;
+}
+
+.scan-source-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scan-source-actions .MuiButton-root {
+  min-width: 52px;
+  min-height: 32px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.scan-source-actions .MuiIconButton-root {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--aios-outline);
+  border-radius: 10px;
 }
 
 .scan-warning-list {
@@ -2996,6 +3100,16 @@
     grid-template-columns: 1fr;
   }
 
+  .scan-source-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .scan-source-row .MuiTextField-root,
+  .scan-source-metrics,
+  .scan-source-actions {
+    grid-column: 2;
+  }
+
   .dashboard-desktop-status {
     grid-column: 1 / -1;
     border-top: 1px solid var(--aios-outline);
@@ -3120,6 +3234,21 @@
   .policy-guardrail-grid,
   .validator-notice-grid {
     grid-template-columns: 1fr;
+  }
+
+  .scan-source-row {
+    grid-template-columns: 1fr;
+  }
+
+  .scan-source-row > .MuiCheckbox-root,
+  .scan-source-row .MuiTextField-root,
+  .scan-source-metrics,
+  .scan-source-actions {
+    grid-column: 1;
+  }
+
+  .scan-source-row > .MuiCheckbox-root {
+    justify-self: start;
   }
 
   .scan-warning-row {

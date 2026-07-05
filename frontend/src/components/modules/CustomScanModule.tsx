@@ -1,7 +1,10 @@
-import { Box, Button, Chip, LinearProgress, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, Checkbox, Chip, IconButton, LinearProgress, MenuItem, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import AddRounded from "@mui/icons-material/AddRounded";
+import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import DeleteSweepRounded from "@mui/icons-material/DeleteSweepRounded";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
+import RefreshRounded from "@mui/icons-material/RefreshRounded";
 import SecurityRounded from "@mui/icons-material/SecurityRounded";
 import StorageRounded from "@mui/icons-material/StorageRounded";
 import StopCircleRounded from "@mui/icons-material/StopCircleRounded";
@@ -10,46 +13,48 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import {
-  applyScanJobProgressEvent,
-  cancelScanJob,
   countSkippedEntries,
   fallbackScanPolicy,
   fallbackScanProfiles,
   DEFAULT_SCAN_PROFILE_ID,
-  getScanJobSnapshot,
   getScanPolicy,
   getScanProfileById,
   getScanProfileForResult,
   getScanProfiles,
-  isTerminalScanJobStatus,
   isTauriRuntimeAvailable,
-  listenToScanJobProgress,
   mapScanResourcesToAiosResources,
-  pickScanDirectory,
-  scanLifecycleFromSnapshot,
-  startCustomScanJob,
   type CustomScanResult,
   type ScanJobSnapshot,
-  type ScanLifecycleState,
   type ScanProfileDefinition,
   type ScanProfileId,
   type ScanResourceKind,
   type ScannerPolicy,
-  type SelectedScanDirectory
 } from "../../lib/customDirectoryScan";
 import {
+  addScanSources,
   buildPersistedLibraryState,
+  buildSelectedBatchSourceIds,
+  cancelScanBatch,
   clearResourceLibrary,
   fallbackResourceLibrarySummary,
   fallbackResourceStoreStatus,
+  getScanBatchSnapshot,
   getResourceLibrarySummary,
   getResourceStoreStatus,
+  isTerminalScanBatchStatus,
   listPersistedScanJobs,
   listScanSources,
+  patchSourceInList,
+  removeScanSource,
+  scanBatchProgressPercent,
+  scanBatchStatusLabel,
+  startScanSourcesBatch,
+  updateScanSource,
   type PersistedScanJob,
   type PersistedScanSource,
   type ResourceLibrarySummary,
-  type ResourceStoreStatus
+  type ResourceStoreStatus,
+  type ScanBatchSnapshot
 } from "../../lib/resourceStore";
 import { ResourceGroup, type ResourceGroupData } from "../resources/ResourceGroup";
 import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
@@ -62,17 +67,20 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const [policy, setPolicy] = useState<ScannerPolicy>(fallbackScanPolicy);
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
   const [activeProfileId, setActiveProfileId] = useState<ScanProfileId>(DEFAULT_SCAN_PROFILE_ID);
-  const [selectedDirectory, setSelectedDirectory] = useState<SelectedScanDirectory | null>(null);
-  const [scanJobSnapshot, setScanJobSnapshot] = useState<ScanJobSnapshot | null>(null);
   const [scanResult, setScanResult] = useState<CustomScanResult | null>(null);
   const [resourceStoreStatus, setResourceStoreStatus] = useState<ResourceStoreStatus>(fallbackResourceStoreStatus);
   const [librarySummary, setLibrarySummary] = useState<ResourceLibrarySummary>(fallbackResourceLibrarySummary);
   const [persistedSources, setPersistedSources] = useState<PersistedScanSource[]>([]);
   const [persistedJobs, setPersistedJobs] = useState<PersistedScanJob[]>([]);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [sourceProjectDrafts, setSourceProjectDrafts] = useState<Record<string, string>>({});
+  const [newProjectLabel, setNewProjectLabel] = useState("");
+  const [batchSnapshot, setBatchSnapshot] = useState<ScanBatchSnapshot | null>(null);
   const [libraryBusyState, setLibraryBusyState] = useState<"idle" | "loading" | "clearing">("idle");
+  const [sourceBusyId, setSourceBusyId] = useState<string | null>(null);
+  const [batchBusyState, setBatchBusyState] = useState<"idle" | "adding" | "starting" | "cancelling">("idle");
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyState, setBusyState] = useState<"idle" | "picking">("idle");
   const tauriAvailable = isTauriRuntimeAvailable();
 
   useEffect(() => {
@@ -94,6 +102,19 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       setLibrarySummary(nextSummary);
       setPersistedSources(nextSources);
       setPersistedJobs(nextJobs);
+      setSourceProjectDrafts((current) => {
+        const nextDrafts: Record<string, string> = {};
+        for (const source of nextSources) {
+          nextDrafts[source.id] = current[source.id] ?? source.projectLabel ?? "";
+        }
+        return nextDrafts;
+      });
+      setSelectedSourceIds((current) => {
+        const existingIds = new Set(nextSources.map((source) => source.id));
+        const retained = current.filter((id) => existingIds.has(id));
+        if (retained.length > 0) return retained;
+        return nextSources.filter((source) => source.enabled).map((source) => source.id);
+      });
       setLibraryError(null);
     } catch (storeError) {
       setLibraryError(formatCommandError(storeError));
@@ -106,56 +127,27 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
     void refreshResourceLibrary();
   }, [refreshResourceLibrary]);
 
-  const refreshScanJobSnapshot = useCallback(async (jobId: string) => {
-    try {
-      const snapshot = await getScanJobSnapshot(jobId);
-      setScanJobSnapshot(snapshot);
-      if (snapshot.status === "completed" && snapshot.result) {
-        setScanResult(snapshot.result);
-        setError(null);
-      } else if (snapshot.status === "failed") {
-        setScanResult(null);
-        setError(snapshot.error?.message ?? "扫描任务失败。");
-      } else if (snapshot.status === "cancelled") {
-        setScanResult(null);
-      }
-      if (isTerminalScanJobStatus(snapshot.status)) {
-        void refreshResourceLibrary();
-      }
-    } catch (snapshotError) {
-      setError(formatCommandError(snapshotError));
-    }
-  }, [refreshResourceLibrary]);
-
   useEffect(() => {
-    if (!tauriAvailable) return undefined;
+    if (!tauriAvailable || !batchSnapshot || isTerminalScanBatchStatus(batchSnapshot.status)) return undefined;
     let active = true;
-    let cleanup: (() => void) | null = null;
-
-    listenToScanJobProgress((event) => {
-      if (!active) return;
-      setScanJobSnapshot((current) => {
-        if (current && current.jobId !== event.jobId) return current;
-        return applyScanJobProgressEvent(current, event);
-      });
-      if (isTerminalScanJobStatus(event.status)) {
-        void refreshScanJobSnapshot(event.jobId);
-      }
-    })
-      .then((unlisten) => {
-        if (active) {
-          cleanup = unlisten;
-        } else {
-          unlisten();
-        }
-      })
-      .catch((listenError: unknown) => setError(formatCommandError(listenError)));
-
+    const intervalId = window.setInterval(() => {
+      getScanBatchSnapshot(batchSnapshot.batchId)
+        .then((snapshot) => {
+          if (!active) return;
+          setBatchSnapshot(snapshot);
+          if (isTerminalScanBatchStatus(snapshot.status)) {
+            void refreshResourceLibrary();
+          }
+        })
+        .catch((snapshotError: unknown) => {
+          if (active) setError(formatCommandError(snapshotError));
+        });
+    }, 800);
     return () => {
       active = false;
-      cleanup?.();
+      window.clearInterval(intervalId);
     };
-  }, [refreshScanJobSnapshot, tauriAvailable]);
+  }, [batchSnapshot, refreshResourceLibrary, tauriAvailable]);
 
   const activeProfile = useMemo(() => getScanProfileById(activeProfileId, profiles), [activeProfileId, profiles]);
   const scanResultProfile = useMemo(() => (scanResult ? getScanProfileForResult(scanResult, profiles) : null), [profiles, scanResult]);
@@ -164,70 +156,142 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const visibleResources = useMemo(() => filterResourceList(resources, query), [query, resources]);
   const groups = useMemo(() => buildScanGroups(visibleResources, profileForVisibleResults), [profileForVisibleResults, visibleResources]);
   const categorySummary = useMemo(() => (scanResult ? buildProfileCategorySummary(scanResult, profileForVisibleResults) : []), [profileForVisibleResults, scanResult]);
-  const persistedLibraryState = useMemo(() => buildPersistedLibraryState(librarySummary, persistedSources, persistedJobs), [librarySummary, persistedJobs, persistedSources]);
-  const skippedCount = scanResult ? countSkippedEntries(scanResult.counts) : (scanJobSnapshot?.progress.skippedEntries ?? 0);
-  const lifecycle = scanLifecycleFromSnapshot(scanJobSnapshot, Boolean(selectedDirectory), Boolean(error));
-  const scanRunning = lifecycle === "running";
-  const scanCancelling = lifecycle === "cancelling";
+  const persistedLibraryState = useMemo(() => buildPersistedLibraryState(librarySummary, persistedSources, persistedJobs, selectedSourceIds), [librarySummary, persistedJobs, persistedSources, selectedSourceIds]);
+  const selectedBatchSourceIds = useMemo(() => buildSelectedBatchSourceIds(persistedSources, selectedSourceIds), [persistedSources, selectedSourceIds]);
+  const skippedCount = scanResult ? countSkippedEntries(scanResult.counts) : 0;
+  const scanRunning = Boolean(batchSnapshot && !isTerminalScanBatchStatus(batchSnapshot.status) && batchSnapshot.status !== "cancelling");
+  const scanCancelling = batchSnapshot?.status === "cancelling" || batchBusyState === "cancelling";
   const scanLocked = scanRunning || scanCancelling;
-  const progressPercent = scanJobSnapshot ? progressPercentFor(scanJobSnapshot) : 0;
+  const batchProgressPercent = scanBatchProgressPercent(batchSnapshot);
 
   const handleProfileChange = useCallback((_event: unknown, nextProfileId: ScanProfileId | null) => {
     if (!nextProfileId) return;
     setActiveProfileId(nextProfileId);
   }, []);
 
-  const handlePickDirectory = useCallback(async () => {
-    setBusyState("picking");
+  const handleAddSources = useCallback(async () => {
+    setBatchBusyState("adding");
     setError(null);
     try {
-      const selected = await pickScanDirectory();
-      setSelectedDirectory(selected);
-      setScanResult(null);
-      setScanJobSnapshot(null);
-    } catch (pickError) {
-      setError(formatCommandError(pickError));
+      const result = await addScanSources(activeProfile.id, newProjectLabel);
+      await refreshResourceLibrary();
+      if (result.sources.length > 0) {
+        setSelectedSourceIds((current) => Array.from(new Set([...current, ...result.sources.map((source) => source.id)])));
+      }
+    } catch (addError) {
+      setError(formatCommandError(addError));
     } finally {
-      setBusyState("idle");
+      setBatchBusyState("idle");
     }
-  }, []);
+  }, [activeProfile.id, newProjectLabel, refreshResourceLibrary]);
 
-  const handleRunScan = useCallback(async () => {
-    if (!selectedDirectory) return;
+  const handleStartBatch = useCallback(async () => {
+    if (selectedBatchSourceIds.length === 0) {
+      setError("请至少选择一个已启用的扫描来源。");
+      return;
+    }
+    setBatchBusyState("starting");
     setError(null);
     setScanResult(null);
-    setScanJobSnapshot(null);
     try {
-      const started = await startCustomScanJob(selectedDirectory.selectionId, activeProfile.id);
-      setScanJobSnapshot(started.snapshot);
-      if (started.snapshot.status === "completed" && started.snapshot.result) {
-        setScanResult(started.snapshot.result);
-        void refreshResourceLibrary();
-      } else if (started.snapshot.status === "failed") {
-        setError(started.snapshot.error?.message ?? "扫描任务失败。");
-        void refreshResourceLibrary();
-      }
+      const started = await startScanSourcesBatch(selectedBatchSourceIds);
+      setBatchSnapshot(started.snapshot);
     } catch (scanError) {
       setError(formatCommandError(scanError));
+    } finally {
+      setBatchBusyState("idle");
     }
-  }, [activeProfile.id, refreshResourceLibrary, selectedDirectory]);
+  }, [selectedBatchSourceIds]);
 
-  const handleCancelScan = useCallback(async () => {
-    if (!scanJobSnapshot || !["queued", "running"].includes(scanJobSnapshot.status)) return;
+  const handleCancelBatch = useCallback(async () => {
+    if (!batchSnapshot || isTerminalScanBatchStatus(batchSnapshot.status)) return;
+    setBatchBusyState("cancelling");
     setError(null);
     try {
-      const snapshot = await cancelScanJob(scanJobSnapshot.jobId);
-      setScanJobSnapshot(snapshot);
+      const snapshot = await cancelScanBatch(batchSnapshot.batchId);
+      setBatchSnapshot(snapshot);
     } catch (cancelError) {
       setError(formatCommandError(cancelError));
+    } finally {
+      setBatchBusyState("idle");
     }
-  }, [scanJobSnapshot]);
+  }, [batchSnapshot]);
+
+  const handleToggleSourceSelection = useCallback((sourceId: string, checked: boolean) => {
+    setSelectedSourceIds((current) => (checked ? Array.from(new Set([...current, sourceId])) : current.filter((id) => id !== sourceId)));
+  }, []);
+
+  const handleUpdateSourceProfile = useCallback(async (source: PersistedScanSource, profileId: string) => {
+    setSourceBusyId(source.id);
+    setError(null);
+    try {
+      const updated = await updateScanSource({ id: source.id, profileId });
+      setPersistedSources((current) => patchSourceInList(current, updated));
+      await refreshResourceLibrary();
+    } catch (updateError) {
+      setError(formatCommandError(updateError));
+    } finally {
+      setSourceBusyId(null);
+    }
+  }, [refreshResourceLibrary]);
+
+  const handleUpdateSourceEnabled = useCallback(async (source: PersistedScanSource, enabled: boolean) => {
+    setSourceBusyId(source.id);
+    setError(null);
+    try {
+      const updated = await updateScanSource({ id: source.id, enabled });
+      setPersistedSources((current) => patchSourceInList(current, updated));
+      setSelectedSourceIds((current) => (enabled ? current : current.filter((id) => id !== source.id)));
+      await refreshResourceLibrary();
+    } catch (updateError) {
+      setError(formatCommandError(updateError));
+    } finally {
+      setSourceBusyId(null);
+    }
+  }, [refreshResourceLibrary]);
+
+  const handleProjectDraftChange = useCallback((sourceId: string, value: string) => {
+    setSourceProjectDrafts((current) => ({ ...current, [sourceId]: value }));
+  }, []);
+
+  const handleProjectBlur = useCallback(async (source: PersistedScanSource) => {
+    const nextProjectLabel = sourceProjectDrafts[source.id] ?? "";
+    if ((source.projectLabel ?? "") === nextProjectLabel.trim()) return;
+    setSourceBusyId(source.id);
+    setError(null);
+    try {
+      const updated = await updateScanSource({ id: source.id, projectLabel: nextProjectLabel });
+      setPersistedSources((current) => patchSourceInList(current, updated));
+      await refreshResourceLibrary();
+    } catch (updateError) {
+      setError(formatCommandError(updateError));
+    } finally {
+      setSourceBusyId(null);
+    }
+  }, [refreshResourceLibrary, sourceProjectDrafts]);
+
+  const handleRemoveSource = useCallback(async (source: PersistedScanSource) => {
+    setSourceBusyId(source.id);
+    setError(null);
+    try {
+      await removeScanSource(source.id);
+      setSelectedSourceIds((current) => current.filter((id) => id !== source.id));
+      await refreshResourceLibrary();
+    } catch (removeError) {
+      setError(formatCommandError(removeError));
+    } finally {
+      setSourceBusyId(null);
+    }
+  }, [refreshResourceLibrary]);
 
   const handleClearResourceLibrary = useCallback(async () => {
     setLibraryBusyState("clearing");
     setLibraryError(null);
     try {
       await clearResourceLibrary();
+      setSelectedSourceIds([]);
+      setBatchSnapshot(null);
+      setScanResult(null);
       await refreshResourceLibrary();
     } catch (clearError) {
       setLibraryError(formatCommandError(clearError));
@@ -240,11 +304,11 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
     <AiosModuleFrame
       view="custom-scan"
       summary={zhCN.moduleSummaries["custom-scan"]}
-      count={visibleResources.length}
+      count={librarySummary.resourceCount}
       ariaLabel={moduleAriaLabel("custom-scan")}
       actions={
         <>
-          <Chip className="status-chip status-ok" label="指定目录" />
+          <Chip className="status-chip status-ok" label="扫描管理" />
           <Chip label="仅元数据" variant="outlined" />
           <Chip className="status-chip status-disabled" label="全盘扫描禁用" variant="outlined" />
         </>
@@ -252,8 +316,8 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
     >
       <AiosSection className="scan-profile-section">
         <AiosSectionHeader
-          title="扫描模板"
-          summary="模板只调整说明、分类重点和有界上限；AIOS 只扫描你随后手动选择的文件夹。"
+          title="扫描管理"
+          summary="先添加一个或多个用户授权目录，分别设置模板和项目标签，再手动启动顺序扫描。"
           action={<Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />}
         />
         <Box className="scan-profile-selector" aria-label="扫描模板选择">
@@ -288,7 +352,7 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       </AiosSection>
 
       <AiosSection className="scan-first-use-section">
-        <AiosSectionHeader title="首次选择建议" summary="先选边界明确的小目录。不要选择系统根、home 根或磁盘根。" />
+        <AiosSectionHeader title="来源设置" summary="添加来源只保存授权目录元数据，不会自动扫描；扫描必须手动启动。" />
         <Box className="scan-first-use-grid">
           {firstUseGuides.map((guide) => (
             <Box className={`scan-first-use-item ${guide.tone}`} key={guide.title}>
@@ -302,38 +366,38 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       </AiosSection>
 
       <AiosSection className="scan-control-section">
-        <AiosSectionHeader title="扫描控制" summary={`当前模板：${activeProfile.displayName}。只允许系统目录选择器授权的单个目录；完成、取消或失败任务会保存安全元数据摘要。`} />
+        <AiosSectionHeader title="批次控制" summary={`默认新来源模板：${activeProfile.displayName}。批次扫描按已选择且已启用的来源顺序执行。`} />
         <Box className="scan-control-grid">
           <Box className="scan-control-card">
             <Box className="scan-control-heading">
               <FolderOpenRounded fontSize="small" />
               <Box className="scan-control-copy">
-                <Typography component="strong">目录选择</Typography>
+                <Typography component="strong">添加扫描来源</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  {selectedDirectory ? selectedDirectory.rootSummary : "尚未选择目录"}
+                  系统目录选择器可一次选择多个目录；添加后不会自动扫描。
                 </Typography>
               </Box>
             </Box>
-            {selectedDirectory && (
-              <AiosTechnicalDetails
-                rows={[
-                  { label: "显示名", value: selectedDirectory.displayName },
-                  { label: "根摘要", value: selectedDirectory.rootSummary, code: true },
-                  { label: "扫描模板", value: activeProfile.displayName },
-                  { label: "策略判定", value: "允许指定目录扫描" }
-                ]}
-              />
-            )}
+            <TextField
+              disabled={scanLocked}
+              label="默认项目 / scope 标签"
+              size="small"
+              value={newProjectLabel}
+              onChange={(event) => setNewProjectLabel(event.target.value)}
+            />
             <Box className="scan-action-row">
-              <Button disabled={!tauriAvailable || busyState !== "idle" || scanLocked} startIcon={<FolderOpenRounded />} variant="outlined" onClick={handlePickDirectory}>
-                选择目录
+              <Button disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
+                添加目录
               </Button>
-              <Button disabled={!tauriAvailable || !selectedDirectory || busyState !== "idle" || scanLocked} startIcon={<PlayArrowRounded />} variant="contained" onClick={handleRunScan}>
-                运行扫描
+              <Button disabled={!tauriAvailable || selectedBatchSourceIds.length === 0 || batchBusyState !== "idle" || scanLocked} startIcon={<PlayArrowRounded />} variant="contained" onClick={handleStartBatch}>
+                扫描所选
               </Button>
-              {scanRunning && (
-                <Button color="warning" disabled={!scanJobSnapshot} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelScan}>
-                  取消扫描
+              <Button disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
+                刷新
+              </Button>
+              {scanLocked && (
+                <Button color="warning" disabled={!batchSnapshot || batchBusyState === "cancelling"} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelBatch}>
+                  取消批次
                 </Button>
               )}
             </Box>
@@ -360,6 +424,106 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         </Box>
       </AiosSection>
 
+      <AiosSection className="scan-sources-section">
+        <AiosSectionHeader title="已保存扫描来源" summary="移除来源只删除 AIOS 本地库中的来源、任务和资源位置记录，不删除用户文件。" count={persistedSources.length} />
+        <Box className="scan-source-list" aria-label="扫描来源列表">
+          {persistedSources.length > 0 ? (
+            persistedSources.map((source) => {
+              const row = persistedLibraryState.sourceRows.find((candidate) => candidate.id === source.id);
+              const sourceBusy = sourceBusyId === source.id || scanLocked;
+              const batchSource = batchSnapshot?.sources.find((candidate) => candidate.scanSourceId === source.id);
+              const status = batchSource?.status ?? row?.status ?? "idle";
+              return (
+                <Box className={`scan-source-row ${source.enabled ? "" : "disabled"}`} key={source.id}>
+                  <Checkbox
+                    checked={selectedSourceIds.includes(source.id)}
+                    disabled={!source.enabled || sourceBusy}
+                    slotProps={{ input: { "aria-label": `选择扫描来源 ${source.displayName}` } }}
+                    onChange={(event) => handleToggleSourceSelection(source.id, event.target.checked)}
+                  />
+                  <Box className="scan-source-main">
+                    <Typography component="strong" title={source.displayName}>
+                      {source.displayName}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2" title={source.rootDisplayPath}>
+                      {source.rootDisplayPath}
+                    </Typography>
+                    <Box className="scan-source-chip-row">
+                      <Chip className={`status-chip ${source.enabled ? "status-ok" : "status-disabled"}`} label={source.enabled ? "已启用" : "已停用"} size="small" />
+                      <Chip label={scanBatchStatusLabel(status)} size="small" variant="outlined" />
+                      {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
+                    </Box>
+                  </Box>
+                  <TextField disabled={sourceBusy} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
+                    {profiles.map((profile) => (
+                      <MenuItem key={profile.id} value={profile.id}>
+                        {profile.displayName}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    disabled={sourceBusy}
+                    label="项目 / scope"
+                    size="small"
+                    value={sourceProjectDrafts[source.id] ?? source.projectLabel ?? ""}
+                    onBlur={() => void handleProjectBlur(source)}
+                    onChange={(event) => handleProjectDraftChange(source.id, event.target.value)}
+                  />
+                  <Box className="scan-source-metrics">
+                    <ProgressMetric label="资源" value={batchSource?.resourcesFound ?? source.resourceCount} />
+                    <ProgressMetric label="跳过" value={batchSource?.skippedEntries ?? source.skippedEntries} />
+                    <ProgressMetric label="错误" value={batchSource?.errorCount ?? source.errorCount} />
+                  </Box>
+                  <Box className="scan-source-actions">
+                    <Button disabled={sourceBusyId === source.id || scanLocked} size="small" variant="outlined" onClick={() => void handleUpdateSourceEnabled(source, !source.enabled)}>
+                      {source.enabled ? "停用" : "启用"}
+                    </Button>
+                    <IconButton aria-label={`移除扫描来源 ${source.displayName}`} disabled={sourceBusyId === source.id || scanLocked} size="small" onClick={() => void handleRemoveSource(source)}>
+                      <DeleteRounded fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+              );
+            })
+          ) : (
+            <Box className="scan-empty-state">
+              <Typography component="strong">尚无扫描来源</Typography>
+              <Typography color="text.secondary" variant="body2">
+                添加目录后会保存为本地 SQLite scan_source。添加不会触发扫描。
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </AiosSection>
+
+      {batchSnapshot && (
+        <AiosSection className="scan-progress-section">
+          <AiosSectionHeader
+            title="批次进度"
+            summary={`状态：${scanBatchStatusLabel(batchSnapshot.status)}。当前来源：${batchSnapshot.activeSourceId ?? "无"}`}
+            action={<Chip className={`status-chip ${batchSnapshot.status === "completed" ? "status-ok" : batchSnapshot.status === "failed" || batchSnapshot.status === "cancelled" ? "status-warn" : "status-disabled"}`} label={scanBatchStatusLabel(batchSnapshot.status)} variant="outlined" />}
+          />
+          <Box className="scan-progress-card">
+            <Box className="scan-progress-heading">
+              <Typography component="strong">
+                {batchSnapshot.completedSources} / {batchSnapshot.totalSources} 来源已结束
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                活动来源已访问 {batchSnapshot.progress.activeVisitedEntries} 项，匹配 {batchSnapshot.progress.activeMatchedResources} 项，跳过 {batchSnapshot.progress.activeSkippedEntries} 项。
+              </Typography>
+            </Box>
+            <LinearProgress className="scan-progress-bar" value={batchProgressPercent} variant="determinate" />
+            <Box className="scan-progress-grid">
+              <ProgressMetric label="总来源" value={batchSnapshot.totalSources} />
+              <ProgressMetric label="已结束" value={batchSnapshot.completedSources} />
+              <ProgressMetric label="已取消" value={batchSnapshot.cancelledSources} />
+              <ProgressMetric label="失败" value={batchSnapshot.failedSources} />
+              <ProgressMetric label="耗时" value={`${Math.max(0, Math.round(batchSnapshot.progress.elapsedMs / 1000))}s`} />
+            </Box>
+          </Box>
+        </AiosSection>
+      )}
+
       <AiosSection className="scan-library-section">
         <AiosSectionHeader
           title="本地资源库"
@@ -379,14 +543,23 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
             </Box>
             <Box className="scan-progress-grid">
               <ProgressMetric label="保存来源" value={librarySummary.sourceCount} />
+              <ProgressMetric label="已启用" value={librarySummary.enabledSourceCount} />
               <ProgressMetric label="扫描任务" value={librarySummary.jobCount} />
               <ProgressMetric label="资源" value={librarySummary.resourceCount} />
-              <ProgressMetric label="位置记录" value={librarySummary.locationCount} />
+              <ProgressMetric label="跳过" value={librarySummary.skippedEntryTotal} />
+              <ProgressMetric label="错误" value={librarySummary.errorTotal} />
             </Box>
             <Box className="scan-library-list" aria-label="已保存扫描来源">
+              <Typography component="strong">最近成功扫描</Typography>
+              <Box className="scan-library-row">
+                <Typography component="span">{persistedLibraryState.latestSuccessfulScanLabel}</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  最近任务：{persistedLibraryState.latestJobLabel}
+                </Typography>
+              </Box>
               <Typography component="strong">扫描来源</Typography>
               {persistedLibraryState.sourceRows.length > 0 ? (
-                persistedLibraryState.sourceRows.map((source) => (
+                persistedLibraryState.sourceRows.slice(0, 4).map((source) => (
                   <Box className="scan-library-row" key={source.id}>
                     <Typography component="span" title={source.primary}>
                       {source.primary}
@@ -449,6 +622,13 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         </Box>
       </AiosSection>
 
+      <Box className="scan-boundary-callout info">
+        <SecurityRounded fontSize="small" />
+        <Typography color="text.secondary" variant="body2">
+          智能全机发现仍未启用；未来如进入高级阶段，必须重新设计权限门控、限速、暂停恢复和隐私策略。
+        </Typography>
+      </Box>
+
       {!tauriAvailable && (
         <Box className="scan-boundary-callout warn">
           <WarningAmberRounded fontSize="small" />
@@ -476,39 +656,12 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         </Box>
       )}
 
-      {busyState !== "idle" && (
+      {batchBusyState === "adding" && (
         <Box className="scan-boundary-callout info">
           <Typography color="text.secondary" variant="body2">
-            正在等待目录选择器返回结果。
+            正在等待目录选择器返回结果；添加来源不会自动扫描。
           </Typography>
         </Box>
-      )}
-
-      {(scanJobSnapshot || lifecycle !== "idle") && (
-        <AiosSection className="scan-progress-section">
-          <AiosSectionHeader
-            title="扫描任务"
-            summary={lifecycleSummary(lifecycle, scanJobSnapshot)}
-            action={<Chip className={`status-chip ${lifecycleChipClass(lifecycle)}`} label={lifecycleLabel(lifecycle)} variant="outlined" />}
-          />
-          <Box className="scan-progress-card">
-            <Box className="scan-progress-heading">
-              <Typography component="strong">{scanJobSnapshot?.rootSummary ?? selectedDirectory?.rootSummary ?? "尚未选择目录"}</Typography>
-              <Typography color="text.secondary" variant="body2">
-                {scanJobSnapshot ? `模板 ${scanJobSnapshot.progress.profileId} · 阶段 ${phaseLabel(scanJobSnapshot.progress.currentPhase)}` : "等待用户选择目录并启动扫描。"}
-              </Typography>
-            </Box>
-            <LinearProgress className="scan-progress-bar" value={progressPercent} variant="determinate" />
-            <Box className="scan-progress-grid">
-              <ProgressMetric label="已访问" value={scanJobSnapshot?.progress.visitedEntries ?? 0} />
-              <ProgressMetric label="已匹配" value={scanJobSnapshot?.progress.matchedResources ?? 0} />
-              <ProgressMetric label="已跳过" value={scanJobSnapshot?.progress.skippedEntries ?? 0} />
-              <ProgressMetric label="耗时" value={`${scanJobSnapshot ? Math.max(0, Math.round(scanJobSnapshot.progress.elapsedMs / 1000)) : 0}s`} />
-              <ProgressMetric label="深度上限" value={scanJobSnapshot?.progress.maxDepth ?? activeProfile.maxDepth} />
-              <ProgressMetric label="条目上限" value={scanJobSnapshot?.progress.maxEntries ?? activeProfile.maxEntries} />
-            </Box>
-          </Box>
-        </AiosSection>
       )}
 
       {scanResult && (
@@ -537,11 +690,11 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         </AiosSection>
       )}
 
-      {(scanResult || scanJobSnapshot) && (
+      {scanResult && (
         <AiosSection className="scan-skipped-summary-section">
-          <AiosSectionHeader title="跳过摘要" summary="仅展示聚合计数；不会暴露绝对路径或敏感值。" count={skippedSummaryItems(scanResult, scanJobSnapshot).reduce((total, item) => total + item.value, 0)} />
+          <AiosSectionHeader title="跳过摘要" summary="仅展示聚合计数；不会暴露绝对路径或敏感值。" count={skippedSummaryItems(scanResult, null).reduce((total, item) => total + item.value, 0)} />
           <Box className="scan-skipped-summary-grid">
-            {skippedSummaryItems(scanResult, scanJobSnapshot).map((item) => (
+            {skippedSummaryItems(scanResult, null).map((item) => (
               <Box className="scan-skipped-summary-item" key={item.label}>
                 <Typography component="strong">{item.label}</Typography>
                 <Typography className="scan-category-count" component="span">
@@ -587,9 +740,9 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         )
       ) : (
         <Box className="scan-empty-state">
-          <Typography component="strong">{emptyStateTitle(lifecycle)}</Typography>
+          <Typography component="strong">{scanManagementEmptyTitle(batchSnapshot)}</Typography>
           <Typography color="text.secondary" variant="body2">
-            {emptyStateSummary(lifecycle)}
+            {scanManagementEmptySummary(batchSnapshot)}
           </Typography>
         </Box>
       )}
@@ -606,69 +759,20 @@ function ProgressMetric({ label, value }: { label: string; value: string | numbe
   );
 }
 
-function progressPercentFor(snapshot: ScanJobSnapshot): number {
-  if (snapshot.progress.maxEntries <= 0) return 0;
-  return Math.max(0, Math.min(100, (snapshot.progress.visitedEntries / snapshot.progress.maxEntries) * 100));
+function scanManagementEmptyTitle(snapshot: ScanBatchSnapshot | null): string {
+  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "批次扫描运行中";
+  if (snapshot?.status === "completed") return "批次扫描已完成";
+  if (snapshot?.status === "cancelled") return "批次扫描已取消";
+  if (snapshot?.status === "failed") return "批次扫描有失败来源";
+  return "等待配置扫描来源";
 }
 
-function lifecycleLabel(lifecycle: ScanLifecycleState): string {
-  const labels: Record<ScanLifecycleState, string> = {
-    idle: "空闲",
-    "directory-selected": "已选目录",
-    running: "运行中",
-    cancelling: "取消中",
-    completed: "已完成",
-    cancelled: "已取消",
-    failed: "失败"
-  };
-  return labels[lifecycle];
-}
-
-function lifecycleChipClass(lifecycle: ScanLifecycleState): string {
-  if (lifecycle === "running" || lifecycle === "completed" || lifecycle === "directory-selected") return "status-ok";
-  if (lifecycle === "cancelled" || lifecycle === "cancelling") return "status-warn";
-  if (lifecycle === "failed") return "status-warn";
-  return "status-disabled";
-}
-
-function lifecycleSummary(lifecycle: ScanLifecycleState, snapshot: ScanJobSnapshot | null): string {
-  if (snapshot?.error?.message) return snapshot.error.message;
-  if (lifecycle === "running") return "正在执行有界 metadata-only 扫描；可取消，不读取内容。";
-  if (lifecycle === "cancelling") return "已请求取消，Rust 扫描器会在下一个遍历检查点停止。";
-  if (lifecycle === "completed") return "扫描已完成，安全元数据已写入本地资源库。";
-  if (lifecycle === "cancelled") return "扫描已取消，可重新运行或选择其它目录。";
-  if (lifecycle === "failed") return "扫描失败，可选择其它目录或重新运行。";
-  if (lifecycle === "directory-selected") return "目录已选择，等待手动运行扫描。";
-  return "等待指定目录扫描。";
-}
-
-function emptyStateTitle(lifecycle: ScanLifecycleState): string {
-  if (lifecycle === "cancelled") return "扫描已取消";
-  if (lifecycle === "failed") return "扫描失败";
-  if (lifecycle === "running" || lifecycle === "cancelling") return "扫描任务运行中";
-  if (lifecycle === "completed") return "没有匹配的可见结果";
-  return "等待指定目录扫描";
-}
-
-function emptyStateSummary(lifecycle: ScanLifecycleState): string {
-  if (lifecycle === "cancelled") return "任务已安全停止。可以重新运行当前目录，也可以选择其它目录。";
-  if (lifecycle === "failed") return "错误已显示在上方。失败任务只保留安全摘要，可在本地资源库中清空。";
-  if (lifecycle === "running" || lifecycle === "cancelling") return "正在处理任务状态，结果会在完成后显示。";
-  if (lifecycle === "completed") return "扫描完成，但当前搜索或分类下没有可见结果。";
-  return "先选择扫描模板，再选择一个通过策略守卫的目录并手动运行扫描。全盘扫描已禁用，非 MVP，未来需要单独批准。";
-}
-
-function phaseLabel(phase: string): string {
-  const labels: Record<string, string> = {
-    queued: "排队",
-    walking: "遍历元数据",
-    finalizing: "汇总结果",
-    completed: "完成",
-    cancelling: "取消中",
-    cancelled: "已取消",
-    failed: "失败"
-  };
-  return labels[phase] ?? phase;
+function scanManagementEmptySummary(snapshot: ScanBatchSnapshot | null): string {
+  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "结果会写入本地 SQLite 资源库；此视图展示来源状态和持久资源计数。";
+  if (snapshot?.status === "completed") return "可在本地资源库摘要和来源行查看持久资源计数。";
+  if (snapshot?.status === "cancelled") return "当前来源已安全停止，队列中未开始的来源会标记为取消。";
+  if (snapshot?.status === "failed") return "失败来源只保留安全错误摘要；可调整来源后重新手动扫描。";
+  return "添加一个或多个目录后，选择要扫描的已启用来源，再手动启动顺序扫描。全盘扫描仍未启用。";
 }
 
 interface SkippedSummaryItem {

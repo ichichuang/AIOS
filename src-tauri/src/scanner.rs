@@ -1,6 +1,6 @@
 use crate::resource_store::{
     self, PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput,
-    PersistScanSkipInput, PersistScanSourceInput,
+    PersistScanSkipInput, PersistScanSourceInput, UpsertScanSourceInput,
 };
 use ignore::WalkBuilder;
 use serde::Serialize;
@@ -25,11 +25,13 @@ const MAX_RETAINED_SCAN_JOBS: usize = 8;
 const SCAN_JOB_PROGRESS_EVENT: &str = "aios://scan-job-progress";
 const REDACTED_SEGMENT: &str = "[sensitive]";
 static NEXT_SCAN_JOB_COUNTER: AtomicUsize = AtomicUsize::new(1);
+static NEXT_SCAN_BATCH_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Default)]
 pub struct ScanState {
     selected_root: Mutex<Option<SelectedRoot>>,
     jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    batches: Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -178,6 +180,90 @@ pub struct ScanStarted {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AddScanSourcesResult {
+    sources: Vec<resource_store::PersistedScanSource>,
+    selected_count: usize,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanBatchStatus {
+    Queued,
+    Running,
+    Cancelling,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub enum ScanBatchSourceStatus {
+    Idle,
+    Queued,
+    Running,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanBatchProgress {
+    completed_sources: usize,
+    total_sources: usize,
+    active_visited_entries: usize,
+    active_matched_resources: usize,
+    active_skipped_entries: usize,
+    elapsed_ms: u64,
+    cancellation_requested: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanBatchSourceSnapshot {
+    scan_source_id: String,
+    display_name: String,
+    root_display_path: String,
+    profile_id: String,
+    project_label: Option<String>,
+    status: ScanBatchSourceStatus,
+    job_id: Option<String>,
+    resources_found: u64,
+    skipped_entries: u64,
+    error_count: u64,
+    last_scanned_at_ms: Option<u64>,
+    message: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanBatchSnapshot {
+    batch_id: String,
+    status: ScanBatchStatus,
+    started_at_ms: u64,
+    updated_at_ms: u64,
+    completed_at_ms: Option<u64>,
+    total_sources: usize,
+    completed_sources: usize,
+    cancelled_sources: usize,
+    failed_sources: usize,
+    active_source_id: Option<String>,
+    progress: ScanBatchProgress,
+    sources: Vec<ScanBatchSourceSnapshot>,
+    error: Option<ScanCommandError>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanBatchStarted {
+    batch_id: String,
+    snapshot: ScanBatchSnapshot,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct ScanCompleted {
     job_id: String,
@@ -220,6 +306,12 @@ struct ScanJobRecord {
     snapshot: ScanJobSnapshot,
 }
 
+#[derive(Clone)]
+struct ScanBatchRecord {
+    cancellation: ScanCancellation,
+    snapshot: ScanBatchSnapshot,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanResource {
@@ -255,8 +347,10 @@ pub struct ValidatedRoot {
 enum ScanError {
     InvalidPath(String),
     InvalidProfile(String),
+    InvalidInput(String),
     JobConflict(String),
     JobMissing(String),
+    BatchMissing(String),
     Cancelled,
     RejectedRoot(String),
     Permission(String),
@@ -304,6 +398,61 @@ pub async fn pick_scan_directory(
         root_summary: root.root_summary,
         policy_decision: "allowed_custom_directory",
     }))
+}
+
+#[tauri::command]
+pub async fn add_scan_sources(
+    app: tauri::AppHandle,
+    profile_id: Option<String>,
+    project_label: Option<String>,
+    store: State<'_, resource_store::ResourceStoreState>,
+) -> Result<AddScanSourcesResult, ScanCommandError> {
+    let profile = resolve_scan_profile(profile_id.as_deref()).map_err(ScanCommandError::from)?;
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("添加扫描来源目录")
+        .set_can_create_directories(false)
+        .blocking_pick_folders();
+
+    let Some(selected_paths) = selected else {
+        return Ok(AddScanSourcesResult {
+            sources: Vec::new(),
+            selected_count: 0,
+        });
+    };
+
+    let mut sources = Vec::new();
+    let selected_count = selected_paths.len();
+    for selected in selected_paths {
+        let selected_path = selected.into_path().map_err(|_| {
+            ScanCommandError::from(ScanError::InvalidPath(
+                "目录选择器返回了非本地路径。".to_string(),
+            ))
+        })?;
+        let root = validate_scan_root(&selected_path)?;
+        let source = resource_store::upsert_scan_source_for_path(
+            &store.db_path(),
+            UpsertScanSourceInput {
+                id: None,
+                display_name: root.display_name.clone(),
+                root_path: root.canonical_root.to_string_lossy().to_string(),
+                root_display_path: root.root_summary.clone(),
+                profile_id: profile.id.to_string(),
+                source_kind: "custom-directory".to_string(),
+                project_label: normalize_optional_label(project_label.as_deref()),
+                enabled: true,
+            },
+        )
+        .map_err(store_error_to_scan_error)
+        .map_err(ScanCommandError::from)?;
+        sources.push(source);
+    }
+
+    Ok(AddScanSourcesResult {
+        sources,
+        selected_count,
+    })
 }
 
 #[tauri::command]
@@ -393,6 +542,7 @@ pub fn start_custom_scan_job(
         snapshot: snapshot.clone(),
     };
 
+    ensure_no_active_batches(&state.batches).map_err(ScanCommandError::from)?;
     insert_scan_job(&state.jobs, job_id.clone(), record).map_err(ScanCommandError::from)?;
 
     let jobs = Arc::clone(&state.jobs);
@@ -454,6 +604,125 @@ pub fn get_scan_job_snapshot(
 }
 
 #[tauri::command]
+pub fn start_scan_sources_batch(
+    app: tauri::AppHandle,
+    source_ids: Vec<String>,
+    state: State<'_, ScanState>,
+    store: State<'_, resource_store::ResourceStoreState>,
+) -> Result<ScanBatchStarted, ScanCommandError> {
+    let normalized_ids = normalize_source_ids(source_ids).map_err(ScanCommandError::from)?;
+    let sources = resource_store::list_enabled_stored_scan_sources_for_path(
+        &store.db_path(),
+        &normalized_ids,
+    )
+    .map_err(store_error_to_scan_error)
+    .map_err(ScanCommandError::from)?;
+    if sources.is_empty() {
+        return Err(ScanCommandError::from(ScanError::InvalidInput(
+            "没有可扫描的已启用来源。".to_string(),
+        )));
+    }
+    ensure_no_active_jobs(&state.jobs).map_err(ScanCommandError::from)?;
+    ensure_no_active_batches(&state.batches).map_err(ScanCommandError::from)?;
+
+    let batch_id = make_scan_batch_id();
+    let started_at_ms = current_time_ms();
+    let cancellation = ScanCancellation::default();
+    let source_snapshots = sources
+        .iter()
+        .map(|source| {
+            ScanBatchSourceSnapshot::from_stored_source(source, ScanBatchSourceStatus::Queued)
+        })
+        .collect::<Vec<_>>();
+    let snapshot = ScanBatchSnapshot {
+        batch_id: batch_id.clone(),
+        status: ScanBatchStatus::Queued,
+        started_at_ms,
+        updated_at_ms: started_at_ms,
+        completed_at_ms: None,
+        total_sources: source_snapshots.len(),
+        completed_sources: 0,
+        cancelled_sources: 0,
+        failed_sources: 0,
+        active_source_id: None,
+        progress: ScanBatchProgress {
+            completed_sources: 0,
+            total_sources: source_snapshots.len(),
+            active_visited_entries: 0,
+            active_matched_resources: 0,
+            active_skipped_entries: 0,
+            elapsed_ms: 0,
+            cancellation_requested: false,
+        },
+        sources: source_snapshots,
+        error: None,
+    };
+    insert_scan_batch(
+        &state.batches,
+        batch_id.clone(),
+        ScanBatchRecord {
+            cancellation: cancellation.clone(),
+            snapshot: snapshot.clone(),
+        },
+    )
+    .map_err(ScanCommandError::from)?;
+
+    let jobs = Arc::clone(&state.jobs);
+    let batches = Arc::clone(&state.batches);
+    let resource_store_path = store.db_path();
+    let worker_batch_id = batch_id.clone();
+    thread::spawn(move || {
+        run_scan_batch_worker(
+            app,
+            jobs,
+            batches,
+            worker_batch_id,
+            sources,
+            cancellation,
+            resource_store_path,
+        );
+    });
+
+    Ok(ScanBatchStarted { batch_id, snapshot })
+}
+
+#[tauri::command]
+pub fn cancel_scan_batch(
+    batch_id: String,
+    state: State<'_, ScanState>,
+) -> Result<ScanBatchSnapshot, ScanCommandError> {
+    let mut batches = state.batches.lock().map_err(|_| {
+        ScanCommandError::from(ScanError::Permission("扫描批次状态锁定失败。".to_string()))
+    })?;
+    let record = batches
+        .get_mut(&batch_id)
+        .ok_or_else(|| ScanError::BatchMissing("未找到扫描批次。".to_string()))?;
+    record.cancellation.request();
+    if record.snapshot.status.is_active() {
+        record.snapshot.status = ScanBatchStatus::Cancelling;
+        record.snapshot.progress.cancellation_requested = true;
+        record.snapshot.updated_at_ms = current_time_ms();
+    }
+    Ok(record.snapshot.clone())
+}
+
+#[tauri::command]
+pub fn get_scan_batch_snapshot(
+    batch_id: String,
+    state: State<'_, ScanState>,
+) -> Result<ScanBatchSnapshot, ScanCommandError> {
+    let batches = state.batches.lock().map_err(|_| {
+        ScanCommandError::from(ScanError::Permission("扫描批次状态锁定失败。".to_string()))
+    })?;
+    batches
+        .get(&batch_id)
+        .map(|record| record.snapshot.clone())
+        .ok_or_else(|| {
+            ScanCommandError::from(ScanError::BatchMissing("未找到扫描批次。".to_string()))
+        })
+}
+
+#[tauri::command]
 pub fn get_scan_policy() -> ScannerPolicy {
     scanner_policy()
 }
@@ -504,6 +773,37 @@ impl ScanJobStatus {
             self,
             ScanJobStatus::Queued | ScanJobStatus::Running | ScanJobStatus::Cancelling
         )
+    }
+}
+
+impl ScanBatchStatus {
+    fn is_active(&self) -> bool {
+        matches!(
+            self,
+            ScanBatchStatus::Queued | ScanBatchStatus::Running | ScanBatchStatus::Cancelling
+        )
+    }
+}
+
+impl ScanBatchSourceSnapshot {
+    fn from_stored_source(
+        source: &resource_store::StoredScanSource,
+        status: ScanBatchSourceStatus,
+    ) -> Self {
+        Self {
+            scan_source_id: source.id.clone(),
+            display_name: source.display_name.clone(),
+            root_display_path: source.root_display_path.clone(),
+            profile_id: source.profile_id.clone(),
+            project_label: source.project_label.clone(),
+            status,
+            job_id: None,
+            resources_found: 0,
+            skipped_entries: 0,
+            error_count: 0,
+            last_scanned_at_ms: None,
+            message: None,
+        }
     }
 }
 
@@ -560,6 +860,63 @@ fn make_scan_job_id() -> String {
     format!("scan-job-{}-{counter}", current_time_ms())
 }
 
+fn make_scan_batch_id() -> String {
+    let counter = NEXT_SCAN_BATCH_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("scan-batch-{}-{counter}", current_time_ms())
+}
+
+fn normalize_source_ids(source_ids: Vec<String>) -> Result<Vec<String>, ScanError> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for source_id in source_ids {
+        let source_id = source_id.trim();
+        if source_id.is_empty() || !seen.insert(source_id.to_string()) {
+            continue;
+        }
+        normalized.push(source_id.to_string());
+    }
+    if normalized.is_empty() {
+        return Err(ScanError::InvalidInput(
+            "请至少选择一个扫描来源。".to_string(),
+        ));
+    }
+    Ok(normalized)
+}
+
+fn ensure_no_active_jobs(
+    jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+) -> Result<(), ScanError> {
+    let guard = jobs
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描状态锁定失败。".to_string()))?;
+    if guard
+        .values()
+        .any(|existing| existing.snapshot.status.is_active())
+    {
+        return Err(ScanError::JobConflict(
+            "已有扫描任务正在运行，请等待完成或取消后再试。".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_no_active_batches(
+    batches: &Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+) -> Result<(), ScanError> {
+    let guard = batches
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描批次状态锁定失败。".to_string()))?;
+    if guard
+        .values()
+        .any(|existing| existing.snapshot.status.is_active())
+    {
+        return Err(ScanError::JobConflict(
+            "已有扫描批次正在运行，请等待完成或取消后再试。".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn insert_scan_job(
     jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
     job_id: String,
@@ -579,6 +936,26 @@ fn insert_scan_job(
 
     prune_scan_jobs_locked(&mut guard);
     guard.insert(job_id, record);
+    Ok(())
+}
+
+fn insert_scan_batch(
+    batches: &Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+    batch_id: String,
+    record: ScanBatchRecord,
+) -> Result<(), ScanError> {
+    let mut guard = batches
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描批次状态锁定失败。".to_string()))?;
+    if guard
+        .values()
+        .any(|existing| existing.snapshot.status.is_active())
+    {
+        return Err(ScanError::JobConflict(
+            "已有扫描批次正在运行，请等待完成或取消后再试。".to_string(),
+        ));
+    }
+    guard.insert(batch_id, record);
     Ok(())
 }
 
@@ -639,6 +1016,7 @@ fn run_scan_job_worker(
         max_depth: profile.max_depth,
         max_entries: profile.max_entries,
         last_emitted_visited_entries: 0,
+        batch_context: None,
     };
 
     match scan_validated_root_with_progress(&selected_root, &profile, Some(&mut progress)) {
@@ -746,6 +1124,303 @@ fn run_scan_job_worker(
     }
 }
 
+fn run_scan_batch_worker(
+    app: tauri::AppHandle,
+    jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    batches: Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+    batch_id: String,
+    sources: Vec<resource_store::StoredScanSource>,
+    cancellation: ScanCancellation,
+    resource_store_path: PathBuf,
+) {
+    let _ = update_scan_batch_snapshot(&batches, &batch_id, |snapshot| {
+        snapshot.status = ScanBatchStatus::Running;
+        snapshot.updated_at_ms = current_time_ms();
+        snapshot.progress.elapsed_ms = snapshot
+            .updated_at_ms
+            .saturating_sub(snapshot.started_at_ms);
+    });
+
+    for source in sources {
+        if cancellation.is_requested() {
+            let _ = update_scan_batch_source(&batches, &batch_id, &source.id, |source_snapshot| {
+                source_snapshot.status = ScanBatchSourceStatus::Cancelled;
+                source_snapshot.message = Some("批次已取消，未开始扫描。".to_string());
+            });
+            continue;
+        }
+
+        let job_id = make_scan_job_id();
+        let started_at_ms = current_time_ms();
+        let selected_root = match selected_root_from_stored_source(&source) {
+            Ok(root) => root,
+            Err(error) => {
+                let command_error = ScanCommandError::from(error);
+                persist_failed_batch_source_job(
+                    &resource_store_path,
+                    &source,
+                    &job_id,
+                    started_at_ms,
+                    &command_error,
+                );
+                let _ = update_scan_batch_source(&batches, &batch_id, &source.id, |snapshot| {
+                    snapshot.status = ScanBatchSourceStatus::Failed;
+                    snapshot.job_id = Some(job_id.clone());
+                    snapshot.error_count = 1;
+                    snapshot.last_scanned_at_ms = Some(current_time_ms());
+                    snapshot.message = Some(command_error.message.clone());
+                });
+                continue;
+            }
+        };
+        let profile = match resolve_scan_profile(Some(&source.profile_id)) {
+            Ok(profile) => profile,
+            Err(error) => {
+                let command_error = ScanCommandError::from(error);
+                persist_failed_batch_source_job(
+                    &resource_store_path,
+                    &source,
+                    &job_id,
+                    started_at_ms,
+                    &command_error,
+                );
+                let _ = update_scan_batch_source(&batches, &batch_id, &source.id, |snapshot| {
+                    snapshot.status = ScanBatchSourceStatus::Failed;
+                    snapshot.job_id = Some(job_id.clone());
+                    snapshot.error_count = 1;
+                    snapshot.last_scanned_at_ms = Some(current_time_ms());
+                    snapshot.message = Some(command_error.message.clone());
+                });
+                continue;
+            }
+        };
+
+        let progress = ScanProgress::from_counts(
+            profile.id,
+            &ScanCounts::default(),
+            0,
+            started_at_ms,
+            "queued",
+            false,
+            profile.max_depth,
+            profile.max_entries,
+        );
+        let job_snapshot = ScanJobSnapshot {
+            job_id: job_id.clone(),
+            status: ScanJobStatus::Queued,
+            profile_id: profile.id,
+            root_display_name: selected_root.display_name.clone(),
+            root_summary: selected_root.root_summary.clone(),
+            started_at_ms,
+            updated_at_ms: started_at_ms,
+            completed_at_ms: None,
+            progress,
+            result: None,
+            error: None,
+        };
+        let job_record = ScanJobRecord {
+            cancellation: cancellation.clone(),
+            snapshot: job_snapshot,
+        };
+        if let Err(error) = insert_scan_job(&jobs, job_id.clone(), job_record) {
+            let command_error = ScanCommandError::from(error);
+            let _ = update_scan_batch_source(&batches, &batch_id, &source.id, |snapshot| {
+                snapshot.status = ScanBatchSourceStatus::Failed;
+                snapshot.job_id = Some(job_id.clone());
+                snapshot.error_count = 1;
+                snapshot.last_scanned_at_ms = Some(current_time_ms());
+                snapshot.message = Some(command_error.message.clone());
+            });
+            continue;
+        }
+
+        let _ = update_scan_batch_source(&batches, &batch_id, &source.id, |snapshot| {
+            snapshot.status = ScanBatchSourceStatus::Running;
+            snapshot.job_id = Some(job_id.clone());
+            snapshot.message = None;
+        });
+        let source_id = source.id.clone();
+        let project_label = source.project_label.clone();
+        let mut progress_handle = ScanJobProgressHandle {
+            app: app.clone(),
+            jobs: Arc::clone(&jobs),
+            job_id: job_id.clone(),
+            cancellation: cancellation.clone(),
+            started_at_ms,
+            profile_id: profile.id,
+            max_depth: profile.max_depth,
+            max_entries: profile.max_entries,
+            last_emitted_visited_entries: 0,
+            batch_context: Some(ScanBatchProgressContext {
+                batches: Arc::clone(&batches),
+                batch_id: batch_id.clone(),
+                scan_source_id: source_id.clone(),
+            }),
+        };
+
+        match scan_validated_root_with_progress(
+            &selected_root,
+            &profile,
+            Some(&mut progress_handle),
+        ) {
+            Ok(result) => {
+                let completed_at_ms = current_time_ms();
+                let persist_result = persist_completed_scan_result_for_source(
+                    &resource_store_path,
+                    &job_id,
+                    "start_scan_sources_batch",
+                    started_at_ms,
+                    completed_at_ms,
+                    &selected_root,
+                    &profile,
+                    &result,
+                    Some(&source_id),
+                    project_label.as_deref(),
+                );
+                if let Err(error) = persist_result {
+                    let command_error = ScanCommandError::from(error);
+                    let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                        snapshot.status = ScanJobStatus::Failed;
+                        snapshot.updated_at_ms = current_time_ms();
+                        snapshot.completed_at_ms = Some(snapshot.updated_at_ms);
+                        snapshot.progress.current_phase = "failed";
+                        snapshot.error = Some(command_error.clone());
+                    });
+                    let _ = update_scan_batch_source(&batches, &batch_id, &source_id, |snapshot| {
+                        snapshot.status = ScanBatchSourceStatus::Failed;
+                        snapshot.error_count = 1;
+                        snapshot.last_scanned_at_ms = Some(current_time_ms());
+                        snapshot.message = Some(command_error.message.clone());
+                    });
+                    emit_scan_job_progress(&app, &jobs, &job_id);
+                    continue;
+                }
+                let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                    snapshot.status = ScanJobStatus::Completed;
+                    snapshot.updated_at_ms = completed_at_ms;
+                    snapshot.completed_at_ms = Some(completed_at_ms);
+                    snapshot.progress = ScanProgress::from_counts(
+                        profile.id,
+                        &result.counts,
+                        result.resources.len(),
+                        snapshot.started_at_ms,
+                        "completed",
+                        false,
+                        profile.max_depth,
+                        profile.max_entries,
+                    );
+                    snapshot.result = Some(result.clone());
+                    snapshot.error = None;
+                });
+                let skipped_entries = count_skipped_entries(&result.counts);
+                let _ = update_scan_batch_source(&batches, &batch_id, &source_id, |snapshot| {
+                    snapshot.status = ScanBatchSourceStatus::Completed;
+                    snapshot.resources_found = result.resources.len() as u64;
+                    snapshot.skipped_entries = skipped_entries as u64;
+                    snapshot.error_count =
+                        error_inputs_from_warnings(&result.warnings).len() as u64;
+                    snapshot.last_scanned_at_ms = Some(completed_at_ms);
+                    snapshot.message = Some("扫描完成。".to_string());
+                });
+                emit_scan_job_progress(&app, &jobs, &job_id);
+            }
+            Err(ScanError::Cancelled) => {
+                let snapshot_after_cancel = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                    let completed_at_ms = current_time_ms();
+                    snapshot.status = ScanJobStatus::Cancelled;
+                    snapshot.updated_at_ms = completed_at_ms;
+                    snapshot.completed_at_ms = Some(completed_at_ms);
+                    snapshot.progress.current_phase = "cancelled";
+                    snapshot.progress.cancellation_requested = true;
+                    snapshot.progress.elapsed_ms =
+                        completed_at_ms.saturating_sub(snapshot.started_at_ms);
+                    snapshot.result = None;
+                    snapshot.error = None;
+                });
+                if let Ok(snapshot) = snapshot_after_cancel.as_ref() {
+                    let _ = persist_terminal_scan_snapshot_for_source(
+                        &resource_store_path,
+                        &selected_root,
+                        snapshot,
+                        Some(&source_id),
+                        project_label.as_deref(),
+                    );
+                }
+                let _ = update_scan_batch_source(&batches, &batch_id, &source_id, |snapshot| {
+                    snapshot.status = ScanBatchSourceStatus::Cancelled;
+                    snapshot.last_scanned_at_ms = Some(current_time_ms());
+                    snapshot.message = Some("扫描已取消。".to_string());
+                });
+                emit_scan_job_progress(&app, &jobs, &job_id);
+                break;
+            }
+            Err(error) => {
+                let command_error = ScanCommandError::from(error);
+                let snapshot_after_failure = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                    let completed_at_ms = current_time_ms();
+                    snapshot.status = ScanJobStatus::Failed;
+                    snapshot.updated_at_ms = completed_at_ms;
+                    snapshot.completed_at_ms = Some(completed_at_ms);
+                    snapshot.progress.current_phase = "failed";
+                    snapshot.progress.elapsed_ms =
+                        completed_at_ms.saturating_sub(snapshot.started_at_ms);
+                    snapshot.result = None;
+                    snapshot.error = Some(command_error.clone());
+                });
+                if let Ok(snapshot) = snapshot_after_failure.as_ref() {
+                    let _ = persist_terminal_scan_snapshot_for_source(
+                        &resource_store_path,
+                        &selected_root,
+                        snapshot,
+                        Some(&source_id),
+                        project_label.as_deref(),
+                    );
+                }
+                let _ = update_scan_batch_source(&batches, &batch_id, &source_id, |snapshot| {
+                    snapshot.status = ScanBatchSourceStatus::Failed;
+                    snapshot.error_count = 1;
+                    snapshot.last_scanned_at_ms = Some(current_time_ms());
+                    snapshot.message = Some(command_error.message.clone());
+                });
+                emit_scan_job_progress(&app, &jobs, &job_id);
+            }
+        }
+    }
+
+    let _ = update_scan_batch_snapshot(&batches, &batch_id, |snapshot| {
+        if cancellation.is_requested() {
+            for source in &mut snapshot.sources {
+                if matches!(
+                    source.status,
+                    ScanBatchSourceStatus::Queued | ScanBatchSourceStatus::Idle
+                ) {
+                    source.status = ScanBatchSourceStatus::Cancelled;
+                    source.message = Some("批次已取消，未开始扫描。".to_string());
+                }
+            }
+        }
+        recompute_batch_counters(snapshot);
+        snapshot.status = if snapshot.cancelled_sources > 0
+            && snapshot.completed_sources < snapshot.total_sources
+        {
+            ScanBatchStatus::Cancelled
+        } else if snapshot.failed_sources > 0 {
+            ScanBatchStatus::Failed
+        } else if snapshot.cancelled_sources > 0 {
+            ScanBatchStatus::Cancelled
+        } else {
+            ScanBatchStatus::Completed
+        };
+        snapshot.active_source_id = None;
+        snapshot.updated_at_ms = current_time_ms();
+        snapshot.completed_at_ms = Some(snapshot.updated_at_ms);
+        snapshot.progress.elapsed_ms = snapshot
+            .updated_at_ms
+            .saturating_sub(snapshot.started_at_ms);
+        snapshot.progress.cancellation_requested = cancellation.is_requested();
+    });
+}
+
 fn update_scan_job_snapshot<F, R>(
     jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
     job_id: &str,
@@ -762,6 +1437,77 @@ where
         .ok_or_else(|| ScanError::JobMissing("未找到扫描任务。".to_string()))?;
     update(&mut record.snapshot);
     Ok(record.snapshot.clone())
+}
+
+fn update_scan_batch_snapshot<F, R>(
+    batches: &Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+    batch_id: &str,
+    update: F,
+) -> Result<ScanBatchSnapshot, ScanError>
+where
+    F: FnOnce(&mut ScanBatchSnapshot) -> R,
+{
+    let mut guard = batches
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描批次状态锁定失败。".to_string()))?;
+    let record = guard
+        .get_mut(batch_id)
+        .ok_or_else(|| ScanError::BatchMissing("未找到扫描批次。".to_string()))?;
+    update(&mut record.snapshot);
+    recompute_batch_counters(&mut record.snapshot);
+    Ok(record.snapshot.clone())
+}
+
+fn update_scan_batch_source<F, R>(
+    batches: &Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+    batch_id: &str,
+    source_id: &str,
+    update: F,
+) -> Result<ScanBatchSnapshot, ScanError>
+where
+    F: FnOnce(&mut ScanBatchSourceSnapshot) -> R,
+{
+    update_scan_batch_snapshot(batches, batch_id, |snapshot| {
+        snapshot.active_source_id = Some(source_id.to_string());
+        snapshot.updated_at_ms = current_time_ms();
+        snapshot.progress.elapsed_ms = snapshot
+            .updated_at_ms
+            .saturating_sub(snapshot.started_at_ms);
+        if let Some(source) = snapshot
+            .sources
+            .iter_mut()
+            .find(|source| source.scan_source_id == source_id)
+        {
+            update(source);
+        }
+    })
+}
+
+fn recompute_batch_counters(snapshot: &mut ScanBatchSnapshot) {
+    snapshot.completed_sources = snapshot
+        .sources
+        .iter()
+        .filter(|source| {
+            matches!(
+                source.status,
+                ScanBatchSourceStatus::Completed
+                    | ScanBatchSourceStatus::Cancelled
+                    | ScanBatchSourceStatus::Failed
+            )
+        })
+        .count();
+    snapshot.cancelled_sources = snapshot
+        .sources
+        .iter()
+        .filter(|source| source.status == ScanBatchSourceStatus::Cancelled)
+        .count();
+    snapshot.failed_sources = snapshot
+        .sources
+        .iter()
+        .filter(|source| source.status == ScanBatchSourceStatus::Failed)
+        .count();
+    snapshot.progress.completed_sources = snapshot.completed_sources;
+    snapshot.progress.total_sources = snapshot.total_sources;
 }
 
 fn emit_scan_job_progress(
@@ -797,6 +1543,32 @@ fn persist_completed_scan_result(
     profile: &ScanProfileDefinition,
     result: &CustomScanResult,
 ) -> Result<(), ScanError> {
+    persist_completed_scan_result_for_source(
+        db_path,
+        job_id,
+        requested_by,
+        started_at_ms,
+        finished_at_ms,
+        selected_root,
+        profile,
+        result,
+        None,
+        None,
+    )
+}
+
+fn persist_completed_scan_result_for_source(
+    db_path: &Path,
+    job_id: &str,
+    requested_by: &str,
+    started_at_ms: u64,
+    finished_at_ms: u64,
+    selected_root: &SelectedRoot,
+    profile: &ScanProfileDefinition,
+    result: &CustomScanResult,
+    source_id: Option<&str>,
+    project_label: Option<&str>,
+) -> Result<(), ScanError> {
     let skipped_entries = result.counts.skipped_by_exclude
         + result.counts.skipped_by_guard
         + result.counts.skipped_by_metadata_error
@@ -819,7 +1591,7 @@ fn persist_completed_scan_result(
         error_count: error_inputs.len() as u64,
         cancelled: false,
         summary_json: completed_summary_json(result, profile),
-        source: scan_source_input(selected_root, profile),
+        source: scan_source_input(selected_root, profile, source_id, project_label),
         resources: result
             .resources
             .iter()
@@ -836,6 +1608,16 @@ fn persist_terminal_scan_snapshot(
     db_path: &Path,
     selected_root: &SelectedRoot,
     snapshot: &ScanJobSnapshot,
+) -> Result<(), ScanError> {
+    persist_terminal_scan_snapshot_for_source(db_path, selected_root, snapshot, None, None)
+}
+
+fn persist_terminal_scan_snapshot_for_source(
+    db_path: &Path,
+    selected_root: &SelectedRoot,
+    snapshot: &ScanJobSnapshot,
+    source_id: Option<&str>,
+    project_label: Option<&str>,
 ) -> Result<(), ScanError> {
     let profile = resolve_scan_profile(Some(snapshot.profile_id))?;
     let error_inputs = snapshot
@@ -872,7 +1654,7 @@ fn persist_terminal_scan_snapshot(
         error_count: error_inputs.len() as u64,
         cancelled: snapshot.status == ScanJobStatus::Cancelled,
         summary_json: terminal_summary_json(snapshot),
-        source: scan_source_input(selected_root, &profile),
+        source: scan_source_input(selected_root, &profile, source_id, project_label),
         resources: Vec::new(),
         skips,
         errors: error_inputs,
@@ -884,13 +1666,17 @@ fn persist_terminal_scan_snapshot(
 fn scan_source_input(
     selected_root: &SelectedRoot,
     profile: &ScanProfileDefinition,
+    source_id: Option<&str>,
+    project_label: Option<&str>,
 ) -> PersistScanSourceInput {
     PersistScanSourceInput {
+        id: source_id.map(ToString::to_string),
         display_name: selected_root.display_name.clone(),
         root_path: selected_root.canonical_root.to_string_lossy().to_string(),
         root_display_path: selected_root.root_summary.clone(),
         profile_id: profile.id.to_string(),
         source_kind: "custom-directory".to_string(),
+        project_label: normalize_optional_label(project_label),
     }
 }
 
@@ -1062,6 +1848,85 @@ fn store_error_to_scan_error(error: resource_store::ResourceStoreError) -> ScanE
     ScanError::Store(command_error.message)
 }
 
+fn selected_root_from_stored_source(
+    source: &resource_store::StoredScanSource,
+) -> Result<SelectedRoot, ScanError> {
+    let root = validate_scan_root_internal(Path::new(&source.root_path))?;
+    Ok(SelectedRoot {
+        selection_id: source.id.clone(),
+        canonical_root: root.canonical_root,
+        display_name: root.display_name,
+        root_summary: root.root_summary,
+    })
+}
+
+fn persist_failed_batch_source_job(
+    db_path: &Path,
+    source: &resource_store::StoredScanSource,
+    job_id: &str,
+    started_at_ms: u64,
+    error: &ScanCommandError,
+) {
+    let finished_at_ms = current_time_ms();
+    let input = PersistScanJobInput {
+        id: job_id.to_string(),
+        status: "failed".to_string(),
+        profile_id: source.profile_id.clone(),
+        started_at_ms,
+        finished_at_ms: Some(finished_at_ms),
+        elapsed_ms: finished_at_ms.saturating_sub(started_at_ms),
+        requested_by: "start_scan_sources_batch".to_string(),
+        total_entries: 0,
+        matched_resources: 0,
+        skipped_entries: 0,
+        error_count: 1,
+        cancelled: false,
+        summary_json: serde_json::json!({
+            "profileId": source.profile_id.as_str(),
+            "status": "failed",
+            "metadataOnly": true,
+            "contentStored": false,
+            "executionEnabled": false,
+            "fullDiskScanEnabled": false
+        })
+        .to_string(),
+        source: PersistScanSourceInput {
+            id: Some(source.id.clone()),
+            display_name: source.display_name.clone(),
+            root_path: source.root_path.clone(),
+            root_display_path: source.root_display_path.clone(),
+            profile_id: source.profile_id.clone(),
+            source_kind: source.source_kind.clone(),
+            project_label: source.project_label.clone(),
+        },
+        resources: Vec::new(),
+        skips: Vec::new(),
+        errors: vec![PersistScanErrorInput {
+            error_kind: error.code.to_string(),
+            message: error.message.clone(),
+            sample_safe_path: None,
+        }],
+    };
+    let _ = resource_store::persist_scan_job_for_path(db_path, input);
+}
+
+fn count_skipped_entries(counts: &ScanCounts) -> usize {
+    counts.skipped_by_exclude
+        + counts.skipped_by_guard
+        + counts.skipped_by_metadata_error
+        + counts.skipped_by_limit
+        + counts.skipped_by_cancellation
+        + counts.skipped_by_size
+        + counts.skipped_symlinks
+}
+
+fn normalize_optional_label(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
 struct ScanJobProgressHandle {
     app: tauri::AppHandle,
     jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
@@ -1072,6 +1937,14 @@ struct ScanJobProgressHandle {
     max_depth: usize,
     max_entries: usize,
     last_emitted_visited_entries: usize,
+    batch_context: Option<ScanBatchProgressContext>,
+}
+
+#[derive(Clone)]
+struct ScanBatchProgressContext {
+    batches: Arc<Mutex<HashMap<String, ScanBatchRecord>>>,
+    batch_id: String,
+    scan_source_id: String,
 }
 
 impl ScanJobProgressHandle {
@@ -1114,6 +1987,41 @@ impl ScanJobProgressHandle {
             snapshot.updated_at_ms = current_time_ms();
             snapshot.progress = progress;
         });
+        if let Some(context) = &self.batch_context {
+            let _ = update_scan_batch_snapshot(&context.batches, &context.batch_id, |snapshot| {
+                snapshot.updated_at_ms = current_time_ms();
+                snapshot.progress.active_visited_entries = counts.visited_entries;
+                snapshot.progress.active_matched_resources = matched_resources;
+                snapshot.progress.active_skipped_entries = ScanProgress::from_counts(
+                    self.profile_id,
+                    counts,
+                    matched_resources,
+                    self.started_at_ms,
+                    current_phase,
+                    self.is_cancelled(),
+                    self.max_depth,
+                    self.max_entries,
+                )
+                .skipped_entries;
+                snapshot.progress.elapsed_ms = snapshot
+                    .updated_at_ms
+                    .saturating_sub(snapshot.started_at_ms);
+                snapshot.progress.cancellation_requested = self.is_cancelled();
+                if let Some(source) = snapshot
+                    .sources
+                    .iter_mut()
+                    .find(|source| source.scan_source_id == context.scan_source_id)
+                {
+                    source.status = if self.is_cancelled() {
+                        ScanBatchSourceStatus::Running
+                    } else {
+                        ScanBatchSourceStatus::Running
+                    };
+                    source.resources_found = matched_resources as u64;
+                    source.skipped_entries = snapshot.progress.active_skipped_entries as u64;
+                }
+            });
+        }
         emit_scan_job_progress(&self.app, &self.jobs, &self.job_id);
     }
 }
@@ -1937,8 +2845,10 @@ impl From<ScanError> for ScanCommandError {
         match error {
             ScanError::InvalidPath(message) => Self { code, message },
             ScanError::InvalidProfile(message) => Self { code, message },
+            ScanError::InvalidInput(message) => Self { code, message },
             ScanError::JobConflict(message) => Self { code, message },
             ScanError::JobMissing(message) => Self { code, message },
+            ScanError::BatchMissing(message) => Self { code, message },
             ScanError::Cancelled => Self {
                 code,
                 message: "扫描已取消。".to_string(),
@@ -1959,8 +2869,10 @@ impl ScanError {
         match self {
             ScanError::InvalidPath(_) => "invalid_path",
             ScanError::InvalidProfile(_) => "invalid_profile",
+            ScanError::InvalidInput(_) => "invalid_input",
             ScanError::JobConflict(_) => "job_conflict",
             ScanError::JobMissing(_) => "job_missing",
+            ScanError::BatchMissing(_) => "batch_missing",
             ScanError::Cancelled => "cancelled",
             ScanError::RejectedRoot(_) => "rejected_root",
             ScanError::Permission(_) => "permission_error",
@@ -1974,9 +2886,11 @@ impl ScanError {
 mod tests {
     use super::{
         build_scan_job_event_payload, classify_resource_kind, current_time_ms, get_scan_profiles,
-        persist_completed_scan_result, redact_relative_path, resolve_scan_profile,
-        scan_validated_root, validate_scan_root, ScanCancellation, ScanCounts, ScanJobStatus,
-        ScanProgress, SelectedRoot, DEFAULT_SCAN_PROFILE_ID,
+        normalize_source_ids, persist_completed_scan_result, recompute_batch_counters,
+        redact_relative_path, resolve_scan_profile, scan_validated_root, validate_scan_root,
+        ScanBatchProgress, ScanBatchSnapshot, ScanBatchSourceSnapshot, ScanBatchSourceStatus,
+        ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus, ScanProgress, SelectedRoot,
+        DEFAULT_SCAN_PROFILE_ID,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -2248,6 +3162,64 @@ mod tests {
     }
 
     #[test]
+    fn batch_source_ids_are_normalized_and_deduplicated() {
+        let ids = normalize_source_ids(vec![
+            " source-a ".to_string(),
+            "source-b".to_string(),
+            "source-a".to_string(),
+            "".to_string(),
+        ])
+        .expect("source ids should normalize");
+
+        assert_eq!(ids, vec!["source-a", "source-b"]);
+        assert!(normalize_source_ids(vec![" ".to_string()]).is_err());
+    }
+
+    #[test]
+    fn batch_snapshot_counters_follow_sequential_source_states() {
+        let mut snapshot = ScanBatchSnapshot {
+            batch_id: "batch-test".to_string(),
+            status: ScanBatchStatus::Queued,
+            started_at_ms: 100,
+            updated_at_ms: 100,
+            completed_at_ms: None,
+            total_sources: 2,
+            completed_sources: 0,
+            cancelled_sources: 0,
+            failed_sources: 0,
+            active_source_id: None,
+            progress: ScanBatchProgress {
+                completed_sources: 0,
+                total_sources: 2,
+                active_visited_entries: 0,
+                active_matched_resources: 0,
+                active_skipped_entries: 0,
+                elapsed_ms: 0,
+                cancellation_requested: false,
+            },
+            sources: vec![
+                sample_batch_source("source-a", ScanBatchSourceStatus::Queued),
+                sample_batch_source("source-b", ScanBatchSourceStatus::Queued),
+            ],
+            error: None,
+        };
+
+        snapshot.sources[0].status = ScanBatchSourceStatus::Completed;
+        snapshot.sources[0].resources_found = 10;
+        snapshot.sources[1].status = ScanBatchSourceStatus::Running;
+        recompute_batch_counters(&mut snapshot);
+        assert_eq!(snapshot.completed_sources, 1);
+        assert_eq!(snapshot.cancelled_sources, 0);
+        assert_eq!(snapshot.failed_sources, 0);
+
+        snapshot.sources[1].status = ScanBatchSourceStatus::Cancelled;
+        recompute_batch_counters(&mut snapshot);
+        assert_eq!(snapshot.completed_sources, 2);
+        assert_eq!(snapshot.cancelled_sources, 1);
+        assert_eq!(snapshot.progress.completed_sources, 2);
+    }
+
+    #[test]
     fn scan_limit_updates_limit_counters() {
         let canonical_root = fixture_root();
         let selected = SelectedRoot {
@@ -2384,6 +3356,26 @@ mod tests {
 
     fn symlink_fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/scanner-symlink-test")
+    }
+
+    fn sample_batch_source(
+        source_id: &str,
+        status: ScanBatchSourceStatus,
+    ) -> ScanBatchSourceSnapshot {
+        ScanBatchSourceSnapshot {
+            scan_source_id: source_id.to_string(),
+            display_name: source_id.to_string(),
+            root_display_path: format!("~/{source_id}"),
+            profile_id: DEFAULT_SCAN_PROFILE_ID.to_string(),
+            project_label: Some("Test Project".to_string()),
+            status,
+            job_id: None,
+            resources_found: 0,
+            skipped_entries: 0,
+            error_count: 0,
+            last_scanned_at_ms: None,
+            message: None,
+        }
     }
 
     fn temp_resource_store_path() -> PathBuf {

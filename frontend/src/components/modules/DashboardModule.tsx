@@ -72,7 +72,7 @@ const capabilityEntries = [
 const desktopStatusChips: AiosUsageChip[] = [
   { label: "本地运行", className: "status-chip status-ok" },
   { label: "默认只读", className: "status-chip status-ok" },
-  { label: "指定目录扫描 MVP", variant: "outlined" },
+  { label: "多来源扫描管理", variant: "outlined" },
   { label: "SQLite 元数据库", variant: "outlined" },
   { label: "不做全盘扫描", className: "status-chip status-disabled" }
 ];
@@ -94,11 +94,11 @@ const desktopBoundaryCards: Array<{
   },
   {
     title: "扫描引擎",
-    purpose: "已提供用户选择单个目录后的有界元数据扫描；不读取文件内容。",
+    purpose: "已提供用户授权多个来源后的顺序元数据扫描；不读取文件内容。",
     icon: <SearchOffRounded fontSize="small" />,
     chips: [
-      { label: "MVP", className: "status-chip status-ok", variant: "filled" },
-      { label: "Phase 2A" }
+      { label: "Phase 3B", className: "status-chip status-ok", variant: "filled" },
+      { label: "顺序批次" }
     ]
   },
   {
@@ -158,7 +158,7 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
           <Box className="dashboard-status-copy">
             <Typography component="strong">桌面产品状态</Typography>
           <Typography color="text.secondary" variant="body2">
-              当前展示 repo-local snapshot，并支持用户显式选择一个目录执行只读元数据扫描；完成后的安全元数据写入本地 SQLite 资源库，不执行脚本、MCP 或全盘遍历。
+              当前展示 repo-local snapshot，并支持用户显式添加多个扫描来源后手动执行只读元数据扫描；完成后的安全元数据写入本地 SQLite 资源库，不执行脚本、MCP 或全盘遍历。
           </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
@@ -170,7 +170,7 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
       </Box>
 
       <AiosSection className="desktop-boundary-section">
-        <AiosSectionHeader title="桌面能力边界" summary="Phase 2A 增加指定目录只读扫描，静态清单继续保留。" />
+        <AiosSectionHeader title="桌面能力边界" summary="Phase 3B 增加多目录扫描管理，静态清单继续保留。" />
         <Box className="quick-entry-grid desktop-boundary-grid">
           {desktopBoundaryCards.map((entry) => (
             <AiosUsageCard className="dashboard-boundary-card" chips={entry.chips} icon={entry.icon} key={entry.title} purpose={entry.purpose} title={entry.title} />

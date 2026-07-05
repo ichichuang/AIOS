@@ -20,11 +20,17 @@ pub fn run() {
             resource_store::get_resource_library_summary,
             resource_store::list_persisted_resources,
             resource_store::clear_resource_library,
+            resource_store::update_scan_source,
+            resource_store::remove_scan_source,
             scanner::pick_scan_directory,
+            scanner::add_scan_sources,
             scanner::scan_custom_directory,
             scanner::start_custom_scan_job,
             scanner::cancel_scan_job,
             scanner::get_scan_job_snapshot,
+            scanner::start_scan_sources_batch,
+            scanner::cancel_scan_batch,
+            scanner::get_scan_batch_snapshot,
             scanner::get_scan_policy,
             scanner::get_scan_profiles
         ])

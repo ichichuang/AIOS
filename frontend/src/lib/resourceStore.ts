@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntimeAvailable, type ScanResourceKind } from "./customDirectoryScan";
+import { DEFAULT_SCAN_PROFILE_ID, isTauriRuntimeAvailable, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
 
 export interface ResourceStoreStatus {
   databaseReady: boolean;
   schemaVersion: number;
   sourceCount: number;
+  enabledSourceCount: number;
   jobCount: number;
   resourceCount: number;
   metadataOnly: boolean;
@@ -17,12 +18,16 @@ export interface PersistedScanSource {
   rootDisplayPath: string;
   profileId: string;
   sourceKind: string;
+  projectLabel: string | null;
   enabled: boolean;
   createdAtMs: number;
   updatedAtMs: number;
   lastScanJobId: string | null;
   lastScanStatus: string | null;
   lastScanFinishedAtMs: number | null;
+  resourceCount: number;
+  skippedEntries: number;
+  errorCount: number;
 }
 
 export interface PersistedScanJob {
@@ -48,11 +53,15 @@ export interface ResourceKindCount {
 
 export interface ResourceLibrarySummary {
   sourceCount: number;
+  enabledSourceCount: number;
   jobCount: number;
   resourceCount: number;
   locationCount: number;
   latestJob: PersistedScanJob | null;
+  latestSuccessfulScan: PersistedScanJob | null;
   countsByKind: ResourceKindCount[];
+  skippedEntryTotal: number;
+  errorTotal: number;
   metadataOnly: boolean;
   contentStorageEnabled: boolean;
 }
@@ -79,14 +88,93 @@ export interface PersistedResource {
 export interface PersistedLibraryState {
   canClear: boolean;
   latestJobLabel: string;
+  latestSuccessfulScanLabel: string;
   categoryRows: Array<{ label: string; count: number; resourceKind: string }>;
-  sourceRows: Array<{ id: string; primary: string; secondary: string; status: string }>;
+  sourceRows: ScanSourceDisplayRow[];
+}
+
+export interface ScanSourceDisplayRow {
+  id: string;
+  primary: string;
+  secondary: string;
+  status: string;
+  statusLabel: string;
+  projectLabel: string;
+  enabled: boolean;
+  selected: boolean;
+  resourceCount: number;
+  skippedEntries: number;
+  errorCount: number;
+  profileId: string;
+}
+
+export interface UpdateScanSourceInput {
+  id: string;
+  displayName?: string;
+  profileId?: string;
+  projectLabel?: string;
+  enabled?: boolean;
+}
+
+export interface AddScanSourcesResult {
+  sources: PersistedScanSource[];
+  selectedCount: number;
+}
+
+export type ScanBatchStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "failed";
+export type ScanBatchSourceStatus = "idle" | "queued" | "running" | "completed" | "cancelled" | "failed";
+
+export interface ScanBatchProgress {
+  completedSources: number;
+  totalSources: number;
+  activeVisitedEntries: number;
+  activeMatchedResources: number;
+  activeSkippedEntries: number;
+  elapsedMs: number;
+  cancellationRequested: boolean;
+}
+
+export interface ScanBatchSourceSnapshot {
+  scanSourceId: string;
+  displayName: string;
+  rootDisplayPath: string;
+  profileId: string;
+  projectLabel: string | null;
+  status: ScanBatchSourceStatus;
+  jobId: string | null;
+  resourcesFound: number;
+  skippedEntries: number;
+  errorCount: number;
+  lastScannedAtMs: number | null;
+  message: string | null;
+}
+
+export interface ScanBatchSnapshot {
+  batchId: string;
+  status: ScanBatchStatus;
+  startedAtMs: number;
+  updatedAtMs: number;
+  completedAtMs: number | null;
+  totalSources: number;
+  completedSources: number;
+  cancelledSources: number;
+  failedSources: number;
+  activeSourceId: string | null;
+  progress: ScanBatchProgress;
+  sources: ScanBatchSourceSnapshot[];
+  error: { code: string; message: string } | null;
+}
+
+export interface ScanBatchStarted {
+  batchId: string;
+  snapshot: ScanBatchSnapshot;
 }
 
 export const fallbackResourceStoreStatus: ResourceStoreStatus = {
   databaseReady: false,
   schemaVersion: 0,
   sourceCount: 0,
+  enabledSourceCount: 0,
   jobCount: 0,
   resourceCount: 0,
   metadataOnly: true,
@@ -95,11 +183,15 @@ export const fallbackResourceStoreStatus: ResourceStoreStatus = {
 
 export const fallbackResourceLibrarySummary: ResourceLibrarySummary = {
   sourceCount: 0,
+  enabledSourceCount: 0,
   jobCount: 0,
   resourceCount: 0,
   locationCount: 0,
   latestJob: null,
+  latestSuccessfulScan: null,
   countsByKind: [],
+  skippedEntryTotal: 0,
+  errorTotal: 0,
   metadataOnly: true,
   contentStorageEnabled: false
 };
@@ -134,27 +226,90 @@ export async function clearResourceLibrary(): Promise<ResourceLibrarySummary> {
   return invoke<ResourceLibrarySummary>("clear_resource_library");
 }
 
-export function buildPersistedLibraryState(summary: ResourceLibrarySummary, sources: PersistedScanSource[], jobs: PersistedScanJob[]): PersistedLibraryState {
+export async function addScanSources(profileId: ScanProfileId | string = DEFAULT_SCAN_PROFILE_ID, projectLabel?: string): Promise<AddScanSourcesResult> {
+  if (!isTauriRuntimeAvailable()) return { sources: [], selectedCount: 0 };
+  return invoke<AddScanSourcesResult>("add_scan_sources", { profileId, projectLabel: projectLabel?.trim() || null });
+}
+
+export async function updateScanSource(input: UpdateScanSourceInput): Promise<PersistedScanSource> {
+  assertTauriResourceStore();
+  return invoke<PersistedScanSource>("update_scan_source", { input });
+}
+
+export async function removeScanSource(sourceId: string): Promise<ResourceLibrarySummary> {
+  assertTauriResourceStore();
+  return invoke<ResourceLibrarySummary>("remove_scan_source", { sourceId });
+}
+
+export async function startScanSourcesBatch(sourceIds: string[]): Promise<ScanBatchStarted> {
+  assertTauriResourceStore();
+  return invoke<ScanBatchStarted>("start_scan_sources_batch", { sourceIds });
+}
+
+export async function cancelScanBatch(batchId: string): Promise<ScanBatchSnapshot> {
+  assertTauriResourceStore();
+  return invoke<ScanBatchSnapshot>("cancel_scan_batch", { batchId });
+}
+
+export async function getScanBatchSnapshot(batchId: string): Promise<ScanBatchSnapshot> {
+  assertTauriResourceStore();
+  return invoke<ScanBatchSnapshot>("get_scan_batch_snapshot", { batchId });
+}
+
+export function buildPersistedLibraryState(summary: ResourceLibrarySummary, sources: PersistedScanSource[], jobs: PersistedScanJob[], selectedSourceIds: string[] = []): PersistedLibraryState {
   const latestJob = summary.latestJob ?? jobs[0] ?? null;
   const latestJobLabel = latestJob ? `${latestJob.status} · ${latestJob.rootDisplayPath || "未记录根目录"}` : "无持久扫描记录";
+  const latestSuccessfulScanLabel = summary.latestSuccessfulScan ? formatDateTime(summary.latestSuccessfulScan.finishedAtMs ?? summary.latestSuccessfulScan.startedAtMs) : "暂无成功扫描";
   const categoryRows = normalizeResourceKindCounts(summary.countsByKind).map((item) => ({
     label: resourceKindLabels[item.resourceKind] ?? item.resourceKind,
     count: item.count,
     resourceKind: item.resourceKind
   }));
-  const sourceRows = sources.slice(0, 4).map((source) => ({
+  const selected = new Set(selectedSourceIds);
+  const sourceRows = sources.map((source) => ({
     id: source.id,
     primary: source.displayName || source.rootDisplayPath,
-    secondary: `${source.rootDisplayPath} · ${source.profileId} · ${source.lastScanStatus ?? "未扫描"}`,
-    status: source.enabled ? (source.lastScanStatus ?? "enabled") : "disabled"
+    secondary: `${source.rootDisplayPath} · ${source.projectLabel || "未标注项目"} · ${source.profileId}`,
+    status: source.enabled ? (source.lastScanStatus ?? "enabled") : "disabled",
+    statusLabel: source.enabled ? scanStatusLabels[source.lastScanStatus ?? "enabled"] ?? (source.lastScanStatus ?? "已启用") : "已停用",
+    projectLabel: source.projectLabel ?? "",
+    enabled: source.enabled,
+    selected: selected.has(source.id),
+    resourceCount: source.resourceCount,
+    skippedEntries: source.skippedEntries,
+    errorCount: source.errorCount,
+    profileId: source.profileId
   }));
 
   return {
     canClear: summary.sourceCount + summary.jobCount + summary.resourceCount + summary.locationCount > 0,
     latestJobLabel,
+    latestSuccessfulScanLabel,
     categoryRows,
     sourceRows
   };
+}
+
+export function buildSelectedBatchSourceIds(sources: PersistedScanSource[], selectedSourceIds: string[]): string[] {
+  const selected = new Set(selectedSourceIds);
+  return sources.filter((source) => source.enabled && selected.has(source.id)).map((source) => source.id);
+}
+
+export function patchSourceInList(sources: PersistedScanSource[], updated: PersistedScanSource): PersistedScanSource[] {
+  return sources.map((source) => (source.id === updated.id ? updated : source));
+}
+
+export function isTerminalScanBatchStatus(status: ScanBatchStatus): boolean {
+  return status === "completed" || status === "cancelled" || status === "failed";
+}
+
+export function scanBatchProgressPercent(snapshot: ScanBatchSnapshot | null): number {
+  if (!snapshot || snapshot.totalSources <= 0) return 0;
+  return Math.max(0, Math.min(100, (snapshot.completedSources / snapshot.totalSources) * 100));
+}
+
+export function scanBatchStatusLabel(status: ScanBatchStatus | ScanBatchSourceStatus | string | null | undefined): string {
+  return scanStatusLabels[status ?? ""] ?? "未扫描";
 }
 
 export function normalizeResourceKindCounts(counts: ResourceKindCount[]): Array<{ resourceKind: string; count: number }> {
@@ -200,3 +355,26 @@ function resourceKindSortIndex(resourceKind: string): number {
   const index = resourceKindOrder.indexOf(resourceKind);
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
+
+function assertTauriResourceStore(): void {
+  if (!isTauriRuntimeAvailable()) {
+    throw new Error("当前页面不在 Tauri 桌面运行时中，无法管理本地扫描来源。");
+  }
+}
+
+function formatDateTime(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "未记录";
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", hour12: false }).format(new Date(value));
+}
+
+const scanStatusLabels: Record<string, string> = {
+  enabled: "已启用",
+  queued: "排队中",
+  running: "扫描中",
+  cancelling: "取消中",
+  completed: "已完成",
+  cancelled: "已取消",
+  failed: "失败",
+  idle: "空闲",
+  disabled: "已停用"
+};

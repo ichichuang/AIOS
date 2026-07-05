@@ -50,7 +50,7 @@ export const zhCN = {
   },
   views: {
     dashboard: "总览",
-    "custom-scan": "目录扫描",
+    "custom-scan": "扫描管理",
     skills: "技能库",
     mcp: "MCP",
     scripts: "脚本",
@@ -62,7 +62,7 @@ export const zhCN = {
   },
   moduleSummaries: {
     dashboard: "汇总本地 AIOS 资源、基线守卫、只读边界与风险分布。",
-    "custom-scan": "用户显式选择一个目录后执行有界 metadata-only 扫描；全盘扫描禁用。",
+    "custom-scan": "管理多个用户授权扫描来源，手动执行有界 metadata-only 顺序扫描；全盘扫描禁用。",
     skills: "探索本地可用 AI 技能，查看其功能并快速复制提示词进行使用。",
     mcp: "按本地、远程、npx 拉取和凭据需求检查 MCP 元数据。",
     scripts: "仅展示脚本与验证器元数据；执行需要显式命令。",
