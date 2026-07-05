@@ -98,6 +98,7 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           "--aios-outline": palette.outline,
           "--aios-outline-strong": palette.outlineStrong,
           "--aios-text": palette.text,
+          "--aios-text-muted": palette.textMuted,
           "--aios-muted": palette.textMuted,
           "--aios-subtle": palette.textSubtle,
           "--aios-primary": palette.primary,

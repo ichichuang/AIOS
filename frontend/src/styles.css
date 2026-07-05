@@ -639,6 +639,120 @@
   overflow: hidden;
 }
 
+.aios-action-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--aios-selected-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--aios-selected-bg) 72%, var(--aios-surface));
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
+  padding: 14px 16px;
+}
+
+.aios-action-panel__content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aios-action-panel__content strong {
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.aios-action-panel__content p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.aios-action-panel__actions,
+.aios-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aios-action-button.MuiButton-root,
+.aios-action-panel__actions .MuiButton-root,
+.aios-action-group .MuiButton-root,
+.aios-inspector-usage-actions .MuiButton-root,
+.scan-action-row .MuiButton-root {
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.aios-action-button.MuiButton-root .MuiButton-startIcon,
+.aios-action-panel__actions .MuiButton-root .MuiButton-startIcon,
+.aios-action-group .MuiButton-root .MuiButton-startIcon,
+.aios-inspector-usage-actions .MuiButton-root .MuiButton-startIcon,
+.scan-action-row .MuiButton-root .MuiButton-startIcon {
+  margin-right: 6px;
+  margin-left: -2px;
+}
+
+.aios-action-button.MuiButton-root .MuiButton-startIcon > :nth-of-type(1),
+.aios-action-panel__actions .MuiButton-root .MuiButton-startIcon > :nth-of-type(1),
+.aios-action-group .MuiButton-root .MuiButton-startIcon > :nth-of-type(1),
+.aios-inspector-usage-actions .MuiButton-root .MuiButton-startIcon > :nth-of-type(1),
+.scan-action-row .MuiButton-root .MuiButton-startIcon > :nth-of-type(1) {
+  font-size: 18px;
+}
+
+.aios-action-button.MuiButton-contained,
+.aios-action-panel__actions .MuiButton-contained,
+.aios-action-group .MuiButton-contained,
+.aios-inspector-usage-actions .MuiButton-contained,
+.scan-action-row .MuiButton-contained {
+  box-shadow: none;
+}
+
+.aios-action-button.MuiButton-contained:hover,
+.aios-action-panel__actions .MuiButton-contained:hover,
+.aios-action-group .MuiButton-contained:hover,
+.aios-inspector-usage-actions .MuiButton-contained:hover,
+.scan-action-row .MuiButton-contained:hover {
+  box-shadow: none;
+}
+
+.aios-action-button.MuiButton-outlined,
+.aios-action-panel__actions .MuiButton-outlined,
+.aios-action-group .MuiButton-outlined,
+.aios-inspector-usage-actions .MuiButton-outlined,
+.scan-action-row .MuiButton-outlined {
+  background: color-mix(in srgb, var(--aios-surface) 82%, transparent);
+}
+
+.aios-action-button.MuiButton-outlined:hover,
+.aios-action-panel__actions .MuiButton-outlined:hover,
+.aios-action-group .MuiButton-outlined:hover,
+.aios-inspector-usage-actions .MuiButton-outlined:hover,
+.scan-action-row .MuiButton-outlined:hover {
+  background: var(--aios-selected-bg);
+}
+
+.aios-action-button--ghost.MuiButton-root {
+  color: var(--aios-muted);
+}
+
+.aios-action-button--ghost.MuiButton-root:hover {
+  background: var(--aios-surface-muted);
+  color: var(--aios-accent);
+}
+
 .aios-pill-rail {
   display: flex;
   align-items: center;
@@ -942,11 +1056,8 @@
 }
 
 .local-library-cta {
-  align-items: center;
-  grid-template-columns: auto minmax(0, 1fr) auto;
   border-color: var(--aios-selected-border);
-  background: var(--aios-selected-bg);
-  padding: 14px;
+  margin-top: 2px;
 }
 
 .scan-action-row.compact {
@@ -1327,13 +1438,6 @@
 .scan-advanced-confirmation p {
   overflow-wrap: anywhere;
   font-size: 12px;
-}
-
-.scan-action-row .MuiButton-root {
-  min-height: 34px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .scan-policy-chip-row .MuiChip-root {
@@ -3441,6 +3545,10 @@
     grid-template-columns: 1fr;
   }
 
+  .aios-action-panel__actions {
+    justify-content: flex-start;
+  }
+
   .scan-source-row {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -3614,6 +3722,24 @@
   .aios-section-actions {
     max-width: 100%;
     justify-content: flex-start;
+  }
+
+  .aios-action-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .aios-action-panel__actions,
+  .aios-action-group {
+    justify-content: flex-start;
+  }
+
+  .aios-action-button.MuiButton-root,
+  .aios-action-panel__actions .MuiButton-root,
+  .aios-action-group .MuiButton-root,
+  .aios-inspector-usage-actions .MuiButton-root,
+  .scan-action-row .MuiButton-root {
+    flex: 1 1 148px;
+    min-width: 0;
   }
 
   .aios-usage-action,

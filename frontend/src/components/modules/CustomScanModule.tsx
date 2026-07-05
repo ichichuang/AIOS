@@ -519,20 +519,20 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                 </Typography>
               </Box>
             )}
-            <Box className="scan-action-row">
+            <Box className="scan-action-row aios-action-group scan-control-actions">
               {activeScanMode.id === "custom-directory" && (
-                <Button disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
+                <Button className="aios-action-button aios-action-button--secondary" disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
                   添加目录
                 </Button>
               )}
-              <Button disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
+              <Button className="aios-action-button aios-action-button--primary" disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
                 {activeScanMode.id === "custom-directory" ? "扫描所选" : "开始发现"}
               </Button>
-              <Button disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
+              <Button className="aios-action-button aios-action-button--secondary" disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
                 刷新
               </Button>
               {scanLocked && (
-                <Button color="warning" disabled={!batchSnapshot || batchBusyState === "cancelling"} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelBatch}>
+                <Button className="aios-action-button aios-action-button--warning" color="warning" disabled={!batchSnapshot || batchBusyState === "cancelling"} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelBatch}>
                   取消批次
                 </Button>
               )}
@@ -823,8 +823,9 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                 </Box>
               )}
             </Box>
-            <Box className="scan-action-row">
+            <Box className="scan-action-row aios-action-group scan-danger-actions">
               <Button
+                className="aios-action-button aios-action-button--warning"
                 color="warning"
                 disabled={!tauriAvailable || scanLocked || libraryBusyState !== "idle" || !persistedLibraryState.canClear}
                 startIcon={<DeleteSweepRounded />}

@@ -200,19 +200,18 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           <AiosUsageCard title="最近扫描" purpose="最近一次持久化扫描任务；扫描只在扫描管理中启动。" technicalName={localLibraryView.latestScanLabel} chips={[{ label: "仅元数据" }]} />
         </Box>
         {localLibraryView.scanManagementCtaVisible && (
-          <Box className="scan-boundary-callout info local-library-cta">
-            <StorageRounded fontSize="small" />
-            <Box className="scan-control-copy">
+          <Box className="aios-action-panel local-library-cta">
+            <Box className="aios-action-panel__content">
               <Typography component="strong">先建立本机资源库</Typography>
               <Typography color="text.secondary" variant="body2">
                 添加要管理的项目目录，或使用智能发现创建候选来源；下一步仍需手动扫描。
               </Typography>
             </Box>
-            <Box className="scan-action-row compact">
-              <Button startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
+            <Box className="aios-action-panel__actions">
+              <Button className="aios-action-button aios-action-button--primary" startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
                 {localLibraryView.firstUseActions[0]}
               </Button>
-              <Button startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
+              <Button className="aios-action-button aios-action-button--secondary" startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
                 {localLibraryView.firstUseActions[1]}
               </Button>
             </Box>
@@ -289,14 +288,14 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
               </Typography>
             </Box>
           </Box>
-          <Box className="scan-action-row">
-            <Button startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
+          <Box className="scan-action-row aios-action-group first-run-onboarding-actions">
+            <Button className="aios-action-button aios-action-button--primary" startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
               添加自选目录
             </Button>
-            <Button startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
+            <Button className="aios-action-button aios-action-button--secondary" startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
               查看智能发现
             </Button>
-            <Button variant="text" onClick={() => resourceCorpus.onSetFirstRunOnboardingDismissed(true)}>
+            <Button className="aios-action-button aios-action-button--ghost" variant="text" onClick={() => resourceCorpus.onSetFirstRunOnboardingDismissed(true)}>
               不再显示
             </Button>
           </Box>
