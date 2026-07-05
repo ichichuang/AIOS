@@ -3321,7 +3321,10 @@ mod tests {
     use std::collections::HashSet;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static NEXT_TEST_RESOURCE_STORE: AtomicUsize = AtomicUsize::new(1);
 
     #[test]
     fn rejects_broad_machine_roots() {
@@ -4025,9 +4028,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time should be after epoch")
             .as_millis();
+        let index = NEXT_TEST_RESOURCE_STORE.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir()
             .join("aios-scanner-store-tests")
-            .join(format!("fixture-{now}"))
+            .join(format!("fixture-{now}-{index}"))
             .join("resource-store.sqlite3")
     }
 

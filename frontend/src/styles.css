@@ -911,6 +911,18 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
 }
 
+.first-run-onboarding-section {
+  min-width: 0;
+}
+
+.first-run-onboarding-grid,
+.scan-privacy-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+}
+
 .scan-profile-section,
 .scan-first-use-section,
 .scan-control-section,
@@ -934,7 +946,7 @@
 .scan-mode-card.MuiButton-root {
   justify-content: stretch;
   min-width: 0;
-  min-height: 132px;
+  min-height: 236px;
   border-color: var(--aios-outline);
   border-radius: 12px;
   padding: 12px;
@@ -963,6 +975,20 @@
 .scan-mode-card-copy p {
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+
+.scan-mode-safety-list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.scan-mode-safety-list p {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .scan-profile-selector {

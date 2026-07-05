@@ -32,6 +32,7 @@ import {
   type ResourceCorpusScope,
   type ResourceCorpusSummary
 } from "./lib/resourceCorpus";
+import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
 import { useModuleSwapMotion } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
@@ -50,6 +51,7 @@ export default function App() {
   const [corpusLoading, setCorpusLoading] = useState(false);
   const [corpusError, setCorpusError] = useState<string | null>(null);
   const [corpusRefreshToken, setCorpusRefreshToken] = useState(0);
+  const [firstRunOnboardingDismissed, setFirstRunOnboardingDismissedState] = useState(false);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,20 @@ export default function App() {
         setInventory(snapshot);
       })
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getFirstRunOnboardingDismissed()
+      .then((dismissed) => {
+        if (active) setFirstRunOnboardingDismissedState(dismissed);
+      })
+      .catch((settingError: unknown) => {
+        if (active) setCorpusError(formatAsyncError(settingError));
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -142,6 +158,14 @@ export default function App() {
   const selectedSkillCapability = useMemo(() => (selectedId ? skillCapabilityById.get(selectedId) ?? null : null), [selectedId, skillCapabilityById]);
   const refreshResourceCorpus = useCallback(() => setCorpusRefreshToken((current) => current + 1), []);
 
+  const handleSetFirstRunOnboardingDismissed = useCallback((dismissed: boolean) => {
+    setFirstRunOnboardingDismissedState(dismissed);
+    setFirstRunOnboardingDismissed(dismissed).catch((settingError: unknown) => {
+      setCorpusError(formatAsyncError(settingError));
+      setFirstRunOnboardingDismissedState(!dismissed);
+    });
+  }, []);
+
   const handleViewChange = useCallback((view: ResourceView) => {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
     setActiveView(view);
@@ -219,8 +243,10 @@ export default function App() {
     resourceCorpus: {
       activeScope: activeCorpusScope,
       error: corpusError,
+      firstRunOnboardingDismissed,
       loading: corpusLoading,
       mode: corpusMode,
+      onSetFirstRunOnboardingDismissed: handleSetFirstRunOnboardingDismissed,
       refresh: refreshResourceCorpus,
       summary: corpusSummary
     },

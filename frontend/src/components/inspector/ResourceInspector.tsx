@@ -236,7 +236,7 @@ function getBoundaryChips(resource: AiosResource): Array<{ label: string; classN
     { label: "仅元数据" },
     { label: "敏感值隐藏" },
     { label: "UI 不执行" },
-    { label: "无全盘扫描", className: "status-chip status-disabled" }
+    { label: "不启动扫描", className: "status-chip status-disabled" }
   ];
 }
 

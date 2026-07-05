@@ -84,8 +84,8 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
             {activeModuleLabel} · {shownCount} 项
           </Typography>
         </Box>
-        <Tooltip title={`${zhCN.app.safetyState} · 无全盘扫描`}>
-          <Box className="command-safe-indicator" component="span" aria-label={`${zhCN.app.safetyState}，无全盘扫描`}>
+        <Tooltip title={`${zhCN.app.safetyState} · 无自动扫描`}>
+          <Box className="command-safe-indicator" component="span" aria-label={`${zhCN.app.safetyState}，无自动扫描`}>
             <TuneRounded className="command-safe-icon" fontSize="small" />
           </Box>
         </Tooltip>

@@ -12,6 +12,7 @@ import {
   listResourcesByScope,
   mapCorpusResourceToAiosResource,
   mergeResourceWithCorpusDetail,
+  shouldShowFirstRunOnboarding,
   scopeToResourceQuery,
   type ResourceCorpusDetail,
   type ResourceCorpusResource,
@@ -30,6 +31,8 @@ await assert.rejects(() => getResourceDetail("resource-1"), /Tauri 桌面运行�
 assert.equal(getCorpusSourceMode(fallbackSummary), "legacy");
 assert.equal(getCorpusSourceLabel("legacy"), "示例/Legacy snapshot");
 assert.equal(getCorpusEmptyMessage("legacy"), "尚未扫描任何目录；请到扫描管理添加目录并手动开始扫描.");
+assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, false), true);
+assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, true), false);
 
 const projectScope: ResourceCorpusScope = {
   id: "project:aios",
@@ -80,6 +83,13 @@ assert.deepEqual(scopeToResourceQuery(projectScope, 20), {
 });
 assert.equal(getCorpusSourceMode(dynamicSummary), "dynamic");
 assert.equal(getCorpusSourceLabel("dynamic"), "动态资源库");
+assert.equal(shouldShowFirstRunOnboarding(dynamicSummary, false), false);
+
+const noResourceSummary: ResourceCorpusSummary = {
+  ...dynamicSummary,
+  resourceCount: 0
+};
+assert.equal(shouldShowFirstRunOnboarding(noResourceSummary, false), true);
 
 const corpusResource: ResourceCorpusResource = {
   id: "resource:skill",

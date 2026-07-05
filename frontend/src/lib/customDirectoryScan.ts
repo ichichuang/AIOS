@@ -53,6 +53,15 @@ export interface ScanModeDefinition {
   requiresConfirmation: boolean;
 }
 
+export interface ScanModeSafetyCard {
+  modeId: ScanModeId;
+  title: string;
+  intendedUsers: string;
+  whatScans: string;
+  whatSkips: string;
+  confirmation: string;
+}
+
 export interface ScanModeStartState {
   hasSelectedSources: boolean;
   advancedConfirmed: boolean;
@@ -92,6 +101,33 @@ export const scanModeDefinitions: ScanModeDefinition[] = [
     summary: "Advanced broad discovery path for users who explicitly accept slower, permission-sensitive scanning.",
     warning: "Requires explicit confirmation and stores metadata-only results locally.",
     requiresConfirmation: true
+  }
+];
+
+export const scanModeSafetyCards: ScanModeSafetyCard[] = [
+  {
+    modeId: "custom-directory",
+    title: "Custom Directories",
+    intendedUsers: "知道要检查哪些项目文件夹的用户。",
+    whatScans: "只扫描用户通过系统目录选择器添加的文件夹。",
+    whatSkips: "过宽根目录、home 根、系统根、磁盘根、符号链接、依赖、缓存、构建产物、日志和敏感命名路径段。",
+    confirmation: "添加目录只是授权来源；扫描仍需要单独点击开始。"
+  },
+  {
+    modeId: "intelligent-discovery",
+    title: "Intelligent Whole-Computer Discovery",
+    intendedUsers: "不想逐个选择项目文件夹的非技术用户。",
+    whatScans: "常见用户工作区候选，例如 Desktop、Documents、Downloads、Developer、Work、Projects、Code、Workspace 和 AIOS 工作区候选。",
+    whatSkips: "不存在或不可访问的候选、系统根、home 根、/Users、/Volumes、磁盘根、受保护文件夹、符号链接、凭据、浏览器 cookies、缓存和构建产物。",
+    confirmation: "只在用户点击开始后运行；不需要额外高级确认。"
+  },
+  {
+    modeId: "advanced-full-disk",
+    title: "Advanced Full-Disk Discovery",
+    intendedUsers: "理解较慢、权限敏感 broad discovery 的高级用户。",
+    whatScans: "显式确认后的 broad discovery 来源，受深度、条目上限、强 exclude 和取消机制约束。",
+    whatSkips: "受保护系统区域、Library/System/Applications/Volumes、凭据、SSH/GPG/Kube、Keychains、Cookies、符号链接、缓存、依赖和拒绝元数据访问的条目。",
+    confirmation: "UI 与 Rust command path 都必须收到显式确认后才允许高级来源扫描。"
   }
 ];
 
@@ -443,6 +479,14 @@ export function customDirectoryScanProfiles(profiles: ScanProfileDefinition[] = 
 
 export function getScanModeById(modeId?: string | null): ScanModeDefinition {
   return scanModeDefinitions.find((mode) => mode.id === modeId) ?? scanModeDefinitions[0];
+}
+
+export function getScanModeSafetyCard(modeId: ScanModeId): ScanModeSafetyCard {
+  return scanModeSafetyCards.find((card) => card.modeId === modeId) ?? scanModeSafetyCards[0];
+}
+
+export function scanModeChangeStartsScan(): false {
+  return false;
 }
 
 export function canStartScanMode(modeId: ScanModeId, state: ScanModeStartState): boolean {

@@ -1,8 +1,9 @@
-import { Box, Chip, Typography } from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
 import logoLarge from "../../assets/image/logo.png";
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { shouldShowFirstRunOnboarding } from "../../lib/resourceCorpus";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
@@ -22,6 +23,8 @@ import DesktopMacRounded from "@mui/icons-material/DesktopMacRounded";
 import SearchOffRounded from "@mui/icons-material/SearchOffRounded";
 import StorageRounded from "@mui/icons-material/StorageRounded";
 import FolderOffRounded from "@mui/icons-material/FolderOffRounded";
+import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
+import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 
 const quickViews: ResourceView[] = ["custom-scan", "skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
@@ -75,7 +78,7 @@ const desktopStatusChips: AiosUsageChip[] = [
   { label: "默认只读", className: "status-chip status-ok" },
   { label: "多来源扫描管理", variant: "outlined" },
   { label: "SQLite 元数据库", variant: "outlined" },
-  { label: "不做全盘扫描", className: "status-chip status-disabled" }
+  { label: "无自动扫描", className: "status-chip status-disabled" }
 ];
 
 const desktopBoundaryCards: Array<{
@@ -112,12 +115,12 @@ const desktopBoundaryCards: Array<{
     ]
   },
   {
-    title: "全盘扫描",
-    purpose: "全盘扫描不属于 MVP，未启用，也不是 Phase 1-4 的默认能力。",
+    title: "高级发现",
+    purpose: "高级全盘发现不是默认能力；只能在扫描管理中勾选确认后手动启动。",
     icon: <FolderOffRounded fontSize="small" />,
     chips: [
-      { label: "禁用", className: "status-chip status-disabled", variant: "filled" },
-      { label: "非 MVP" }
+      { label: "显式确认", className: "status-chip status-warn", variant: "filled" },
+      { label: "非默认" }
     ]
   }
 ];
@@ -125,6 +128,7 @@ const desktopBoundaryCards: Array<{
 export function DashboardModule({ allResources, baseline, resourceCorpus, selectedId, viewCounts, onSelect, onViewChange, onQueryChange }: AiosModuleProps) {
   const risks = useMemo(() => riskCounts(allResources), [allResources]);
   const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
+  const showFirstRunOnboarding = shouldShowFirstRunOnboarding(resourceCorpus.summary, resourceCorpus.firstRunOnboardingDismissed);
 
   const handleCapabilityClick = (queryText: string) => {
     if (onQueryChange) {
@@ -170,6 +174,53 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           </Box>
         </Box>
       </Box>
+
+      {showFirstRunOnboarding && (
+        <AiosSection className="first-run-onboarding-section">
+          <AiosSectionHeader
+            title="首次使用"
+            summary="AIOS 尚未扫描这台机器；启动、切换模块和搜索都不会自动扫描。"
+            action={<Chip className="status-chip status-ok" label="metadata-only local" variant="outlined" />}
+          />
+          <Box className="first-run-onboarding-grid">
+            <Box className="scan-first-use-item ok">
+              <Typography component="strong">从自选目录开始</Typography>
+              <Typography color="text.secondary" variant="body2">
+                手动添加项目文件夹后，再选择已启用来源并点击扫描所选。
+              </Typography>
+            </Box>
+            <Box className="scan-first-use-item ok">
+              <Typography component="strong">使用智能发现</Typography>
+              <Typography color="text.secondary" variant="body2">
+                非技术用户可让 AIOS 查找常见工作区候选；仍需手动点击开始。
+              </Typography>
+            </Box>
+            <Box className="scan-first-use-item warn">
+              <Typography component="strong">高级全盘发现</Typography>
+              <Typography color="text.secondary" variant="body2">
+                更慢、受权限影响，必须勾选显式确认；受保护目录可能跳过。
+              </Typography>
+            </Box>
+            <Box className="scan-first-use-item ok">
+              <Typography component="strong">本地元数据</Typography>
+              <Typography color="text.secondary" variant="body2">
+                扫描只保存名称、类型、相对路径、大小、修改时间、来源和安全摘要。
+              </Typography>
+            </Box>
+          </Box>
+          <Box className="scan-action-row">
+            <Button startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
+              添加自选目录
+            </Button>
+            <Button startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
+              查看智能发现
+            </Button>
+            <Button variant="text" onClick={() => resourceCorpus.onSetFirstRunOnboardingDismissed(true)}>
+              不再显示
+            </Button>
+          </Box>
+        </AiosSection>
+      )}
 
       <AiosSection className="desktop-boundary-section">
         <AiosSectionHeader title="桌面能力边界" summary="Phase 3C 接入动态资源库，扫描管理仍是唯一扫描入口。" />

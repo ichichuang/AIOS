@@ -182,6 +182,21 @@ pub struct PersistScanJobInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AppSettingRecord {
+    pub key: String,
+    pub value_json: String,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAppSettingInput {
+    pub key: String,
+    pub value_json: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceStoreStatus {
     pub database_ready: bool,
     pub schema_version: i64,
@@ -452,6 +467,23 @@ pub fn get_resource_store_status(
     state: State<'_, ResourceStoreState>,
 ) -> Result<ResourceStoreStatus, ResourceStoreCommandError> {
     store_status_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_app_setting(
+    state: State<'_, ResourceStoreState>,
+    key: String,
+) -> Result<Option<AppSettingRecord>, ResourceStoreCommandError> {
+    get_app_setting_for_path(&state.db_path, &key).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn set_app_setting(
+    state: State<'_, ResourceStoreState>,
+    input: SetAppSettingInput,
+) -> Result<AppSettingRecord, ResourceStoreCommandError> {
+    set_app_setting_for_path(&state.db_path, &input.key, &input.value_json)
+        .map_err(ResourceStoreCommandError::from)
 }
 
 #[tauri::command]
@@ -913,6 +945,47 @@ pub fn store_status_for_path(db_path: &Path) -> Result<ResourceStoreStatus, Reso
         resource_count: count_rows(&conn, "resources")?,
         metadata_only: true,
         content_storage_enabled: false,
+    })
+}
+
+pub fn get_app_setting_for_path(
+    db_path: &Path,
+    key: &str,
+) -> Result<Option<AppSettingRecord>, ResourceStoreError> {
+    let key = normalize_app_setting_key(key)?;
+    let conn = open_initialized_connection(db_path)?;
+    conn.query_row(
+        "SELECT key, value_json, updated_at FROM app_settings WHERE key = ?1",
+        params![key],
+        row_to_app_setting,
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
+pub fn set_app_setting_for_path(
+    db_path: &Path,
+    key: &str,
+    value_json: &str,
+) -> Result<AppSettingRecord, ResourceStoreError> {
+    let key = normalize_app_setting_key(key)?;
+    serde_json::from_str::<serde_json::Value>(value_json).map_err(|error| {
+        ResourceStoreError::InvalidInput(format!("app setting value must be valid JSON: {error}"))
+    })?;
+
+    let conn = open_initialized_connection(db_path)?;
+    let now = current_time_ms();
+    conn.execute(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(key) DO UPDATE SET
+            value_json = excluded.value_json,
+            updated_at = excluded.updated_at",
+        params![&key, value_json.trim(), u64_to_i64(now)],
+    )?;
+
+    get_app_setting_for_path(db_path, &key)?.ok_or_else(|| {
+        ResourceStoreError::InvalidInput("app setting was not persisted".to_string())
     })
 }
 
@@ -1667,6 +1740,14 @@ fn row_to_scan_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PersistedScanJob
     })
 }
 
+fn row_to_app_setting(row: &rusqlite::Row<'_>) -> rusqlite::Result<AppSettingRecord> {
+    Ok(AppSettingRecord {
+        key: row.get(0)?,
+        value_json: row.get(1)?,
+        updated_at_ms: i64_to_u64(row.get(2)?),
+    })
+}
+
 fn resource_kind_counts(conn: &Connection) -> Result<Vec<ResourceKindCount>, ResourceStoreError> {
     let mut stmt = conn.prepare(
         "SELECT resource_kind, COUNT(*)
@@ -2260,6 +2341,24 @@ fn normalize_limit(limit: Option<usize>, fallback: usize) -> i64 {
     limit.unwrap_or(fallback).clamp(1, 500) as i64
 }
 
+fn normalize_app_setting_key(key: &str) -> Result<String, ResourceStoreError> {
+    let key = key.trim();
+    if key.is_empty() || key.len() > 128 {
+        return Err(ResourceStoreError::InvalidInput(
+            "app setting key must be 1-128 characters".to_string(),
+        ));
+    }
+    if !key
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.'))
+    {
+        return Err(ResourceStoreError::InvalidInput(
+            "app setting key contains unsupported characters".to_string(),
+        ));
+    }
+    Ok(key.to_string())
+}
+
 fn bool_to_i64(value: bool) -> i64 {
     if value {
         1
@@ -2412,16 +2511,17 @@ fn debug_text_values_for_table(
 mod tests {
     use super::{
         clear_resource_library_for_path, debug_all_text_values_for_path,
-        get_active_resource_corpus_summary_for_path, get_library_summary_for_path,
-        get_resource_counts_by_scope_for_path, get_resource_detail_for_path, initialize_database,
+        get_active_resource_corpus_summary_for_path, get_app_setting_for_path,
+        get_library_summary_for_path, get_resource_counts_by_scope_for_path,
+        get_resource_detail_for_path, initialize_database,
         list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
         list_project_scopes_for_path, list_resource_corpus_scopes_for_path,
         list_resources_by_kind_for_path, list_resources_by_scope_for_path, list_scan_jobs_for_path,
         list_scan_sources_for_path, persist_scan_job_for_path, remove_scan_source_for_path,
-        store_status_for_path, update_scan_source_for_path, upsert_scan_source_for_path,
-        PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput, PersistScanSkipInput,
-        PersistScanSourceInput, ResourceCorpusQuery, ResourceStoreError, UpdateScanSourceInput,
-        UpsertScanSourceInput,
+        set_app_setting_for_path, store_status_for_path, update_scan_source_for_path,
+        upsert_scan_source_for_path, PersistScanErrorInput, PersistScanJobInput,
+        PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
+        ResourceCorpusQuery, ResourceStoreError, UpdateScanSourceInput, UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -2444,6 +2544,46 @@ mod tests {
         assert!(status.metadata_only);
         assert!(!status.content_storage_enabled);
 
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn app_settings_round_trip_json_values() {
+        let db_path = temp_db_path("app-settings");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let empty = get_app_setting_for_path(&db_path, "firstRunOnboardingDismissed")
+            .expect("setting lookup should succeed");
+        assert!(empty.is_none());
+
+        let stored = set_app_setting_for_path(&db_path, "firstRunOnboardingDismissed", "true")
+            .expect("setting should persist");
+        assert_eq!(stored.key, "firstRunOnboardingDismissed");
+        assert_eq!(stored.value_json, "true");
+
+        let loaded = get_app_setting_for_path(&db_path, "firstRunOnboardingDismissed")
+            .expect("setting should load")
+            .expect("setting should exist");
+        assert_eq!(loaded.value_json, "true");
+
+        let updated = set_app_setting_for_path(&db_path, "firstRunOnboardingDismissed", "false")
+            .expect("setting should update");
+        assert_eq!(updated.value_json, "false");
+        assert!(updated.updated_at_ms >= stored.updated_at_ms);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn app_settings_reject_invalid_json_values() {
+        let db_path = temp_db_path("app-settings-invalid-json");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let error =
+            set_app_setting_for_path(&db_path, "firstRunOnboardingDismissed", "not valid json")
+                .expect_err("invalid JSON should be rejected");
+
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
         cleanup_db(db_path);
     }
 

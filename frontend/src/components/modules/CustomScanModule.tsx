@@ -23,6 +23,7 @@ import {
   WEB_DISCOVERY_UNAVAILABLE_COPY,
   customDirectoryScanProfiles,
   getScanModeById,
+  getScanModeSafetyCard,
   getScanPolicy,
   getScanProfileById,
   getScanProfileForResult,
@@ -42,6 +43,7 @@ import {
 import {
   addScanSources,
   addDiscoveryScanSources,
+  buildPrivacyDataControlSummary,
   buildPersistedLibraryState,
   buildDiscoveryResultStats,
   buildSelectedBatchSourceIds,
@@ -61,6 +63,8 @@ import {
   scanBatchStatusLabel,
   startScanSourcesBatch,
   updateScanSource,
+  WHAT_AIOS_NEVER_STORES_COPY,
+  WHAT_AIOS_STORES_COPY,
   type PersistedScanJob,
   type PersistedScanSource,
   type ResourceLibrarySummary,
@@ -174,6 +178,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
   const groups = useMemo(() => buildScanGroups(visibleResources, profileForVisibleResults), [profileForVisibleResults, visibleResources]);
   const categorySummary = useMemo(() => (scanResult ? buildProfileCategorySummary(scanResult, profileForVisibleResults) : []), [profileForVisibleResults, scanResult]);
   const persistedLibraryState = useMemo(() => buildPersistedLibraryState(librarySummary, persistedSources, persistedJobs, selectedSourceIds), [librarySummary, persistedJobs, persistedSources, selectedSourceIds]);
+  const privacySummary = useMemo(() => buildPrivacyDataControlSummary(resourceStoreStatus, librarySummary, persistedSources), [librarySummary, persistedSources, resourceStoreStatus]);
   const selectedBatchSourceIds = useMemo(() => buildSelectedBatchSourceIds(persistedSources, selectedSourceIds), [persistedSources, selectedSourceIds]);
   const discoveryStats = useMemo(() => buildDiscoveryResultStats(librarySummary, persistedSources, batchSnapshot), [batchSnapshot, librarySummary, persistedSources]);
   const hasDiscoverySources = persistedSources.some((source) => source.sourceKind === "intelligent-discovery" || source.sourceKind === "advanced-full-disk");
@@ -350,6 +355,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
       setSelectedSourceIds([]);
       setBatchSnapshot(null);
       setScanResult(null);
+      resourceCorpus.onSetFirstRunOnboardingDismissed(false);
       await refreshResourceLibrary();
     } catch (clearError) {
       setLibraryError(formatCommandError(clearError));
@@ -378,32 +384,49 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
           summary="AIOS 首次启动不会扫描这台机器。必须选择模式、阅读边界说明，并手动点击开始。"
           action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />}
         />
-        {librarySummary.resourceCount === 0 && persistedSources.length === 0 && (
+        {(resourceCorpus.summary.resourceCount === 0 || persistedSources.length === 0) && (
           <Box className="scan-boundary-callout info">
             <SecurityRounded fontSize="small" />
             <Typography color="text.secondary" variant="body2">
-              AIOS 尚未扫描这台机器。你可以手动添加项目文件夹；非技术用户可运行智能全机发现；高级全盘发现更慢、受权限影响，并且必须显式确认。
+              AIOS 尚未扫描这台机器。AIOS 不会自动扫描；可以手动添加项目文件夹，或让非技术用户使用智能全机发现。高级全盘发现更慢、受权限影响，并且必须显式确认。所有扫描都是本地 metadata-only。
             </Typography>
           </Box>
         )}
         <Box className="scan-mode-card-grid" aria-label="扫描模式选择">
-          {scanModeDefinitions.map((mode) => (
-            <Button
-              className={`scan-mode-card ${activeScanMode.id === mode.id ? "active" : ""}`}
-              disabled={scanLocked}
-              key={mode.id}
-              variant="outlined"
-              onClick={() => handleScanModeChange(mode.id)}
-            >
-              <Box className="scan-mode-card-copy">
-                <Typography component="strong">{mode.title}</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {mode.summary}
-                </Typography>
-                <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
-              </Box>
-            </Button>
-          ))}
+          {scanModeDefinitions.map((mode) => {
+            const safetyCard = getScanModeSafetyCard(mode.id);
+            return (
+              <Button
+                className={`scan-mode-card ${activeScanMode.id === mode.id ? "active" : ""}`}
+                disabled={scanLocked}
+                key={mode.id}
+                variant="outlined"
+                onClick={() => handleScanModeChange(mode.id)}
+              >
+                <Box className="scan-mode-card-copy">
+                  <Typography component="strong">{mode.title}</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {mode.summary}
+                  </Typography>
+                  <Box className="scan-mode-safety-list">
+                    <Typography color="text.secondary" variant="body2">
+                      适合：{safetyCard.intendedUsers}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      扫描：{safetyCard.whatScans}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      跳过：{safetyCard.whatSkips}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      确认：{safetyCard.confirmation}
+                    </Typography>
+                  </Box>
+                  <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
+                </Box>
+              </Button>
+            );
+          })}
         </Box>
       </AiosSection>
 
@@ -523,6 +546,12 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               <Chip className="status-chip status-disabled" label="不跟随符号链接" size="small" />
               <Chip className="status-chip status-disabled" label="本地 SQLite" size="small" />
               <Chip className="status-chip status-disabled" label="可取消" size="small" />
+            </Box>
+            <Box className="scan-boundary-callout warn">
+              <WarningAmberRounded fontSize="small" />
+              <Typography color="text.secondary" variant="body2">
+                macOS 或桌面受保护文件夹可能被跳过，permission denied 属于预期结果。你可以改为手动添加具体项目文件夹；AIOS 不会自动修改系统设置。
+              </Typography>
             </Box>
           </Box>
         </Box>
@@ -722,11 +751,44 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
             <Box className="scan-control-heading">
               <SecurityRounded fontSize="small" />
               <Box className="scan-control-copy">
-                <Typography component="strong">分类计数与隐私控制</Typography>
+                <Typography component="strong">隐私与数据控制</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  分类来自已保存的 metadata-only 资源记录；清空只删除 AIOS 本地库记录，不删除用户文件。
+                  本地库只属于 AIOS Desktop；重置只删除应用记录，不删除用户文件。
                 </Typography>
               </Box>
+            </Box>
+            <AiosTechnicalDetails
+              rows={[
+                { label: "数据边界", value: privacySummary.localBoundaryLabel },
+                { label: "数据库", value: privacySummary.databaseStatus },
+                { label: "扫描来源", value: privacySummary.sourceCountLabel },
+                { label: "持久资源", value: privacySummary.persistedResourceCountLabel },
+                { label: "最近扫描", value: privacySummary.lastScanLabel },
+                { label: "扫描时间", value: privacySummary.lastScanTimeLabel },
+                { label: "元数据策略", value: privacySummary.metadataPolicyLabel },
+                { label: "内容存储", value: privacySummary.contentPolicyLabel },
+                { label: "执行边界", value: privacySummary.executionPolicyLabel }
+              ]}
+            />
+            <Box className="scan-privacy-copy-grid">
+              <Box className="scan-first-use-item ok">
+                <Typography component="strong">AIOS 保存</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {WHAT_AIOS_STORES_COPY}
+                </Typography>
+              </Box>
+              <Box className="scan-first-use-item warn">
+                <Typography component="strong">AIOS 不保存</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {WHAT_AIOS_NEVER_STORES_COPY}
+                </Typography>
+              </Box>
+            </Box>
+            <Box className="scan-boundary-callout warn">
+              <WarningAmberRounded fontSize="small" />
+              <Typography color="text.secondary" variant="body2">
+                {privacySummary.resetWarning}
+              </Typography>
             </Box>
             <Box className="scan-category-summary-grid compact" aria-label="持久化资源分类计数">
               {persistedLibraryState.categoryRows.length > 0 ? (
@@ -755,7 +817,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                 variant="outlined"
                 onClick={handleClearResourceLibrary}
               >
-                清空本地资源库
+                删除 AIOS 本地数据
               </Button>
               <Chip label={libraryBusyState === "idle" ? "本地记录可重建" : libraryBusyState === "clearing" ? "正在清空" : "正在读取"} size="small" variant="outlined" />
             </Box>
@@ -1118,7 +1180,7 @@ const firstUseGuides: Array<{ title: string; summary: string; tone: "ok" | "warn
   },
   {
     title: "不要选择系统 / home / 磁盘根",
-    summary: "根目录、home 根和系统目录会被守卫拒绝；也不会提供全盘扫描入口。",
+    summary: "普通自选目录会拒绝根目录、home 根和系统目录；高级发现必须走独立确认。",
     tone: "warn"
   }
 ];

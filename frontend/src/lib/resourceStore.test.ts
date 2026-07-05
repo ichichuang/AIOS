@@ -2,20 +2,26 @@ import assert from "node:assert/strict";
 import {
   buildPersistedLibraryState,
   buildDiscoveryResultStats,
+  buildPrivacyDataControlSummary,
   buildSelectedBatchSourceIds,
   clearResourceLibrary,
   fallbackResourceLibrarySummary,
+  getFirstRunOnboardingDismissed,
   getResourceLibrarySummary,
   getResourceStoreStatus,
   isTerminalScanBatchStatus,
   listPersistedResources,
   listPersistedScanJobs,
   listScanSources,
+  LOCAL_DATA_RESET_WARNING_COPY,
   normalizeResourceKindCounts,
   patchSourceInList,
   scanBatchProgressPercent,
   scanBatchStatusLabel,
+  setFirstRunOnboardingDismissed,
   startScanSourcesBatch,
+  WHAT_AIOS_NEVER_STORES_COPY,
+  WHAT_AIOS_STORES_COPY,
   type PersistedScanJob,
   type PersistedScanSource,
   type ScanBatchSnapshot,
@@ -28,11 +34,15 @@ const fallbackSources = await listScanSources();
 const fallbackJobs = await listPersistedScanJobs();
 const fallbackResources = await listPersistedResources();
 const clearedSummary = await clearResourceLibrary();
+const fallbackDismissed = await getFirstRunOnboardingDismissed();
+const fallbackSetting = await setFirstRunOnboardingDismissed(true);
 
 assert.equal(fallbackStatus.databaseReady, false);
 assert.equal(fallbackStatus.metadataOnly, true);
 assert.equal(fallbackStatus.contentStorageEnabled, false);
 assert.equal(fallbackStatus.enabledSourceCount, 0);
+assert.equal(fallbackDismissed, false);
+assert.equal(fallbackSetting.valueJson, "true");
 assert.deepEqual(fallbackSummary, fallbackResourceLibrarySummary);
 assert.deepEqual(fallbackSources, []);
 assert.deepEqual(fallbackJobs, []);
@@ -118,6 +128,18 @@ assert.equal(state.sourceRows[0].statusLabel, "已完成");
 assert.equal(state.sourceRows[0].resourceCount, 4);
 assert.equal(state.categoryRows[0].label, "技能");
 assert.equal(state.categoryRows[0].count, 2);
+
+const privacySummary = buildPrivacyDataControlSummary(fallbackStatus, summary, [source]);
+assert.equal(privacySummary.databaseStatus, "未连接本地库");
+assert.equal(privacySummary.sourceCountLabel, "1 个来源");
+assert.equal(privacySummary.persistedResourceCountLabel, "4 项资源");
+assert.equal(privacySummary.lastScanLabel, "completed · ~/custom-scan-basic");
+assert.equal(privacySummary.metadataPolicyLabel, "仅保存元数据");
+assert.equal(privacySummary.contentPolicyLabel, "不保存文件内容");
+assert.equal(privacySummary.executionPolicyLabel, "不执行脚本或 MCP");
+assert.match(LOCAL_DATA_RESET_WARNING_COPY, /不会删除用户文件/);
+assert.match(WHAT_AIOS_STORES_COPY, /相对路径/);
+assert.match(WHAT_AIOS_NEVER_STORES_COPY, /provider keys/);
 
 const disabledSource: PersistedScanSource = { ...source, id: "scan-source:disabled", enabled: false };
 assert.deepEqual(buildSelectedBatchSourceIds([source, disabledSource], [source.id, disabledSource.id]), [source.id]);

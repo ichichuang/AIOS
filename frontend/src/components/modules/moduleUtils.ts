@@ -16,8 +16,10 @@ export interface ResourceSelectionContext {
 export interface ResourceCorpusModuleState {
   activeScope: ResourceCorpusScope;
   error: string | null;
+  firstRunOnboardingDismissed: boolean;
   loading: boolean;
   mode: ResourceCorpusSourceMode;
+  onSetFirstRunOnboardingDismissed: (dismissed: boolean) => void;
   refresh: () => void;
   summary: ResourceCorpusSummary;
 }

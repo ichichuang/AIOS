@@ -196,6 +196,11 @@ export function hasDynamicCorpus(summary: ResourceCorpusSummary): boolean {
   return summary.resourceCount > 0;
 }
 
+export function shouldShowFirstRunOnboarding(summary: ResourceCorpusSummary, dismissed: boolean): boolean {
+  if (dismissed) return false;
+  return summary.resourceCount === 0 || summary.sourceCount === 0;
+}
+
 export function getCorpusSourceMode(summary: ResourceCorpusSummary): ResourceCorpusSourceMode {
   return hasDynamicCorpus(summary) ? "dynamic" : "legacy";
 }

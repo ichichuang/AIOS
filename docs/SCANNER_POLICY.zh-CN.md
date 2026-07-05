@@ -59,6 +59,40 @@ I understand this scan may take time, may skip protected folders, and stores met
 - 结果写入同一个 Rust-owned SQLite 资源库，并进入全局、project/source/unclassified scope；不会覆盖手动添加的项目来源。
 - 清空本地资源库只删除 AIOS app SQLite 记录，不删除用户文件。
 
+## Phase 4B 首次引导与隐私数据控制
+
+Phase 4B 在既有扫描管理、发现模式、安全门控、SQLite 资源库和动态资源语料之上增加用户可理解的引导与数据控制。本阶段不是扫描范围扩展，不新增扫描模式或后端扫描命令。
+
+首次引导：
+
+- 当动态资源语料没有持久资源或没有扫描来源时，Dashboard 显示首次使用引导。
+- 引导明确说明 AIOS 尚未扫描这台机器，AIOS 不会自动扫描。
+- 引导只提供进入“扫描管理”的普通导航按钮，不启动扫描、不创建来源、不解析发现候选。
+- 用户可以关闭引导；关闭状态保存到 Rust-owned SQLite `app_settings` 表。清空本地资源库会删除该 app setting，下一次空库状态会再次显示引导。
+
+隐私与数据控制：
+
+- “扫描管理”显示本地数据状态：SQLite 是否就绪、扫描来源数、持久资源数、最近扫描状态和时间。
+- UI 明确说明本地-only 数据边界、metadata-only 策略、不保存文件内容、不执行脚本或 MCP。
+- “删除 AIOS 本地数据”调用既有 `clear_resource_library` 行为，只删除 AIOS app SQLite 记录，不删除、移动或修改用户文件。
+- 清空会删除 scan sources、scan jobs、resources、locations、findings、skips、errors、project scopes 和 app settings 记录；schema migration 记录保留以便数据库继续可用。
+
+UI 中“AIOS 保存”仅可描述为：
+
+- 资源名称、类型、相对路径、大小、修改时间、来源、扫描模板和安全发现摘要。
+
+UI 中“AIOS 不保存”必须包括：
+
+- 文件内容。
+- raw secrets、token values、auth/session values、provider keys、cookies 和 env values。
+
+权限与错误恢复：
+
+- macOS 或桌面受保护文件夹可能被跳过。
+- `permission denied` 是预期结果，不代表 AIOS 需要自动修改系统设置。
+- 用户可以改为手动添加更具体的项目文件夹。
+- AIOS 不会自动修改系统设置、授权、全局配置或安全策略。
+
 ### Custom Folder / Profile Templates
 
 Phase 2A / 2B 状态：

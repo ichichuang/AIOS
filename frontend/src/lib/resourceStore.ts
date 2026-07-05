@@ -1,6 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_SCAN_PROFILE_ID, isTauriRuntimeAvailable, type ScanModeId, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
 
+export const FIRST_RUN_ONBOARDING_DISMISSED_SETTING_KEY = "firstRunOnboardingDismissed";
+export const LOCAL_DATA_RESET_WARNING_COPY = "清空只删除 AIOS 应用记录，不会删除用户文件。";
+export const WHAT_AIOS_STORES_COPY = "保存资源名称、类型、相对路径、大小、修改时间、来源、扫描模板和安全发现摘要。";
+export const WHAT_AIOS_NEVER_STORES_COPY = "不保存文件内容、raw secrets、token values、auth/session values、provider keys、cookies 或 env values。";
+
+export interface AppSettingRecord {
+  key: string;
+  valueJson: string;
+  updatedAtMs: number;
+}
+
+export interface SetAppSettingInput {
+  key: string;
+  valueJson: string;
+}
+
 export interface ResourceStoreStatus {
   databaseReady: boolean;
   schemaVersion: number;
@@ -103,6 +119,21 @@ export interface PersistedLibraryState {
   latestSuccessfulScanLabel: string;
   categoryRows: Array<{ label: string; count: number; resourceKind: string }>;
   sourceRows: ScanSourceDisplayRow[];
+}
+
+export interface PrivacyDataControlSummary {
+  localBoundaryLabel: string;
+  databaseStatus: string;
+  sourceCountLabel: string;
+  persistedResourceCountLabel: string;
+  lastScanLabel: string;
+  lastScanTimeLabel: string;
+  metadataPolicyLabel: string;
+  contentPolicyLabel: string;
+  executionPolicyLabel: string;
+  resetWarning: string;
+  storesCopy: string;
+  neverStoresCopy: string;
 }
 
 export interface ScanSourceDisplayRow {
@@ -225,6 +256,39 @@ export const fallbackResourceLibrarySummary: ResourceLibrarySummary = {
   contentStorageEnabled: false
 };
 
+export async function getAppSetting(key: string): Promise<AppSettingRecord | null> {
+  if (!isTauriRuntimeAvailable()) return null;
+  return invoke<AppSettingRecord | null>("get_app_setting", { key });
+}
+
+export async function setAppSetting(input: SetAppSettingInput): Promise<AppSettingRecord> {
+  if (!isTauriRuntimeAvailable()) {
+    return {
+      key: input.key,
+      valueJson: input.valueJson,
+      updatedAtMs: Date.now()
+    };
+  }
+  return invoke<AppSettingRecord>("set_app_setting", { input });
+}
+
+export async function getFirstRunOnboardingDismissed(): Promise<boolean> {
+  const setting = await getAppSetting(FIRST_RUN_ONBOARDING_DISMISSED_SETTING_KEY);
+  if (!setting) return false;
+  try {
+    return JSON.parse(setting.valueJson) === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function setFirstRunOnboardingDismissed(dismissed: boolean): Promise<AppSettingRecord> {
+  return setAppSetting({
+    key: FIRST_RUN_ONBOARDING_DISMISSED_SETTING_KEY,
+    valueJson: JSON.stringify(dismissed)
+  });
+}
+
 export async function getResourceStoreStatus(): Promise<ResourceStoreStatus> {
   if (!isTauriRuntimeAvailable()) return fallbackResourceStoreStatus;
   return invoke<ResourceStoreStatus>("get_resource_store_status");
@@ -327,6 +391,24 @@ export function buildPersistedLibraryState(summary: ResourceLibrarySummary, sour
     latestSuccessfulScanLabel,
     categoryRows,
     sourceRows
+  };
+}
+
+export function buildPrivacyDataControlSummary(status: ResourceStoreStatus, summary: ResourceLibrarySummary, sources: PersistedScanSource[]): PrivacyDataControlSummary {
+  const latestJob = summary.latestJob ?? null;
+  return {
+    localBoundaryLabel: "本机 app-owned SQLite",
+    databaseStatus: status.databaseReady ? `SQLite 已就绪 · schema ${status.schemaVersion}` : "未连接本地库",
+    sourceCountLabel: `${summary.sourceCount || sources.length} 个来源`,
+    persistedResourceCountLabel: `${summary.resourceCount} 项资源`,
+    lastScanLabel: latestJob ? `${latestJob.status} · ${latestJob.rootDisplayPath || "未记录根目录"}` : "暂无扫描任务",
+    lastScanTimeLabel: latestJob ? formatDateTime(latestJob.finishedAtMs ?? latestJob.startedAtMs) : "暂无扫描时间",
+    metadataPolicyLabel: summary.metadataOnly && status.metadataOnly ? "仅保存元数据" : "元数据策略需复核",
+    contentPolicyLabel: summary.contentStorageEnabled || status.contentStorageEnabled ? "内容存储需复核" : "不保存文件内容",
+    executionPolicyLabel: "不执行脚本或 MCP",
+    resetWarning: LOCAL_DATA_RESET_WARNING_COPY,
+    storesCopy: WHAT_AIOS_STORES_COPY,
+    neverStoresCopy: WHAT_AIOS_NEVER_STORES_COPY
   };
 }
 

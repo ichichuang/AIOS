@@ -10,9 +10,12 @@ import {
   fallbackScanProfiles,
   getScanProfileById,
   getScanModeById,
+  getScanModeSafetyCard,
   isTerminalScanJobStatus,
   mapScanResourcesToAiosResources,
   nextScanModeState,
+  scanModeChangeStartsScan,
+  scanModeSafetyCards,
   scanLifecycleFromSnapshot,
   type ScanJobEventPayload,
   type CustomScanResult
@@ -143,6 +146,11 @@ assert.equal(advancedMode.requiresConfirmation, true);
 assert.match(advancedMode.warning, /explicit confirmation/i);
 assert.match(ADVANCED_FULL_DISK_CONFIRMATION_COPY, /metadata-only results locally/);
 assert.match(WEB_DISCOVERY_UNAVAILABLE_COPY, /不会模拟真实全盘扫描/);
+assert.equal(scanModeSafetyCards.length, 3);
+assert.match(getScanModeSafetyCard("custom-directory").intendedUsers, /项目文件夹/);
+assert.match(getScanModeSafetyCard("intelligent-discovery").whatScans, /Desktop/);
+assert.match(getScanModeSafetyCard("intelligent-discovery").whatSkips, /系统根/);
+assert.match(getScanModeSafetyCard("advanced-full-disk").confirmation, /显式确认/);
 assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: true, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
 assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), false);
 assert.equal(canStartScanMode("intelligent-discovery", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
@@ -152,6 +160,7 @@ assert.equal(canStartScanMode("intelligent-discovery", { hasSelectedSources: fal
 assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: true, tauriAvailable: false, scanLocked: false }), false);
 assert.deepEqual(nextScanModeState("advanced-full-disk", { advancedConfirmed: true }), { modeId: "advanced-full-disk", advancedConfirmed: false });
 assert.deepEqual(nextScanModeState("intelligent-discovery", { advancedConfirmed: false }), { modeId: "intelligent-discovery", advancedConfirmed: false });
+assert.equal(scanModeChangeStartsScan(), false);
 
 const fallbackSnapshot = createFallbackScanJobSnapshot("job-1", "project-root");
 assert.equal(fallbackSnapshot.status, "queued");
