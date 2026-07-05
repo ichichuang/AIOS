@@ -3,7 +3,8 @@ import logoLarge from "../../assets/image/logo.png";
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
-import { shouldShowFirstRunOnboarding } from "../../lib/resourceCorpus";
+import { buildLocalResourceLibraryViewState, getScopeSemanticDescription, shouldShowFirstRunOnboarding, type ProjectResourceMapEntry, type ScanSourceResourceMapEntry } from "../../lib/resourceCorpus";
+import { normalizeResourceKindCounts, scanBatchStatusLabel } from "../../lib/resourceStore";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
 import { moduleIcons } from "../shell/moduleConfig";
 import { ResourceCard } from "../resources/ResourceCard";
@@ -129,6 +130,8 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
   const risks = useMemo(() => riskCounts(allResources), [allResources]);
   const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
   const showFirstRunOnboarding = shouldShowFirstRunOnboarding(resourceCorpus.summary, resourceCorpus.firstRunOnboardingDismissed);
+  const localLibraryView = buildLocalResourceLibraryViewState(resourceCorpus.summary, resourceCorpus.activeScope, resourceCorpus.mode);
+  const activeScopeDescription = getScopeSemanticDescription(resourceCorpus.activeScope, resourceCorpus.mode);
   const dataSourceCopy =
     resourceCorpus.dataSource.activeSource === "dynamic-corpus"
       ? `本机已有 AIOS 本地资源库，当前动态资源 ${resourceCorpus.dataSource.dynamicResourceCount} 项。Legacy 示例数据不参与默认统计。`
@@ -139,6 +142,10 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
       onQueryChange(queryText);
     }
     onViewChange("skills");
+  };
+  const handleScopeSwitch = (scopeId: string) => {
+    const scope = resourceCorpus.scopes.find((candidate) => candidate.id === scopeId);
+    if (scope) resourceCorpus.onScopeChange(scope);
   };
 
   return (
@@ -178,6 +185,75 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           </Box>
         </Box>
       </Box>
+
+      <AiosSection className="local-resource-library-section">
+        <AiosSectionHeader
+          title="本机资源库"
+          summary={`${localLibraryView.activeScopeLabel}。${activeScopeDescription}`}
+          action={<Chip className={resourceCorpus.summary.resourceCount > 0 ? "status-chip status-ok" : "status-chip status-disabled"} label={localLibraryView.statusLabel} variant="outlined" />}
+        />
+        <Box className="local-library-grid">
+          <AiosUsageCard title="动态资源" purpose="只统计 Rust-owned SQLite 本地资源库，不包含 Legacy 示例快照。" technicalName={`${localLibraryView.dynamicResourceCount}`} chips={[{ label: "SQLite 动态" }]} />
+          <AiosUsageCard title="扫描来源" purpose="用户已选择并保存的目录来源；添加来源不会自动扫描。" technicalName={`${localLibraryView.scanSourceCount}`} chips={[{ label: `${resourceCorpus.summary.enabledSourceCount} 已启用` }]} />
+          <AiosUsageCard title="项目 scope" purpose="由扫描来源的 project/scope 标签形成，用于回答项目拥有哪些资源。" technicalName={`${localLibraryView.projectScopeCount}`} chips={[{ label: "Project" }]} />
+          <AiosUsageCard title="最近扫描" purpose="最近持久化扫描任务的状态与时间；扫描只在扫描管理中启动。" technicalName={localLibraryView.latestScanLabel} chips={[{ label: "metadata-only" }]} />
+        </Box>
+        {localLibraryView.scanManagementCtaVisible && (
+          <Box className="scan-boundary-callout info local-library-cta">
+            <StorageRounded fontSize="small" />
+            <Box className="scan-control-copy">
+              <Typography component="strong">这台机器还没有动态资源</Typography>
+              <Typography color="text.secondary" variant="body2">
+                先到扫描管理添加项目目录，或使用智能发现创建候选来源；不会自动开始扫描。
+              </Typography>
+            </Box>
+            <Box className="scan-action-row compact">
+              <Button startIcon={<FolderOpenRounded />} variant="contained" onClick={() => onViewChange("custom-scan")}>
+                {localLibraryView.firstUseActions[0]}
+              </Button>
+              <Button startIcon={<ManageSearchRounded />} variant="outlined" onClick={() => onViewChange("custom-scan")}>
+                {localLibraryView.firstUseActions[1]}
+              </Button>
+            </Box>
+          </Box>
+        )}
+      </AiosSection>
+
+      <AiosSection className="resource-map-section">
+        <AiosSectionHeader title="项目资源地图" summary="每个项目 / scope 只汇总动态资源库中该标签下的资源与来源目录。" count={resourceCorpus.projectMap.length} />
+        {resourceCorpus.projectMap.length > 0 ? (
+          <Box className="resource-map-grid">
+            {resourceCorpus.projectMap.map((project) => (
+              <ProjectMapCard activeScopeId={resourceCorpus.activeScope.id} key={project.scopeId} project={project} onScopeSwitch={handleScopeSwitch} />
+            ))}
+          </Box>
+        ) : (
+          <Box className="scan-empty-state">
+            <Typography component="strong">尚无项目 scope</Typography>
+            <Typography color="text.secondary" variant="body2">
+              为扫描来源填写项目 / scope 标签后，这里会显示每个项目拥有哪些动态资源。跨项目共享/重复检测是后续能力。
+            </Typography>
+          </Box>
+        )}
+      </AiosSection>
+
+      <AiosSection className="resource-map-section">
+        <AiosSectionHeader title="扫描来源目录地图" summary="每个已选择目录来源的 profile、项目标签、启用状态、资源和跳过/错误计数。" count={resourceCorpus.scanSourceMap.length} />
+        {resourceCorpus.scanSourceMap.length > 0 ? (
+          <Box className="resource-map-grid source-map">
+            {resourceCorpus.scanSourceMap.map((source) => (
+              <SourceMapCard activeScopeId={resourceCorpus.activeScope.id} key={source.scopeId} source={source} onScopeSwitch={handleScopeSwitch} />
+            ))}
+          </Box>
+        ) : (
+          <Box className="scan-empty-state">
+            <Typography component="strong">尚无扫描来源目录</Typography>
+            <Typography color="text.secondary" variant="body2">
+              打开扫描管理后添加自选目录，或手动启动智能发现来创建候选来源。添加来源不会自动扫描。
+            </Typography>
+          </Box>
+        )}
+      </AiosSection>
 
       {showFirstRunOnboarding && (
         <AiosSection className="first-run-onboarding-section">
@@ -312,4 +388,119 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
         )}
     </AiosModuleFrame>
   );
+}
+
+function ProjectMapCard({ activeScopeId, project, onScopeSwitch }: { activeScopeId: string; project: ProjectResourceMapEntry; onScopeSwitch: (scopeId: string) => void }) {
+  const active = activeScopeId === project.scopeId;
+  const directorySummary = project.directories.length > 0 ? project.directories.map((directory) => directory.rootDisplayPath).join(" / ") : "尚无关联目录";
+  return (
+    <Box className={active ? "resource-map-card active" : "resource-map-card"}>
+      <Box className="resource-map-card-heading">
+        <Box className="resource-map-card-title">
+          <Typography component="strong">{project.projectLabel}</Typography>
+          <Typography color="text.secondary" variant="body2" title={directorySummary}>
+            {directorySummary}
+          </Typography>
+        </Box>
+        <Chip className={active ? "status-chip status-ok" : undefined} label={active ? "当前项目" : "Project"} size="small" variant={active ? "filled" : "outlined"} />
+      </Box>
+      <Box className="resource-map-metrics">
+        <MapMetric label="资源" value={project.resourceCount} />
+        <MapMetric label="来源" value={project.directories.length} />
+        <MapMetric label="跳过" value={project.skippedEntries} />
+        <MapMetric label="错误" value={project.errorCount} />
+      </Box>
+      <Typography color="text.secondary" variant="body2">
+        {formatKindCounts(project.countsByKind)}
+      </Typography>
+      <Typography color="text.secondary" variant="body2">
+        最近扫描：{formatScanStatusTime(project.lastScanStatus, project.lastScanFinishedAtMs)}
+      </Typography>
+      <Typography color="text.secondary" variant="body2">
+        此项目 scope 包含 {project.resourceCount} 项动态资源；跨项目共享/重复检测是后续能力。
+      </Typography>
+      <Box className="resource-map-directory-list">
+        {project.directories.slice(0, 3).map((directory) => (
+          <Chip key={directory.scanSourceId} label={`${directory.displayName} · ${directory.profileId}`} size="small" variant="outlined" />
+        ))}
+        {project.directories.length > 3 && <Chip label={`+${project.directories.length - 3} 来源`} size="small" variant="outlined" />}
+      </Box>
+      <Button disabled={active} size="small" variant="outlined" onClick={() => onScopeSwitch(project.scopeId)}>
+        切换到项目 scope
+      </Button>
+    </Box>
+  );
+}
+
+function SourceMapCard({ activeScopeId, source, onScopeSwitch }: { activeScopeId: string; source: ScanSourceResourceMapEntry; onScopeSwitch: (scopeId: string) => void }) {
+  const active = activeScopeId === source.scopeId;
+  return (
+    <Box className={active ? "resource-map-card active" : "resource-map-card"}>
+      <Box className="resource-map-card-heading">
+        <Box className="resource-map-card-title">
+          <Typography component="strong">{source.displayName}</Typography>
+          <Typography color="text.secondary" variant="body2" title={source.rootDisplayPath}>
+            {source.rootDisplayPath}
+          </Typography>
+        </Box>
+        <Chip className={source.enabled ? "status-chip status-ok" : "status-chip status-disabled"} label={source.enabled ? "已启用" : "已停用"} size="small" variant="outlined" />
+      </Box>
+      <Box className="resource-map-metrics">
+        <MapMetric label="资源" value={source.resourceCount} />
+        <MapMetric label="跳过" value={source.skippedEntries} />
+        <MapMetric label="错误" value={source.errorCount} />
+      </Box>
+      <Box className="resource-map-directory-list">
+        <Chip label={source.profileId} size="small" variant="outlined" />
+        <Chip label={source.projectLabel || "未归类"} size="small" variant="outlined" />
+        <Chip label={source.sourceKind} size="small" variant="outlined" />
+      </Box>
+      <Typography color="text.secondary" variant="body2">
+        {formatKindCounts(source.countsByKind)}
+      </Typography>
+      <Typography color="text.secondary" variant="body2">
+        最近扫描：{formatScanStatusTime(source.lastScanStatus, source.lastScanFinishedAtMs)}
+      </Typography>
+      <Button disabled={active} size="small" variant="outlined" onClick={() => onScopeSwitch(source.scopeId)}>
+        切换到来源 scope
+      </Button>
+    </Box>
+  );
+}
+
+function MapMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <Box className="resource-map-metric">
+      <Typography component="span">{label}</Typography>
+      <Typography component="strong">{value}</Typography>
+    </Box>
+  );
+}
+
+function formatKindCounts(counts: ProjectResourceMapEntry["countsByKind"]): string {
+  const normalized = normalizeResourceKindCounts(counts);
+  if (normalized.length === 0) return "资源类型：暂无动态资源";
+  return `资源类型：${normalized.slice(0, 4).map((item) => `${resourceKindLabel(item.resourceKind)} ${item.count}`).join(" / ")}`;
+}
+
+function formatScanStatusTime(status: string | null, finishedAtMs: number | null): string {
+  const statusLabel = scanBatchStatusLabel(status);
+  if (!finishedAtMs) return statusLabel;
+  return `${statusLabel} · ${new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", hour12: false }).format(new Date(finishedAtMs))}`;
+}
+
+function resourceKindLabel(resourceKind: string): string {
+  const labels: Record<string, string> = {
+    skill: "技能",
+    prompt: "提示词",
+    "mcp-config": "MCP",
+    script: "脚本",
+    validator: "验证器",
+    "report-doc": "报告",
+    "project-pack": "项目包",
+    "policy-governance": "策略",
+    "package-manifest": "包清单",
+    "unknown-local-resource": "未知资源"
+  };
+  return labels[resourceKind] ?? resourceKind;
 }

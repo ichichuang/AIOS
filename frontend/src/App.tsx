@@ -22,7 +22,9 @@ import {
   fallbackResourceCorpusSummary,
   getActiveResourceCorpusSummary,
   getDynamicCorpusResourceId,
+  getProjectResourceMap,
   getResourceDetail,
+  getScanSourceResourceMap,
   globalCorpusScope,
   isDynamicCorpusResource,
   listResourceCorpusScopes,
@@ -31,8 +33,10 @@ import {
   mapCorpusResourcesToAiosResources,
   mergeResourceWithCorpusDetail,
   scopeToResourceQuery,
+  type ProjectResourceMapEntry,
   type ResourceCorpusScope,
-  type ResourceCorpusSummary
+  type ResourceCorpusSummary,
+  type ScanSourceResourceMapEntry
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
@@ -48,6 +52,8 @@ export default function App() {
   const [selection, setSelection] = useState<{ resource: AiosResource; context?: ResourceSelectionContext } | null>(null);
   const [corpusSummary, setCorpusSummary] = useState<ResourceCorpusSummary>(fallbackResourceCorpusSummary);
   const [corpusScopes, setCorpusScopes] = useState<ResourceCorpusScope[]>([globalCorpusScope]);
+  const [projectResourceMap, setProjectResourceMap] = useState<ProjectResourceMapEntry[]>([]);
+  const [scanSourceResourceMap, setScanSourceResourceMap] = useState<ScanSourceResourceMapEntry[]>([]);
   const [activeCorpusScope, setActiveCorpusScope] = useState<ResourceCorpusScope>(globalCorpusScope);
   const [corpusResources, setCorpusResources] = useState<AiosResource[]>([]);
   const [corpusLoading, setCorpusLoading] = useState(false);
@@ -84,12 +90,14 @@ export default function App() {
   useEffect(() => {
     let active = true;
     setCorpusLoading(true);
-    Promise.all([getActiveResourceCorpusSummary(), listResourceCorpusScopes()])
-      .then(([summary, scopes]) => {
+    Promise.all([getActiveResourceCorpusSummary(), listResourceCorpusScopes(), getProjectResourceMap(), getScanSourceResourceMap()])
+      .then(([summary, scopes, projectMap, sourceMap]) => {
         if (!active) return;
         const safeScopes = scopes.length > 0 ? scopes : [globalCorpusScope];
         setCorpusSummary(summary);
         setCorpusScopes(safeScopes);
+        setProjectResourceMap(projectMap);
+        setScanSourceResourceMap(sourceMap);
         setCorpusError(null);
         setActiveCorpusScope((current) => (summary.resourceCount > 0 ? safeScopes.find((scope) => scope.id === current.id) ?? safeScopes[0] ?? globalCorpusScope : globalCorpusScope));
       })
@@ -97,6 +105,8 @@ export default function App() {
         if (!active) return;
         setCorpusSummary(fallbackResourceCorpusSummary);
         setCorpusScopes([globalCorpusScope]);
+        setProjectResourceMap([]);
+        setScanSourceResourceMap([]);
         setActiveCorpusScope(globalCorpusScope);
         setCorpusError(formatAsyncError(loadError));
       })
@@ -112,6 +122,7 @@ export default function App() {
   const corpusDataSource = useMemo(() => buildResourceDataSourceState(corpusSummary, legacySnapshotResources.length), [corpusSummary, legacySnapshotResources.length]);
   const legacySnapshotDataSource = useMemo(() => asLegacySnapshotDataSource(corpusDataSource), [corpusDataSource]);
   const corpusMode = corpusDataSource.activeSource;
+  const shellCorpusMode = renderedView === "legacy" ? "legacy-snapshot" : corpusMode;
 
   useEffect(() => {
     let active = true;
@@ -249,8 +260,12 @@ export default function App() {
     firstRunOnboardingDismissed,
     loading: corpusLoading,
     mode: corpusMode,
+    projectMap: projectResourceMap,
     onSetFirstRunOnboardingDismissed: handleSetFirstRunOnboardingDismissed,
+    onScopeChange: handleScopeChange,
     refresh: refreshResourceCorpus,
+    scanSourceMap: scanSourceResourceMap,
+    scopes: corpusScopes,
     summary: corpusSummary
   };
   const moduleResourceCorpusState =
@@ -283,7 +298,7 @@ export default function App() {
       activeScopeId={activeCorpusScope.id}
       corpusError={corpusError}
       corpusLoading={corpusLoading}
-      corpusMode={corpusMode}
+      corpusMode={shellCorpusMode}
       corpusScopes={corpusScopes}
       corpusSummary={corpusSummary}
       inventory={displayInventory}
@@ -291,7 +306,7 @@ export default function App() {
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
-      shownCount={renderedView === "legacy" ? 0 : filteredResources.length}
+      shownCount={filteredResources.length}
       inspectorVisibleCount={filteredResources.length}
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}

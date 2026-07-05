@@ -41,6 +41,7 @@ export interface ResourceCorpusSummary {
   projectScopeCount: number;
   resourceCount: number;
   locationCount: number;
+  latestScan: PersistedScanJob | null;
   latestSuccessfulScan: PersistedScanJob | null;
   countsByKind: ResourceKindCount[];
   countsByScope: ResourceScopeCount[];
@@ -58,6 +59,73 @@ export interface ResourceCorpusQuery {
   resourceKind?: ScanResourceKind | string | null;
   limit?: number;
   offset?: number;
+}
+
+export interface ProjectResourceDirectory {
+  scanSourceId: string;
+  displayName: string;
+  rootDisplayPath: string;
+  profileId: string;
+  sourceKind: string;
+  enabled: boolean;
+  resourceCount: number;
+  skippedEntries: number;
+  errorCount: number;
+  lastScanStatus: string | null;
+  lastScanFinishedAtMs: number | null;
+}
+
+export interface ProjectResourceMapEntry {
+  scopeId: string;
+  projectLabel: string;
+  directories: ProjectResourceDirectory[];
+  resourceCount: number;
+  countsByKind: ResourceKindCount[];
+  lastScanStatus: string | null;
+  lastScanFinishedAtMs: number | null;
+  skippedEntries: number;
+  errorCount: number;
+  metadataOnly: boolean;
+}
+
+export interface ScanSourceResourceMapEntry {
+  scopeId: string;
+  scanSourceId: string;
+  displayName: string;
+  rootDisplayPath: string;
+  profileId: string;
+  sourceKind: string;
+  projectLabel: string | null;
+  enabled: boolean;
+  resourceCount: number;
+  countsByKind: ResourceKindCount[];
+  lastScanStatus: string | null;
+  lastScanFinishedAtMs: number | null;
+  skippedEntries: number;
+  errorCount: number;
+  metadataOnly: boolean;
+}
+
+export interface LocalResourceLibraryViewState {
+  statusLabel: string;
+  dynamicResourceCount: number;
+  scanSourceCount: number;
+  projectScopeCount: number;
+  latestScanLabel: string;
+  activeScopeLabel: string;
+  scanManagementCtaVisible: boolean;
+  firstUseActions: string[];
+}
+
+export interface ResourceInspectorProvenanceSummary {
+  dataSourceType: string;
+  projectLabel: string;
+  scanSourceName: string;
+  scanSourceDirectory: string;
+  relativePath: string;
+  profileLabel: string;
+  lastScanLabel: string;
+  metadataBoundary: string;
 }
 
 export interface ResourceCorpusResource {
@@ -142,6 +210,7 @@ export const fallbackResourceCorpusSummary: ResourceCorpusSummary = {
   projectScopeCount: 0,
   resourceCount: 0,
   locationCount: 0,
+  latestScan: null,
   latestSuccessfulScan: null,
   countsByKind: [],
   countsByScope: [],
@@ -177,6 +246,16 @@ export async function listProjectScopes(): Promise<ResourceCorpusScope[]> {
 export async function getActiveResourceCorpusSummary(): Promise<ResourceCorpusSummary> {
   if (!isTauriRuntimeAvailable()) return fallbackResourceCorpusSummary;
   return invoke<ResourceCorpusSummary>("get_active_resource_corpus_summary");
+}
+
+export async function getProjectResourceMap(): Promise<ProjectResourceMapEntry[]> {
+  if (!isTauriRuntimeAvailable()) return [];
+  return invoke<ProjectResourceMapEntry[]>("get_project_resource_map");
+}
+
+export async function getScanSourceResourceMap(): Promise<ScanSourceResourceMapEntry[]> {
+  if (!isTauriRuntimeAvailable()) return [];
+  return invoke<ScanSourceResourceMapEntry[]>("get_scan_source_resource_map");
 }
 
 export async function listResourcesByScope(query: ResourceCorpusQuery = {}): Promise<ResourceCorpusResource[]> {
@@ -224,6 +303,36 @@ export function getCorpusEmptyMessage(mode: ResourceCorpusSourceMode): string {
   if (mode === "dynamic-corpus") return "当前 scope 下没有匹配的动态资源。";
   if (mode === "legacy-snapshot") return "这是内置示例/兼容快照，不代表当前电脑扫描结果。";
   return "尚未扫描任何目录；请到扫描管理添加项目目录或运行智能发现。";
+}
+
+export function getScopeViewingLabel(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
+  if (mode === "legacy-snapshot") return "正在查看 Legacy 示例快照";
+  if (scope.scopeKind === "project") return `正在查看项目：${scope.label}`;
+  if (scope.scopeKind === "source") return `正在查看来源：${scope.label}`;
+  if (scope.scopeKind === "unclassified") return "正在查看：未归类动态资源";
+  return "正在查看：全局本地资源库";
+}
+
+export function getScopeSemanticDescription(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
+  if (mode === "legacy-snapshot") return "Legacy 是内置示例/兼容快照，不代表当前电脑扫描结果，也不会写入 SQLite。";
+  if (scope.scopeKind === "project") return "Project 只显示该项目 / scope 标签下的 SQLite 动态资源。";
+  if (scope.scopeKind === "source") return "Source 只显示该已选择目录来源产生的 SQLite 动态资源。";
+  if (scope.scopeKind === "unclassified") return "Unclassified 只显示尚未设置 project/scope 标签的动态资源。";
+  return "Global 只汇总本机 SQLite 动态资源库，不包含 Legacy 示例快照。";
+}
+
+export function buildLocalResourceLibraryViewState(summary: ResourceCorpusSummary, activeScope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): LocalResourceLibraryViewState {
+  const latestScan = summary.latestScan ?? summary.latestSuccessfulScan;
+  return {
+    statusLabel: summary.resourceCount > 0 ? "已建立本地资源库" : "空资源库",
+    dynamicResourceCount: Math.max(0, summary.resourceCount),
+    scanSourceCount: Math.max(0, summary.sourceCount),
+    projectScopeCount: Math.max(0, summary.projectScopeCount),
+    latestScanLabel: latestScan ? `${latestScan.status} · ${formatDateTime(latestScan.finishedAtMs ?? latestScan.startedAtMs)}` : "暂无扫描记录",
+    activeScopeLabel: getScopeViewingLabel(activeScope, mode),
+    scanManagementCtaVisible: summary.resourceCount === 0,
+    firstUseActions: ["添加自选目录", "查看智能发现"]
+  };
 }
 
 export function buildResourceDataSourceState(summary: ResourceCorpusSummary, legacySnapshotCount: number, activeSource: ResourceCorpusSourceMode = getCorpusSourceMode(summary)): ResourceDataSourceState {
@@ -405,6 +514,37 @@ export function getDynamicCorpusResourceId(resource: AiosResource): string | nul
   return typeof value === "string" ? value : null;
 }
 
+export function getResourceInspectorProvenanceSummary(resource: AiosResource): ResourceInspectorProvenanceSummary {
+  if (isLegacySnapshotResource(resource)) {
+    const snapshotGeneratedAt = getMetadataString(resource, "snapshotGeneratedAt");
+    return {
+      dataSourceType: "Legacy 示例数据",
+      projectLabel: "不适用",
+      scanSourceName: "不适用",
+      scanSourceDirectory: "不适用",
+      relativePath: getMetadataString(resource, "relativePath") ?? resource.path ?? "未记录",
+      profileLabel: "不适用",
+      lastScanLabel: snapshotGeneratedAt ? `示例快照 · ${formatDateTime(Date.parse(snapshotGeneratedAt))}` : "示例快照",
+      metadataBoundary: "Legacy 不代表当前电脑扫描结果，不写入 SQLite 动态资源库"
+    };
+  }
+
+  const profileId = getMetadataString(resource, "scanProfileId");
+  const profile = getScanProfileById(profileId);
+  const scanJobStatus = getMetadataString(resource, "scanJobStatus");
+  const scanJobId = getMetadataString(resource, "scanJobId");
+  return {
+    dataSourceType: isDynamicCorpusResource(resource) ? "动态本地资源库" : "本地清单元数据",
+    projectLabel: getMetadataString(resource, "projectLabel") ?? "未归类",
+    scanSourceName: getMetadataString(resource, "scanSourceName") ?? "未记录",
+    scanSourceDirectory: getMetadataString(resource, "rootDisplayPath") ?? getMetadataString(resource, "root") ?? "未记录",
+    relativePath: getMetadataString(resource, "relativePath") ?? getMetadataString(resource, "displayPath") ?? resource.path ?? "未记录",
+    profileLabel: profile.displayName,
+    lastScanLabel: scanJobStatus && scanJobId ? `${scanJobStatus} · ${scanJobId}` : scanJobStatus ?? "未记录",
+    metadataBoundary: isDynamicCorpusResource(resource) ? "仅展示 SQLite 持久化元数据，不读取文件内容" : "仅展示本地清单元数据"
+  };
+}
+
 const kindMapping: Record<string, { zhLabel: string; capabilityType: CapabilityType; toolType: ToolType }> = {
   skill: { zhLabel: "技能", capabilityType: "skill", toolType: "project-local" },
   prompt: { zhLabel: "提示词", capabilityType: "usage-prompt", toolType: "project-local" },
@@ -440,6 +580,16 @@ function formatIsoTime(value: number | null | undefined): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+function formatDateTime(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "未记录";
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", hour12: false }).format(new Date(value));
+}
+
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function getMetadataString(resource: AiosResource, key: string): string | null {
+  const value = resource.metadata?.[key];
+  return typeof value === "string" ? value : null;
 }

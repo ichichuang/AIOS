@@ -3,7 +3,7 @@ import type { ResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
-import type { ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary, ResourceDataSourceState } from "../../lib/resourceCorpus";
+import type { ProjectResourceMapEntry, ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary, ResourceDataSourceState, ScanSourceResourceMapEntry } from "../../lib/resourceCorpus";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
@@ -20,8 +20,12 @@ export interface ResourceCorpusModuleState {
   firstRunOnboardingDismissed: boolean;
   loading: boolean;
   mode: ResourceCorpusSourceMode;
+  projectMap: ProjectResourceMapEntry[];
   onSetFirstRunOnboardingDismissed: (dismissed: boolean) => void;
+  onScopeChange: (scope: ResourceCorpusScope) => void;
   refresh: () => void;
+  scanSourceMap: ScanSourceResourceMapEntry[];
+  scopes: ResourceCorpusScope[];
   summary: ResourceCorpusSummary;
 }
 

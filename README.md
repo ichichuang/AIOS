@@ -43,6 +43,13 @@ Rust scans only metadata with bounded depth, bounded entry count, strong exclude
 
 The Dashboard shows first-run guidance when the local corpus has no persisted resources or scan sources. Scan Management shows Privacy & Data Controls with database status, scan source count, resource count, last scan status/time, what AIOS stores, what it never stores, and a reset action that deletes only AIOS local records.
 
+## Product data model
+
+- Local Resource Library: the app-owned SQLite metadata library created only from user-authorized scans. Global counts mean this dynamic local library only.
+- Project scopes: project/scope labels attached to selected scan sources. Project views show only dynamic resources under that label.
+- Scan source directories: every user-selected directory source keeps a display name, root display path, profile, enabled state, project label, last scan state, and metadata-only counts.
+- Legacy demo isolation: `frontend/public/aios-inventory.snapshot.json` is bundled demo/compatibility data. It is visible only in Legacy context and is never current-machine scan output, never seeded into SQLite, and never included in global/project/source counts.
+
 See:
 
 - `docs/ARCHITECTURE.zh-CN.md`

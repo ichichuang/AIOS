@@ -284,6 +284,11 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
     setSelectedSourceIds((current) => (checked ? Array.from(new Set([...current, sourceId])) : current.filter((id) => id !== sourceId)));
   }, []);
 
+  const handleSourceScopeSwitch = useCallback((sourceId: string) => {
+    const scope = resourceCorpus.scopes.find((candidate) => candidate.scanSourceId === sourceId);
+    if (scope) resourceCorpus.onScopeChange(scope);
+  }, [resourceCorpus.onScopeChange, resourceCorpus.scopes]);
+
   const handleUpdateSourceProfile = useCallback(async (source: PersistedScanSource, profileId: string) => {
     setSourceBusyId(source.id);
     setError(null);
@@ -595,6 +600,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                       <Chip label={scanBatchStatusLabel(status)} size="small" variant="outlined" />
                       <Chip label={sourceKindLabel(source.sourceKind)} size="small" variant="outlined" />
                       {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
+                      {source.lastScanFinishedAtMs && <Chip label={`最近 ${formatDate(source.lastScanFinishedAtMs)}`} size="small" variant="outlined" />}
                     </Box>
                   </Box>
                   <TextField disabled={sourceBusy || source.sourceKind !== "custom-directory"} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
@@ -618,6 +624,9 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                     <ProgressMetric label="错误" value={batchSource?.errorCount ?? source.errorCount} />
                   </Box>
                   <Box className="scan-source-actions">
+                    <Button disabled={!resourceCorpus.scopes.some((scope) => scope.scanSourceId === source.id)} size="small" variant="outlined" onClick={() => handleSourceScopeSwitch(source.id)}>
+                      查看 scope
+                    </Button>
                     <Button disabled={sourceBusyId === source.id || scanLocked} size="small" variant="outlined" onClick={() => void handleUpdateSourceEnabled(source, !source.enabled)}>
                       {source.enabled ? "停用" : "启用"}
                     </Button>

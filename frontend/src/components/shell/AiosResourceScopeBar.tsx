@@ -3,6 +3,8 @@ import {
   buildCorpusScopeTabs,
   getCorpusEmptyMessage,
   getCorpusSourceLabel,
+  getScopeSemanticDescription,
+  globalCorpusScope,
   type ResourceCorpusScope,
   type ResourceCorpusSourceMode,
   type ResourceCorpusSummary
@@ -21,7 +23,32 @@ interface AiosResourceScopeBarProps {
 export function AiosResourceScopeBar({ activeScopeId, loading, mode, scopes, summary, error, onScopeChange }: AiosResourceScopeBarProps) {
   const tabs = buildCorpusScopeTabs(scopes, summary);
   const sourceLabel = getCorpusSourceLabel(mode);
-  const helper = error || (mode === "empty" ? getCorpusEmptyMessage(mode) : "全局、项目和来源 scope 只来自 SQLite 动态资源库。");
+  const activeScope = scopes.find((scope) => scope.id === activeScopeId) ?? scopes[0] ?? globalCorpusScope;
+  const helper = error || (mode === "empty" ? getCorpusEmptyMessage(mode) : getScopeSemanticDescription(activeScope, mode));
+
+  if (mode === "legacy-snapshot") {
+    return (
+      <Box className="resource-scope-bar" aria-label="资源库 scope 过滤">
+        <Box className="resource-scope-meta">
+          <Typography component="strong">{sourceLabel}</Typography>
+          <Typography color="text.secondary" variant="body2" noWrap title={helper}>
+            {helper}
+          </Typography>
+        </Box>
+        <Box className="resource-scope-tabs" role="tablist" aria-label="资源 scope">
+          <ButtonBase aria-selected className="resource-scope-tab active" disabled role="tab" title={helper}>
+            <Typography className="resource-scope-kind" component="span">
+              Legacy
+            </Typography>
+            <Typography component="span" noWrap>
+              示例快照
+            </Typography>
+            <Chip label="demo" size="small" variant="filled" />
+          </ButtonBase>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box className="resource-scope-bar" aria-label="资源库 scope 过滤">
@@ -45,6 +72,9 @@ export function AiosResourceScopeBar({ activeScopeId, loading, mode, scopes, sum
               onClick={() => onScopeChange(tab.scope)}
             >
               <Typography component="span" noWrap>
+                <Box className="resource-scope-kind" component="span">
+                  {scopeKindLabel(tab.scope)}
+                </Box>
                 {tab.label}
               </Typography>
               <Chip label={loading && active ? "读取中" : tab.count} size="small" variant={active ? "filled" : "outlined"} />
@@ -54,4 +84,11 @@ export function AiosResourceScopeBar({ activeScopeId, loading, mode, scopes, sum
       </Box>
     </Box>
   );
+}
+
+function scopeKindLabel(scope: ResourceCorpusScope): string {
+  if (scope.scopeKind === "project") return "Project";
+  if (scope.scopeKind === "source") return "Source";
+  if (scope.scopeKind === "unclassified") return "Unclassified";
+  return "Global";
 }

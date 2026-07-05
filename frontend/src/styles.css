@@ -433,6 +433,15 @@
   white-space: nowrap;
 }
 
+.resource-scope-kind {
+  max-width: 84px !important;
+  color: var(--aios-muted);
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .resource-scope-tab .MuiChip-root {
   height: 22px;
   font-size: 10px;
@@ -913,6 +922,129 @@
 
 .first-run-onboarding-section {
   min-width: 0;
+}
+
+.local-resource-library-section,
+.resource-map-section {
+  min-width: 0;
+}
+
+.local-library-grid,
+.resource-map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+}
+
+.local-library-cta {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.scan-action-row.compact {
+  justify-content: flex-end;
+}
+
+.resource-map-grid.source-map {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.resource-map-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  padding: 14px;
+}
+
+.resource-map-card.active {
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-selected-surface);
+}
+
+.resource-map-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resource-map-card-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.resource-map-card-title strong {
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-map-card-title p,
+.resource-map-card > p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.resource-map-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.resource-map-metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 10px;
+  background: var(--aios-surface-muted);
+  padding: 7px 8px;
+}
+
+.resource-map-metric span {
+  overflow: hidden;
+  color: var(--aios-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-map-metric strong {
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.resource-map-directory-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resource-map-directory-list .MuiChip-root {
+  max-width: 100%;
+}
+
+.resource-map-card .MuiButton-root {
+  justify-self: start;
+  min-height: 32px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .first-run-onboarding-grid,
@@ -3252,6 +3384,8 @@
 
   .dashboard-summary,
   .quick-entry-grid,
+  .local-library-grid,
+  .resource-map-grid,
   .scan-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3261,7 +3395,8 @@
   }
 
   .scan-control-grid,
-  .scan-library-grid {
+  .scan-library-grid,
+  .local-library-cta {
     grid-template-columns: 1fr;
   }
 
@@ -3393,6 +3528,8 @@
 
   .dashboard-summary,
   .quick-entry-grid,
+  .local-library-grid,
+  .resource-map-grid,
   .scan-summary-grid,
   .skill-group-index,
   .resource-card-grid,

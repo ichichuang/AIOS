@@ -331,6 +331,7 @@ pub struct ResourceCorpusSummary {
     pub project_scope_count: u64,
     pub resource_count: u64,
     pub location_count: u64,
+    pub latest_scan: Option<PersistedScanJob>,
     pub latest_successful_scan: Option<PersistedScanJob>,
     pub counts_by_kind: Vec<ResourceKindCount>,
     pub counts_by_scope: Vec<ResourceScopeCount>,
@@ -338,6 +339,57 @@ pub struct ResourceCorpusSummary {
     pub error_total: u64,
     pub metadata_only: bool,
     pub content_storage_enabled: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectResourceDirectory {
+    pub scan_source_id: String,
+    pub display_name: String,
+    pub root_display_path: String,
+    pub profile_id: String,
+    pub source_kind: String,
+    pub enabled: bool,
+    pub resource_count: u64,
+    pub skipped_entries: u64,
+    pub error_count: u64,
+    pub last_scan_status: Option<String>,
+    pub last_scan_finished_at_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectResourceMapEntry {
+    pub scope_id: String,
+    pub project_label: String,
+    pub directories: Vec<ProjectResourceDirectory>,
+    pub resource_count: u64,
+    pub counts_by_kind: Vec<ResourceKindCount>,
+    pub last_scan_status: Option<String>,
+    pub last_scan_finished_at_ms: Option<u64>,
+    pub skipped_entries: u64,
+    pub error_count: u64,
+    pub metadata_only: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanSourceResourceMapEntry {
+    pub scope_id: String,
+    pub scan_source_id: String,
+    pub display_name: String,
+    pub root_display_path: String,
+    pub profile_id: String,
+    pub source_kind: String,
+    pub project_label: Option<String>,
+    pub enabled: bool,
+    pub resource_count: u64,
+    pub counts_by_kind: Vec<ResourceKindCount>,
+    pub last_scan_status: Option<String>,
+    pub last_scan_finished_at_ms: Option<u64>,
+    pub skipped_entries: u64,
+    pub error_count: u64,
+    pub metadata_only: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -537,6 +589,20 @@ pub fn get_active_resource_corpus_summary(
 ) -> Result<ResourceCorpusSummary, ResourceStoreCommandError> {
     get_active_resource_corpus_summary_for_path(&state.db_path)
         .map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_project_resource_map(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ProjectResourceMapEntry>, ResourceStoreCommandError> {
+    get_project_resource_map_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_scan_source_resource_map(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ScanSourceResourceMapEntry>, ResourceStoreCommandError> {
+    get_scan_source_resource_map_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
 }
 
 #[tauri::command]
@@ -993,6 +1059,12 @@ pub fn list_scan_sources_for_path(
     db_path: &Path,
 ) -> Result<Vec<PersistedScanSource>, ResourceStoreError> {
     let conn = open_initialized_connection(db_path)?;
+    list_scan_sources_for_connection(&conn)
+}
+
+fn list_scan_sources_for_connection(
+    conn: &Connection,
+) -> Result<Vec<PersistedScanSource>, ResourceStoreError> {
     let mut stmt = conn.prepare(
         "SELECT
             s.id, s.display_name, s.root_display_path, s.profile_id, s.source_kind, s.enabled,
@@ -1193,6 +1265,7 @@ pub fn get_active_resource_corpus_summary_for_path(
         )?,
         resource_count: count_rows(&conn, "resources")?,
         location_count: count_rows(&conn, "resource_locations")?,
+        latest_scan: latest_scan_job(&conn)?,
         latest_successful_scan: latest_successful_scan_job(&conn)?,
         counts_by_kind: resource_kind_counts(&conn)?,
         counts_by_scope,
@@ -1201,6 +1274,20 @@ pub fn get_active_resource_corpus_summary_for_path(
         metadata_only: true,
         content_storage_enabled: false,
     })
+}
+
+pub fn get_project_resource_map_for_path(
+    db_path: &Path,
+) -> Result<Vec<ProjectResourceMapEntry>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    get_project_resource_map_for_connection(&conn)
+}
+
+pub fn get_scan_source_resource_map_for_path(
+    db_path: &Path,
+) -> Result<Vec<ScanSourceResourceMapEntry>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    get_scan_source_resource_map_for_connection(&conn)
 }
 
 pub fn list_resources_by_scope_for_path(
@@ -2074,6 +2161,214 @@ fn list_source_scopes_for_connection(
     collect_rows(rows)
 }
 
+fn get_project_resource_map_for_connection(
+    conn: &Connection,
+) -> Result<Vec<ProjectResourceMapEntry>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT TRIM(project_label)
+        FROM scan_sources
+        WHERE project_label IS NOT NULL AND TRIM(project_label) <> ''
+        ORDER BY TRIM(project_label) ASC",
+    )?;
+    let labels = collect_rows(stmt.query_map([], |row| row.get::<_, String>(0))?)?;
+    let mut entries = Vec::with_capacity(labels.len());
+
+    for project_label in labels {
+        let directories = list_project_resource_directories(conn, &project_label)?;
+        let latest_scan = latest_scan_for_project(conn, &project_label)?;
+        entries.push(ProjectResourceMapEntry {
+            scope_id: project_label_scope_id(&project_label),
+            project_label: project_label.clone(),
+            directories,
+            resource_count: distinct_resource_count_for_project(conn, &project_label)?,
+            counts_by_kind: resource_kind_counts_for_project(conn, &project_label)?,
+            last_scan_status: latest_scan.as_ref().map(|scan| scan.0.clone()),
+            last_scan_finished_at_ms: latest_scan.and_then(|scan| scan.1),
+            skipped_entries: skipped_entries_for_project(conn, &project_label)?,
+            error_count: error_count_for_project(conn, &project_label)?,
+            metadata_only: true,
+        });
+    }
+
+    Ok(entries)
+}
+
+fn list_project_resource_directories(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<Vec<ProjectResourceDirectory>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            s.id, s.display_name, s.root_display_path, s.profile_id, s.source_kind, s.enabled,
+            (SELECT COUNT(DISTINCT l.resource_id) FROM resource_locations l WHERE l.scan_source_id = s.id),
+            COALESCE((SELECT SUM(count) FROM scan_skips sk WHERE sk.scan_source_id = s.id), 0),
+            COALESCE((SELECT COUNT(*) FROM scan_errors se WHERE se.scan_source_id = s.id), 0),
+            j.status, j.finished_at
+        FROM scan_sources s
+        LEFT JOIN scan_jobs j ON j.id = s.last_scan_job_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1
+        ORDER BY s.display_name ASC",
+    )?;
+    let rows = stmt.query_map(params![project_label], |row| {
+        Ok(ProjectResourceDirectory {
+            scan_source_id: row.get(0)?,
+            display_name: row.get(1)?,
+            root_display_path: row.get(2)?,
+            profile_id: row.get(3)?,
+            source_kind: row.get(4)?,
+            enabled: int_to_bool(row.get(5)?),
+            resource_count: i64_to_u64(row.get(6)?),
+            skipped_entries: i64_to_u64(row.get(7)?),
+            error_count: i64_to_u64(row.get(8)?),
+            last_scan_status: row.get(9)?,
+            last_scan_finished_at_ms: row.get::<_, Option<i64>>(10)?.map(i64_to_u64),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn get_scan_source_resource_map_for_connection(
+    conn: &Connection,
+) -> Result<Vec<ScanSourceResourceMapEntry>, ResourceStoreError> {
+    let sources = list_scan_sources_for_connection(conn)?;
+    let mut entries = Vec::with_capacity(sources.len());
+
+    for source in sources {
+        entries.push(ScanSourceResourceMapEntry {
+            scope_id: source_scope_id(&source.id),
+            scan_source_id: source.id.clone(),
+            display_name: source.display_name,
+            root_display_path: source.root_display_path,
+            profile_id: source.profile_id,
+            source_kind: source.source_kind,
+            project_label: source.project_label,
+            enabled: source.enabled,
+            resource_count: source.resource_count,
+            counts_by_kind: resource_kind_counts_for_source(conn, &source.id)?,
+            last_scan_status: source.last_scan_status,
+            last_scan_finished_at_ms: source.last_scan_finished_at_ms,
+            skipped_entries: source.skipped_entries,
+            error_count: source.error_count,
+            metadata_only: true,
+        });
+    }
+
+    Ok(entries)
+}
+
+fn resource_kind_counts_for_project(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<Vec<ResourceKindCount>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT r.resource_kind, COUNT(DISTINCT r.id)
+        FROM resources r
+        JOIN resource_locations l ON l.resource_id = r.id
+        JOIN scan_sources s ON s.id = l.scan_source_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1
+        GROUP BY r.resource_kind
+        ORDER BY COUNT(DISTINCT r.id) DESC, r.resource_kind ASC",
+    )?;
+    let rows = stmt.query_map(params![project_label], |row| {
+        Ok(ResourceKindCount {
+            resource_kind: row.get(0)?,
+            count: i64_to_u64(row.get(1)?),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn resource_kind_counts_for_source(
+    conn: &Connection,
+    source_id: &str,
+) -> Result<Vec<ResourceKindCount>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT r.resource_kind, COUNT(DISTINCT r.id)
+        FROM resources r
+        JOIN resource_locations l ON l.resource_id = r.id
+        WHERE l.scan_source_id = ?1
+        GROUP BY r.resource_kind
+        ORDER BY COUNT(DISTINCT r.id) DESC, r.resource_kind ASC",
+    )?;
+    let rows = stmt.query_map(params![source_id], |row| {
+        Ok(ResourceKindCount {
+            resource_kind: row.get(0)?,
+            count: i64_to_u64(row.get(1)?),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn distinct_resource_count_for_project(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<u64, ResourceStoreError> {
+    conn.query_row(
+        "SELECT COUNT(DISTINCT l.resource_id)
+        FROM resource_locations l
+        JOIN scan_sources s ON s.id = l.scan_source_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1",
+        params![project_label],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(i64_to_u64)
+    .map_err(ResourceStoreError::from)
+}
+
+fn skipped_entries_for_project(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<u64, ResourceStoreError> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(sk.count), 0)
+        FROM scan_skips sk
+        JOIN scan_sources s ON s.id = sk.scan_source_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1",
+        params![project_label],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(i64_to_u64)
+    .map_err(ResourceStoreError::from)
+}
+
+fn error_count_for_project(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<u64, ResourceStoreError> {
+    conn.query_row(
+        "SELECT COUNT(*)
+        FROM scan_errors se
+        JOIN scan_sources s ON s.id = se.scan_source_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1",
+        params![project_label],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(i64_to_u64)
+    .map_err(ResourceStoreError::from)
+}
+
+fn latest_scan_for_project(
+    conn: &Connection,
+    project_label: &str,
+) -> Result<Option<(String, Option<u64>)>, ResourceStoreError> {
+    conn.query_row(
+        "SELECT j.status, j.finished_at
+        FROM scan_sources s
+        JOIN scan_jobs j ON j.id = s.last_scan_job_id
+        WHERE COALESCE(TRIM(s.project_label), '') = ?1
+        ORDER BY COALESCE(j.finished_at, j.started_at) DESC
+        LIMIT 1",
+        params![project_label],
+        |row| {
+            let status: String = row.get(0)?;
+            let finished_at = row.get::<_, Option<i64>>(1)?.map(i64_to_u64);
+            Ok((status, finished_at))
+        },
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
 fn get_resource_counts_by_scope_for_connection(
     conn: &Connection,
 ) -> Result<Vec<ResourceScopeCount>, ResourceStoreError> {
@@ -2512,8 +2807,9 @@ mod tests {
     use super::{
         clear_resource_library_for_path, debug_all_text_values_for_path,
         get_active_resource_corpus_summary_for_path, get_app_setting_for_path,
-        get_library_summary_for_path, get_resource_counts_by_scope_for_path,
-        get_resource_detail_for_path, initialize_database,
+        get_library_summary_for_path, get_project_resource_map_for_path,
+        get_resource_counts_by_scope_for_path, get_resource_detail_for_path,
+        get_scan_source_resource_map_for_path, initialize_database,
         list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
         list_project_scopes_for_path, list_resource_corpus_scopes_for_path,
         list_resources_by_kind_for_path, list_resources_by_scope_for_path, list_scan_jobs_for_path,
@@ -2846,6 +3142,13 @@ mod tests {
         .expect("empty resource list should load");
         assert!(resources.is_empty());
 
+        let project_map =
+            get_project_resource_map_for_path(&db_path).expect("project map should load");
+        let source_map =
+            get_scan_source_resource_map_for_path(&db_path).expect("source map should load");
+        assert!(project_map.is_empty());
+        assert!(source_map.is_empty());
+
         let detail_error = get_resource_detail_for_path(&db_path, "missing-resource")
             .expect_err("missing detail should fail");
         assert!(matches!(detail_error, ResourceStoreError::InvalidInput(_)));
@@ -2876,6 +3179,45 @@ mod tests {
 
         let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
         let source_id = sources[0].id.clone();
+
+        let project_map =
+            get_project_resource_map_for_path(&db_path).expect("project map should load");
+        assert_eq!(project_map.len(), 1);
+        assert_eq!(project_map[0].project_label, "Fixture Project");
+        assert_eq!(project_map[0].resource_count, 2);
+        assert_eq!(project_map[0].directories.len(), 1);
+        assert_eq!(
+            project_map[0].directories[0].root_display_path,
+            "~/custom-scan-basic"
+        );
+        assert_eq!(
+            project_map[0].directories[0].last_scan_status.as_deref(),
+            Some("completed")
+        );
+        assert_eq!(project_map[0].counts_by_kind[0].resource_kind, "skill");
+        assert_eq!(project_map[0].skipped_entries, 1);
+        assert_eq!(project_map[0].error_count, 0);
+        assert!(project_map[0].metadata_only);
+
+        let source_map =
+            get_scan_source_resource_map_for_path(&db_path).expect("source map should load");
+        assert_eq!(source_map.len(), 1);
+        assert_eq!(source_map[0].scan_source_id, source_id);
+        assert_eq!(source_map[0].display_name, "custom-scan-basic");
+        assert_eq!(source_map[0].root_display_path, "~/custom-scan-basic");
+        assert_eq!(
+            source_map[0].project_label.as_deref(),
+            Some("Fixture Project")
+        );
+        assert_eq!(source_map[0].profile_id, "custom-folder");
+        assert!(source_map[0].enabled);
+        assert_eq!(source_map[0].resource_count, 2);
+        assert_eq!(source_map[0].counts_by_kind[0].resource_kind, "skill");
+        assert_eq!(source_map[0].last_scan_status.as_deref(), Some("completed"));
+        assert_eq!(source_map[0].skipped_entries, 1);
+        assert_eq!(source_map[0].error_count, 0);
+        assert!(source_map[0].metadata_only);
+
         let all_scopes =
             list_resource_corpus_scopes_for_path(&db_path).expect("all scopes should load");
         assert!(all_scopes.iter().any(|scope| scope.scope_kind == "global"));

@@ -3,6 +3,7 @@ import { memo } from "react";
 import { getResourceDisplay, translateSafetyNote, translateTokenReason } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { getResourceInspectorProvenanceSummary } from "../../lib/resourceCorpus";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import {
   buildSkillDisplayEnrichment,
@@ -505,20 +506,21 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 function getMetadataRows(resource: AiosResource): MetadataRow[] {
   const rows: MetadataRow[] = [];
   if (isDynamicCorpusResource(resource)) {
-    const projectLabel = getMetadataString(resource, "projectLabel");
-    const scanSourceName = getMetadataString(resource, "scanSourceName");
+    const provenance = getResourceInspectorProvenanceSummary(resource);
     const rootDisplayPath = getMetadataString(resource, "rootDisplayPath") ?? getMetadataString(resource, "root");
-    const relativePath = getMetadataString(resource, "relativePath");
-    const displayPath = getMetadataString(resource, "displayPath");
     const scanJobId = getMetadataString(resource, "scanJobId");
     const scanJobStatus = getMetadataString(resource, "scanJobStatus");
     const classificationReason = getMetadataString(resource, "classificationReason");
     rows.push(
-      { label: "语料来源", value: "动态资源库" },
-      { label: "项目 / scope", value: projectLabel ?? "未归类" },
-      { label: "扫描来源", value: scanSourceName ?? "未记录" },
+      { label: "数据来源类型", value: provenance.dataSourceType },
+      { label: "项目 / scope", value: provenance.projectLabel },
+      { label: "扫描来源", value: provenance.scanSourceName },
+      { label: "扫描来源目录", value: provenance.scanSourceDirectory, code: provenance.scanSourceDirectory !== "未记录" },
       { label: "授权根目录", value: rootDisplayPath ?? "未记录", code: Boolean(rootDisplayPath) },
-      { label: "相对路径", value: relativePath ?? displayPath ?? "未记录", code: Boolean(relativePath || displayPath) }
+      { label: "相对路径", value: provenance.relativePath, code: provenance.relativePath !== "未记录" },
+      { label: "Profile", value: provenance.profileLabel },
+      { label: "最近扫描", value: provenance.lastScanLabel, code: provenance.lastScanLabel.includes("·") },
+      { label: "元数据边界", value: provenance.metadataBoundary }
     );
     if (scanJobId) rows.push({ label: "最近扫描任务", value: scanJobId, code: true });
     if (scanJobStatus) rows.push({ label: "任务状态", value: scanJobStatus });
@@ -529,10 +531,12 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
     if (Array.isArray(findings)) rows.push({ label: "安全发现", value: findings.length });
   }
   if (isLegacySnapshotResource(resource)) {
+    const provenance = getResourceInspectorProvenanceSummary(resource);
     rows.push(
-      { label: "语料来源", value: "Legacy 示例数据" },
+      { label: "数据来源类型", value: provenance.dataSourceType },
       { label: "当前电脑扫描结果", value: "否" },
-      { label: "动态资源库", value: "不计入" }
+      { label: "动态资源库", value: "不计入" },
+      { label: "元数据边界", value: provenance.metadataBoundary }
     );
     const snapshotGeneratedAt = getMetadataString(resource, "snapshotGeneratedAt");
     if (snapshotGeneratedAt) rows.push({ label: "示例快照时间", value: formatDate(snapshotGeneratedAt) });

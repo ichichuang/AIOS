@@ -24,6 +24,8 @@ pub fn run() {
             resource_store::list_resource_corpus_scopes,
             resource_store::list_project_scopes,
             resource_store::get_active_resource_corpus_summary,
+            resource_store::get_project_resource_map,
+            resource_store::get_scan_source_resource_map,
             resource_store::list_resources_by_scope,
             resource_store::list_resources_by_kind,
             resource_store::get_resource_detail,
