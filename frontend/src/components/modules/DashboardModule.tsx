@@ -73,6 +73,7 @@ const desktopStatusChips: AiosUsageChip[] = [
   { label: "本地运行", className: "status-chip status-ok" },
   { label: "默认只读", className: "status-chip status-ok" },
   { label: "指定目录扫描 MVP", variant: "outlined" },
+  { label: "SQLite 元数据库", variant: "outlined" },
   { label: "不做全盘扫描", className: "status-chip status-disabled" }
 ];
 
@@ -102,11 +103,11 @@ const desktopBoundaryCards: Array<{
   },
   {
     title: "SQLite 本地索引",
-    purpose: "SQLite 索引尚未实现；JSON snapshot 兼容路径继续保留。",
+    purpose: "Phase 3A 已添加 Rust-owned SQLite 元数据资源库；静态模块仍保留 JSON snapshot 兼容路径。",
     icon: <StorageRounded fontSize="small" />,
     chips: [
-      { label: "未实现", className: "status-chip status-warn", variant: "filled" },
-      { label: "未来 Phase 3" }
+      { label: "Phase 3A", className: "status-chip status-ok", variant: "filled" },
+      { label: "仅元数据" }
     ]
   },
   {
@@ -156,9 +157,9 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
         <Box className="dashboard-desktop-status" aria-label="AIOS Desktop MVP 边界">
           <Box className="dashboard-status-copy">
             <Typography component="strong">桌面产品状态</Typography>
-            <Typography color="text.secondary" variant="body2">
-              当前展示 repo-local snapshot，并支持用户显式选择一个目录执行只读元数据扫描；不执行脚本、MCP 或全盘遍历。
-            </Typography>
+          <Typography color="text.secondary" variant="body2">
+              当前展示 repo-local snapshot，并支持用户显式选择一个目录执行只读元数据扫描；完成后的安全元数据写入本地 SQLite 资源库，不执行脚本、MCP 或全盘遍历。
+          </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
             {desktopStatusChips.map((chip) => (

@@ -1,3 +1,7 @@
+use crate::resource_store::{
+    self, PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput,
+    PersistScanSkipInput, PersistScanSourceInput,
+};
 use ignore::WalkBuilder;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -257,6 +261,7 @@ enum ScanError {
     RejectedRoot(String),
     Permission(String),
     SelectionMissing,
+    Store(String),
 }
 
 #[tauri::command]
@@ -306,6 +311,7 @@ pub fn scan_custom_directory(
     selection_id: String,
     profile_id: Option<String>,
     state: State<'_, ScanState>,
+    store: State<'_, resource_store::ResourceStoreState>,
 ) -> Result<CustomScanResult, ScanCommandError> {
     let profile = resolve_scan_profile(profile_id.as_deref()).map_err(ScanCommandError::from)?;
     let selected_root = {
@@ -319,7 +325,22 @@ pub fn scan_custom_directory(
             .ok_or(ScanError::SelectionMissing)?
     };
 
-    scan_validated_root(&selected_root, &profile).map_err(ScanCommandError::from)
+    let started_at_ms = current_time_ms();
+    let result = scan_validated_root(&selected_root, &profile).map_err(ScanCommandError::from)?;
+    let finished_at_ms = current_time_ms();
+    persist_completed_scan_result(
+        &store.db_path(),
+        &make_scan_job_id(),
+        "scan_custom_directory",
+        started_at_ms,
+        finished_at_ms,
+        &selected_root,
+        &profile,
+        &result,
+    )
+    .map_err(ScanCommandError::from)?;
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -328,6 +349,7 @@ pub fn start_custom_scan_job(
     selection_id: String,
     profile_id: Option<String>,
     state: State<'_, ScanState>,
+    store: State<'_, resource_store::ResourceStoreState>,
 ) -> Result<ScanStarted, ScanCommandError> {
     let profile = resolve_scan_profile(profile_id.as_deref()).map_err(ScanCommandError::from)?;
     let selected_root = {
@@ -375,6 +397,7 @@ pub fn start_custom_scan_job(
 
     let jobs = Arc::clone(&state.jobs);
     let worker_job_id = job_id.clone();
+    let resource_store_path = store.db_path();
     thread::spawn(move || {
         run_scan_job_worker(
             app,
@@ -383,6 +406,7 @@ pub fn start_custom_scan_job(
             selected_root,
             profile,
             cancellation,
+            resource_store_path,
         );
     });
 
@@ -580,6 +604,7 @@ fn run_scan_job_worker(
     selected_root: SelectedRoot,
     profile: ScanProfileDefinition,
     cancellation: ScanCancellation,
+    resource_store_path: PathBuf,
 ) {
     let started_at_ms = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
         let cancellation_requested = cancellation.is_requested();
@@ -618,8 +643,34 @@ fn run_scan_job_worker(
 
     match scan_validated_root_with_progress(&selected_root, &profile, Some(&mut progress)) {
         Ok(result) => {
+            let completed_at_ms = current_time_ms();
+            let persist_result = persist_completed_scan_result(
+                &resource_store_path,
+                &job_id,
+                "start_custom_scan_job",
+                started_at_ms,
+                completed_at_ms,
+                &selected_root,
+                &profile,
+                &result,
+            );
+            if let Err(error) = persist_result {
+                let command_error = ScanCommandError::from(error);
+                let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                    let failed_at_ms = current_time_ms();
+                    snapshot.status = ScanJobStatus::Failed;
+                    snapshot.updated_at_ms = failed_at_ms;
+                    snapshot.completed_at_ms = Some(failed_at_ms);
+                    snapshot.progress.current_phase = "failed";
+                    snapshot.progress.elapsed_ms =
+                        failed_at_ms.saturating_sub(snapshot.started_at_ms);
+                    snapshot.result = None;
+                    snapshot.error = Some(command_error);
+                });
+                emit_scan_job_progress(&app, &jobs, &job_id);
+                return;
+            }
             let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
-                let completed_at_ms = current_time_ms();
                 snapshot.status = ScanJobStatus::Completed;
                 snapshot.updated_at_ms = completed_at_ms;
                 snapshot.completed_at_ms = Some(completed_at_ms);
@@ -639,7 +690,7 @@ fn run_scan_job_worker(
             emit_scan_job_progress(&app, &jobs, &job_id);
         }
         Err(ScanError::Cancelled) => {
-            let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+            let snapshot_after_cancel = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
                 let completed_at_ms = current_time_ms();
                 snapshot.status = ScanJobStatus::Cancelled;
                 snapshot.updated_at_ms = completed_at_ms;
@@ -651,11 +702,24 @@ fn run_scan_job_worker(
                 snapshot.result = None;
                 snapshot.error = None;
             });
+            if let Ok(snapshot) = snapshot_after_cancel.as_ref() {
+                if let Err(error) =
+                    persist_terminal_scan_snapshot(&resource_store_path, &selected_root, snapshot)
+                {
+                    let command_error = ScanCommandError::from(error);
+                    let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                        snapshot.status = ScanJobStatus::Failed;
+                        snapshot.updated_at_ms = current_time_ms();
+                        snapshot.progress.current_phase = "failed";
+                        snapshot.error = Some(command_error);
+                    });
+                }
+            }
             emit_scan_job_progress(&app, &jobs, &job_id);
         }
         Err(error) => {
             let command_error = ScanCommandError::from(error);
-            let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+            let snapshot_after_failure = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
                 let completed_at_ms = current_time_ms();
                 snapshot.status = ScanJobStatus::Failed;
                 snapshot.updated_at_ms = completed_at_ms;
@@ -664,8 +728,19 @@ fn run_scan_job_worker(
                 snapshot.progress.elapsed_ms =
                     completed_at_ms.saturating_sub(snapshot.started_at_ms);
                 snapshot.result = None;
-                snapshot.error = Some(command_error);
+                snapshot.error = Some(command_error.clone());
             });
+            if let Ok(snapshot) = snapshot_after_failure.as_ref() {
+                if let Err(error) =
+                    persist_terminal_scan_snapshot(&resource_store_path, &selected_root, snapshot)
+                {
+                    let store_error = ScanCommandError::from(error);
+                    let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                        snapshot.updated_at_ms = current_time_ms();
+                        snapshot.error = Some(store_error);
+                    });
+                }
+            }
             emit_scan_job_progress(&app, &jobs, &job_id);
         }
     }
@@ -710,6 +785,281 @@ fn emit_scan_job_progress(
         snapshot.error,
     );
     let _ = app.emit(SCAN_JOB_PROGRESS_EVENT, payload);
+}
+
+fn persist_completed_scan_result(
+    db_path: &Path,
+    job_id: &str,
+    requested_by: &str,
+    started_at_ms: u64,
+    finished_at_ms: u64,
+    selected_root: &SelectedRoot,
+    profile: &ScanProfileDefinition,
+    result: &CustomScanResult,
+) -> Result<(), ScanError> {
+    let skipped_entries = result.counts.skipped_by_exclude
+        + result.counts.skipped_by_guard
+        + result.counts.skipped_by_metadata_error
+        + result.counts.skipped_by_limit
+        + result.counts.skipped_by_cancellation
+        + result.counts.skipped_by_size
+        + result.counts.skipped_symlinks;
+    let error_inputs = error_inputs_from_warnings(&result.warnings);
+    let input = PersistScanJobInput {
+        id: job_id.to_string(),
+        status: "completed".to_string(),
+        profile_id: profile.id.to_string(),
+        started_at_ms,
+        finished_at_ms: Some(finished_at_ms),
+        elapsed_ms: finished_at_ms.saturating_sub(started_at_ms),
+        requested_by: requested_by.to_string(),
+        total_entries: result.counts.visited_entries as u64,
+        matched_resources: result.resources.len() as u64,
+        skipped_entries: skipped_entries as u64,
+        error_count: error_inputs.len() as u64,
+        cancelled: false,
+        summary_json: completed_summary_json(result, profile),
+        source: scan_source_input(selected_root, profile),
+        resources: result
+            .resources
+            .iter()
+            .map(persist_resource_input)
+            .collect(),
+        skips: skip_inputs_from_counts(&result.counts, &result.warnings),
+        errors: error_inputs,
+    };
+
+    resource_store::persist_scan_job_for_path(db_path, input).map_err(store_error_to_scan_error)
+}
+
+fn persist_terminal_scan_snapshot(
+    db_path: &Path,
+    selected_root: &SelectedRoot,
+    snapshot: &ScanJobSnapshot,
+) -> Result<(), ScanError> {
+    let profile = resolve_scan_profile(Some(snapshot.profile_id))?;
+    let error_inputs = snapshot
+        .error
+        .as_ref()
+        .map(|error| PersistScanErrorInput {
+            error_kind: error.code.to_string(),
+            message: error.message.clone(),
+            sample_safe_path: None,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    let skips = if snapshot.status == ScanJobStatus::Cancelled {
+        vec![PersistScanSkipInput {
+            reason: "skipped_by_cancellation".to_string(),
+            count: 1,
+            sample_safe_path: None,
+        }]
+    } else {
+        Vec::new()
+    };
+
+    let input = PersistScanJobInput {
+        id: snapshot.job_id.clone(),
+        status: scan_job_status_value(&snapshot.status).to_string(),
+        profile_id: snapshot.profile_id.to_string(),
+        started_at_ms: snapshot.started_at_ms,
+        finished_at_ms: snapshot.completed_at_ms,
+        elapsed_ms: snapshot.progress.elapsed_ms,
+        requested_by: "start_custom_scan_job".to_string(),
+        total_entries: snapshot.progress.visited_entries as u64,
+        matched_resources: snapshot.progress.matched_resources as u64,
+        skipped_entries: snapshot.progress.skipped_entries as u64,
+        error_count: error_inputs.len() as u64,
+        cancelled: snapshot.status == ScanJobStatus::Cancelled,
+        summary_json: terminal_summary_json(snapshot),
+        source: scan_source_input(selected_root, &profile),
+        resources: Vec::new(),
+        skips,
+        errors: error_inputs,
+    };
+
+    resource_store::persist_scan_job_for_path(db_path, input).map_err(store_error_to_scan_error)
+}
+
+fn scan_source_input(
+    selected_root: &SelectedRoot,
+    profile: &ScanProfileDefinition,
+) -> PersistScanSourceInput {
+    PersistScanSourceInput {
+        display_name: selected_root.display_name.clone(),
+        root_path: selected_root.canonical_root.to_string_lossy().to_string(),
+        root_display_path: selected_root.root_summary.clone(),
+        profile_id: profile.id.to_string(),
+        source_kind: "custom-directory".to_string(),
+    }
+}
+
+fn persist_resource_input(resource: &ScanResource) -> PersistScanResourceInput {
+    PersistScanResourceInput {
+        name: display_name_for_relative_resource(&resource.relative_path),
+        resource_kind: resource.resource_kind.to_string(),
+        description: resource.classification_reason.to_string(),
+        primary_type: resource.entry_type.to_string(),
+        risk_level: risk_level_for_scan_resource(resource).to_string(),
+        boundary_labels: resource
+            .boundary_labels
+            .iter()
+            .map(|label| (*label).to_string())
+            .collect(),
+        relative_path: resource.relative_path.clone(),
+        display_path: resource.relative_path.clone(),
+        extension: resource.extension.clone(),
+        entry_type: resource.entry_type.to_string(),
+        size_bytes: resource.size_bytes,
+        modified_at_ms: resource.modified_at_ms,
+        classification_reason: resource.classification_reason.to_string(),
+        sensitive_path_redacted: resource.sensitive,
+        risk_labels: resource
+            .risk_labels
+            .iter()
+            .map(|label| (*label).to_string())
+            .collect(),
+    }
+}
+
+fn skip_inputs_from_counts(
+    counts: &ScanCounts,
+    warnings: &[ScanWarning],
+) -> Vec<PersistScanSkipInput> {
+    [
+        (
+            "skipped_by_exclude",
+            counts.skipped_by_exclude,
+            None::<&[&str]>,
+        ),
+        ("skipped_by_guard", counts.skipped_by_guard, None::<&[&str]>),
+        (
+            "skipped_by_metadata_error",
+            counts.skipped_by_metadata_error,
+            Some(&["metadata_denied", "walk_error"][..]),
+        ),
+        (
+            "skipped_by_limit",
+            counts.skipped_by_limit,
+            Some(&["max_entries_reached"][..]),
+        ),
+        (
+            "skipped_by_cancellation",
+            counts.skipped_by_cancellation,
+            None::<&[&str]>,
+        ),
+        (
+            "skipped_by_size",
+            counts.skipped_by_size,
+            Some(&["max_file_size_skipped"][..]),
+        ),
+        (
+            "skipped_symlinks",
+            counts.skipped_symlinks,
+            Some(&["symlink_skipped"][..]),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(reason, count, warning_codes)| {
+        if count == 0 {
+            return None;
+        }
+        Some(PersistScanSkipInput {
+            reason: reason.to_string(),
+            count: count as u64,
+            sample_safe_path: warning_codes.and_then(|codes| sample_warning_path(warnings, codes)),
+        })
+    })
+    .collect()
+}
+
+fn error_inputs_from_warnings(warnings: &[ScanWarning]) -> Vec<PersistScanErrorInput> {
+    warnings
+        .iter()
+        .filter(|warning| matches!(warning.code, "metadata_denied" | "walk_error"))
+        .map(|warning| PersistScanErrorInput {
+            error_kind: warning.code.to_string(),
+            message: warning.message.clone(),
+            sample_safe_path: warning.relative_path.clone(),
+        })
+        .collect()
+}
+
+fn sample_warning_path(warnings: &[ScanWarning], codes: &[&str]) -> Option<String> {
+    warnings
+        .iter()
+        .find(|warning| codes.contains(&warning.code))
+        .and_then(|warning| warning.relative_path.clone())
+}
+
+fn completed_summary_json(result: &CustomScanResult, profile: &ScanProfileDefinition) -> String {
+    serde_json::json!({
+        "policyId": result.policy_id,
+        "profileId": profile.id,
+        "metadataOnly": true,
+        "contentStored": false,
+        "executionEnabled": false,
+        "fullDiskScanEnabled": false,
+        "visitedEntries": result.counts.visited_entries,
+        "matchedResources": result.resources.len(),
+        "warningCount": result.warnings.len(),
+        "truncated": result.counts.truncated
+    })
+    .to_string()
+}
+
+fn terminal_summary_json(snapshot: &ScanJobSnapshot) -> String {
+    serde_json::json!({
+        "profileId": snapshot.profile_id,
+        "status": scan_job_status_value(&snapshot.status),
+        "metadataOnly": true,
+        "contentStored": false,
+        "executionEnabled": false,
+        "fullDiskScanEnabled": false,
+        "visitedEntries": snapshot.progress.visited_entries,
+        "matchedResources": snapshot.progress.matched_resources,
+        "skippedEntries": snapshot.progress.skipped_entries,
+        "cancelled": snapshot.status == ScanJobStatus::Cancelled
+    })
+    .to_string()
+}
+
+fn scan_job_status_value(status: &ScanJobStatus) -> &'static str {
+    match status {
+        ScanJobStatus::Queued => "queued",
+        ScanJobStatus::Running => "running",
+        ScanJobStatus::Cancelling => "cancelling",
+        ScanJobStatus::Completed => "completed",
+        ScanJobStatus::Cancelled => "cancelled",
+        ScanJobStatus::Failed => "failed",
+    }
+}
+
+fn risk_level_for_scan_resource(resource: &ScanResource) -> &'static str {
+    if resource.sensitive
+        || matches!(
+            resource.resource_kind,
+            "script" | "validator" | "mcp-config"
+        )
+    {
+        "medium"
+    } else {
+        "low"
+    }
+}
+
+fn display_name_for_relative_resource(relative_path: &str) -> String {
+    relative_path
+        .split('/')
+        .filter(|segment| !segment.trim().is_empty())
+        .last()
+        .unwrap_or(relative_path)
+        .to_string()
+}
+
+fn store_error_to_scan_error(error: resource_store::ResourceStoreError) -> ScanError {
+    let command_error = resource_store::ResourceStoreCommandError::from(error);
+    ScanError::Store(command_error.message)
 }
 
 struct ScanJobProgressHandle {
@@ -1599,6 +1949,7 @@ impl From<ScanError> for ScanCommandError {
                 code,
                 message: "请先通过系统目录选择器选择一个目录。".to_string(),
             },
+            ScanError::Store(message) => Self { code, message },
         }
     }
 }
@@ -1614,6 +1965,7 @@ impl ScanError {
             ScanError::RejectedRoot(_) => "rejected_root",
             ScanError::Permission(_) => "permission_error",
             ScanError::SelectionMissing => "selection_missing",
+            ScanError::Store(_) => "resource_store_error",
         }
     }
 }
@@ -1621,14 +1973,16 @@ impl ScanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_scan_job_event_payload, classify_resource_kind, get_scan_profiles,
-        redact_relative_path, resolve_scan_profile, scan_validated_root, validate_scan_root,
-        ScanCancellation, ScanCounts, ScanJobStatus, ScanProgress, SelectedRoot,
-        DEFAULT_SCAN_PROFILE_ID,
+        build_scan_job_event_payload, classify_resource_kind, current_time_ms, get_scan_profiles,
+        persist_completed_scan_result, redact_relative_path, resolve_scan_profile,
+        scan_validated_root, validate_scan_root, ScanCancellation, ScanCounts, ScanJobStatus,
+        ScanProgress, SelectedRoot, DEFAULT_SCAN_PROFILE_ID,
     };
+    use crate::resource_store;
     use std::collections::HashSet;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn rejects_broad_machine_roots() {
@@ -1840,6 +2194,60 @@ mod tests {
     }
 
     #[test]
+    fn fixture_scan_results_persist_to_resource_store() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "persist-fixture".to_string(),
+            canonical_root,
+            display_name: "custom-scan-basic".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+        };
+        let profile =
+            resolve_scan_profile(Some("project-root")).expect("known profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("fixture scan should succeed");
+        let db_path = temp_resource_store_path();
+        resource_store::initialize_database(&db_path).expect("resource DB should initialize");
+
+        let started_at_ms = current_time_ms();
+        let finished_at_ms = started_at_ms + 250;
+        persist_completed_scan_result(
+            &db_path,
+            "scan-job-fixture-persist",
+            "scanner-test",
+            started_at_ms,
+            finished_at_ms,
+            &selected,
+            &profile,
+            &result,
+        )
+        .expect("fixture scan result should persist");
+
+        let summary =
+            resource_store::get_library_summary_for_path(&db_path).expect("summary should load");
+        assert_eq!(summary.source_count, 1);
+        assert_eq!(summary.job_count, 1);
+        assert_eq!(summary.resource_count, result.resources.len() as u64);
+        assert_eq!(
+            summary.latest_job.as_ref().map(|job| job.status.as_str()),
+            Some("completed")
+        );
+
+        let persisted_resources = resource_store::list_persisted_resources_for_path(&db_path, None)
+            .expect("persisted resources should load");
+        assert!(
+            persisted_resources
+                .iter()
+                .all(|resource| !resource.display_path.starts_with('/')),
+            "resource locations should use redacted relative display paths"
+        );
+
+        let cleared =
+            resource_store::clear_resource_library_for_path(&db_path).expect("clear should work");
+        assert_eq!(cleared.resource_count, 0);
+        cleanup_resource_store(db_path);
+    }
+
+    #[test]
     fn scan_limit_updates_limit_counters() {
         let canonical_root = fixture_root();
         let selected = SelectedRoot {
@@ -1976,5 +2384,22 @@ mod tests {
 
     fn symlink_fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/scanner-symlink-test")
+    }
+
+    fn temp_resource_store_path() -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_millis();
+        std::env::temp_dir()
+            .join("aios-scanner-store-tests")
+            .join(format!("fixture-{now}"))
+            .join("resource-store.sqlite3")
+    }
+
+    fn cleanup_resource_store(db_path: PathBuf) {
+        if let Some(parent) = db_path.parent() {
+            let _ = fs::remove_dir_all(parent);
+        }
     }
 }

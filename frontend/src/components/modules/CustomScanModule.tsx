@@ -1,7 +1,9 @@
 import { Box, Button, Chip, LinearProgress, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import DeleteSweepRounded from "@mui/icons-material/DeleteSweepRounded";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
 import SecurityRounded from "@mui/icons-material/SecurityRounded";
+import StorageRounded from "@mui/icons-material/StorageRounded";
 import StopCircleRounded from "@mui/icons-material/StopCircleRounded";
 import WarningAmberRounded from "@mui/icons-material/WarningAmberRounded";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,6 +37,20 @@ import {
   type ScannerPolicy,
   type SelectedScanDirectory
 } from "../../lib/customDirectoryScan";
+import {
+  buildPersistedLibraryState,
+  clearResourceLibrary,
+  fallbackResourceLibrarySummary,
+  fallbackResourceStoreStatus,
+  getResourceLibrarySummary,
+  getResourceStoreStatus,
+  listPersistedScanJobs,
+  listScanSources,
+  type PersistedScanJob,
+  type PersistedScanSource,
+  type ResourceLibrarySummary,
+  type ResourceStoreStatus
+} from "../../lib/resourceStore";
 import { ResourceGroup, type ResourceGroupData } from "../resources/ResourceGroup";
 import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
 import type { ResourceCardVariant } from "../resources/ResourceCard";
@@ -49,6 +65,12 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const [selectedDirectory, setSelectedDirectory] = useState<SelectedScanDirectory | null>(null);
   const [scanJobSnapshot, setScanJobSnapshot] = useState<ScanJobSnapshot | null>(null);
   const [scanResult, setScanResult] = useState<CustomScanResult | null>(null);
+  const [resourceStoreStatus, setResourceStoreStatus] = useState<ResourceStoreStatus>(fallbackResourceStoreStatus);
+  const [librarySummary, setLibrarySummary] = useState<ResourceLibrarySummary>(fallbackResourceLibrarySummary);
+  const [persistedSources, setPersistedSources] = useState<PersistedScanSource[]>([]);
+  const [persistedJobs, setPersistedJobs] = useState<PersistedScanJob[]>([]);
+  const [libraryBusyState, setLibraryBusyState] = useState<"idle" | "loading" | "clearing">("idle");
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyState, setBusyState] = useState<"idle" | "picking">("idle");
   const tauriAvailable = isTauriRuntimeAvailable();
@@ -64,6 +86,26 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       .catch((policyError: unknown) => setError(formatCommandError(policyError)));
   }, []);
 
+  const refreshResourceLibrary = useCallback(async () => {
+    setLibraryBusyState("loading");
+    try {
+      const [nextStatus, nextSummary, nextSources, nextJobs] = await Promise.all([getResourceStoreStatus(), getResourceLibrarySummary(), listScanSources(), listPersistedScanJobs(6)]);
+      setResourceStoreStatus(nextStatus);
+      setLibrarySummary(nextSummary);
+      setPersistedSources(nextSources);
+      setPersistedJobs(nextJobs);
+      setLibraryError(null);
+    } catch (storeError) {
+      setLibraryError(formatCommandError(storeError));
+    } finally {
+      setLibraryBusyState("idle");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshResourceLibrary();
+  }, [refreshResourceLibrary]);
+
   const refreshScanJobSnapshot = useCallback(async (jobId: string) => {
     try {
       const snapshot = await getScanJobSnapshot(jobId);
@@ -77,10 +119,13 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       } else if (snapshot.status === "cancelled") {
         setScanResult(null);
       }
+      if (isTerminalScanJobStatus(snapshot.status)) {
+        void refreshResourceLibrary();
+      }
     } catch (snapshotError) {
       setError(formatCommandError(snapshotError));
     }
-  }, []);
+  }, [refreshResourceLibrary]);
 
   useEffect(() => {
     if (!tauriAvailable) return undefined;
@@ -119,6 +164,7 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const visibleResources = useMemo(() => filterResourceList(resources, query), [query, resources]);
   const groups = useMemo(() => buildScanGroups(visibleResources, profileForVisibleResults), [profileForVisibleResults, visibleResources]);
   const categorySummary = useMemo(() => (scanResult ? buildProfileCategorySummary(scanResult, profileForVisibleResults) : []), [profileForVisibleResults, scanResult]);
+  const persistedLibraryState = useMemo(() => buildPersistedLibraryState(librarySummary, persistedSources, persistedJobs), [librarySummary, persistedJobs, persistedSources]);
   const skippedCount = scanResult ? countSkippedEntries(scanResult.counts) : (scanJobSnapshot?.progress.skippedEntries ?? 0);
   const lifecycle = scanLifecycleFromSnapshot(scanJobSnapshot, Boolean(selectedDirectory), Boolean(error));
   const scanRunning = lifecycle === "running";
@@ -156,13 +202,15 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       setScanJobSnapshot(started.snapshot);
       if (started.snapshot.status === "completed" && started.snapshot.result) {
         setScanResult(started.snapshot.result);
+        void refreshResourceLibrary();
       } else if (started.snapshot.status === "failed") {
         setError(started.snapshot.error?.message ?? "扫描任务失败。");
+        void refreshResourceLibrary();
       }
     } catch (scanError) {
       setError(formatCommandError(scanError));
     }
-  }, [activeProfile.id, selectedDirectory]);
+  }, [activeProfile.id, refreshResourceLibrary, selectedDirectory]);
 
   const handleCancelScan = useCallback(async () => {
     if (!scanJobSnapshot || !["queued", "running"].includes(scanJobSnapshot.status)) return;
@@ -174,6 +222,19 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       setError(formatCommandError(cancelError));
     }
   }, [scanJobSnapshot]);
+
+  const handleClearResourceLibrary = useCallback(async () => {
+    setLibraryBusyState("clearing");
+    setLibraryError(null);
+    try {
+      await clearResourceLibrary();
+      await refreshResourceLibrary();
+    } catch (clearError) {
+      setLibraryError(formatCommandError(clearError));
+    } finally {
+      setLibraryBusyState("idle");
+    }
+  }, [refreshResourceLibrary]);
 
   return (
     <AiosModuleFrame
@@ -241,7 +302,7 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       </AiosSection>
 
       <AiosSection className="scan-control-section">
-        <AiosSectionHeader title="扫描控制" summary={`当前模板：${activeProfile.displayName}。只允许系统目录选择器授权的单个目录；结果仅保存在当前界面内存中。`} />
+        <AiosSectionHeader title="扫描控制" summary={`当前模板：${activeProfile.displayName}。只允许系统目录选择器授权的单个目录；完成、取消或失败任务会保存安全元数据摘要。`} />
         <Box className="scan-control-grid">
           <Box className="scan-control-card">
             <Box className="scan-control-heading">
@@ -299,11 +360,109 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         </Box>
       </AiosSection>
 
+      <AiosSection className="scan-library-section">
+        <AiosSectionHeader
+          title="本地资源库"
+          summary={tauriAvailable ? "Rust 后端拥有的 SQLite 元数据资源库；不保存文件内容、secret、env value、auth/session 或 cookie。" : "Web/Vite 预览模式不连接本地 SQLite，仅显示空的降级状态。"}
+          action={<Chip className={`status-chip ${resourceStoreStatus.databaseReady ? "status-ok" : "status-disabled"}`} label={resourceStoreStatus.databaseReady ? "SQLite 已就绪" : "未连接本地库"} variant="outlined" />}
+        />
+        <Box className="scan-library-grid">
+          <Box className="scan-control-card library">
+            <Box className="scan-control-heading">
+              <StorageRounded fontSize="small" />
+              <Box className="scan-control-copy">
+                <Typography component="strong">持久化摘要</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  最近任务：{persistedLibraryState.latestJobLabel}
+                </Typography>
+              </Box>
+            </Box>
+            <Box className="scan-progress-grid">
+              <ProgressMetric label="保存来源" value={librarySummary.sourceCount} />
+              <ProgressMetric label="扫描任务" value={librarySummary.jobCount} />
+              <ProgressMetric label="资源" value={librarySummary.resourceCount} />
+              <ProgressMetric label="位置记录" value={librarySummary.locationCount} />
+            </Box>
+            <Box className="scan-library-list" aria-label="已保存扫描来源">
+              <Typography component="strong">扫描来源</Typography>
+              {persistedLibraryState.sourceRows.length > 0 ? (
+                persistedLibraryState.sourceRows.map((source) => (
+                  <Box className="scan-library-row" key={source.id}>
+                    <Typography component="span" title={source.primary}>
+                      {source.primary}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2" title={source.secondary}>
+                      {source.secondary}
+                    </Typography>
+                  </Box>
+                ))
+              ) : (
+                <Typography color="text.secondary" variant="body2">
+                  尚无持久化扫描来源。完成一次指定目录扫描后会出现在这里。
+                </Typography>
+              )}
+            </Box>
+          </Box>
+
+          <Box className="scan-control-card library">
+            <Box className="scan-control-heading">
+              <SecurityRounded fontSize="small" />
+              <Box className="scan-control-copy">
+                <Typography component="strong">分类计数与隐私控制</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  分类来自已保存的 metadata-only 资源记录；清空只删除 AIOS 本地库记录，不删除用户文件。
+                </Typography>
+              </Box>
+            </Box>
+            <Box className="scan-category-summary-grid compact" aria-label="持久化资源分类计数">
+              {persistedLibraryState.categoryRows.length > 0 ? (
+                persistedLibraryState.categoryRows.slice(0, 6).map((item) => (
+                  <Box className="scan-category-summary-item" key={item.resourceKind}>
+                    <Typography component="strong">{item.label}</Typography>
+                    <Typography className="scan-category-count" component="span">
+                      {item.count}
+                    </Typography>
+                  </Box>
+                ))
+              ) : (
+                <Box className="scan-category-summary-item">
+                  <Typography component="strong">无持久资源</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    本地资源库为空。
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            <Box className="scan-action-row">
+              <Button
+                color="warning"
+                disabled={!tauriAvailable || scanLocked || libraryBusyState !== "idle" || !persistedLibraryState.canClear}
+                startIcon={<DeleteSweepRounded />}
+                variant="outlined"
+                onClick={handleClearResourceLibrary}
+              >
+                清空本地资源库
+              </Button>
+              <Chip label={libraryBusyState === "idle" ? "本地记录可重建" : libraryBusyState === "clearing" ? "正在清空" : "正在读取"} size="small" variant="outlined" />
+            </Box>
+          </Box>
+        </Box>
+      </AiosSection>
+
       {!tauriAvailable && (
         <Box className="scan-boundary-callout warn">
           <WarningAmberRounded fontSize="small" />
           <Typography color="text.secondary" variant="body2">
             当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择和 Rust 扫描只在 Tauri 桌面应用中启用。
+          </Typography>
+        </Box>
+      )}
+
+      {libraryError && (
+        <Box className="scan-boundary-callout warn">
+          <WarningAmberRounded fontSize="small" />
+          <Typography color="text.secondary" variant="body2">
+            {libraryError}
           </Typography>
         </Box>
       )}
@@ -476,7 +635,7 @@ function lifecycleSummary(lifecycle: ScanLifecycleState, snapshot: ScanJobSnapsh
   if (snapshot?.error?.message) return snapshot.error.message;
   if (lifecycle === "running") return "正在执行有界 metadata-only 扫描；可取消，不读取内容。";
   if (lifecycle === "cancelling") return "已请求取消，Rust 扫描器会在下一个遍历检查点停止。";
-  if (lifecycle === "completed") return "扫描已完成，结果仅保存在当前界面内存中。";
+  if (lifecycle === "completed") return "扫描已完成，安全元数据已写入本地资源库。";
   if (lifecycle === "cancelled") return "扫描已取消，可重新运行或选择其它目录。";
   if (lifecycle === "failed") return "扫描失败，可选择其它目录或重新运行。";
   if (lifecycle === "directory-selected") return "目录已选择，等待手动运行扫描。";
@@ -493,7 +652,7 @@ function emptyStateTitle(lifecycle: ScanLifecycleState): string {
 
 function emptyStateSummary(lifecycle: ScanLifecycleState): string {
   if (lifecycle === "cancelled") return "任务已安全停止。可以重新运行当前目录，也可以选择其它目录。";
-  if (lifecycle === "failed") return "错误已显示在上方。修正目录选择后可重新运行；不会保留失败历史。";
+  if (lifecycle === "failed") return "错误已显示在上方。失败任务只保留安全摘要，可在本地资源库中清空。";
   if (lifecycle === "running" || lifecycle === "cancelling") return "正在处理任务状态，结果会在完成后显示。";
   if (lifecycle === "completed") return "扫描完成，但当前搜索或分类下没有可见结果。";
   return "先选择扫描模板，再选择一个通过策略守卫的目录并手动运行扫描。全盘扫描已禁用，非 MVP，未来需要单独批准。";
@@ -684,7 +843,7 @@ const scanKindSummaries: Record<ScanResourceKind, string> = {
   script: "脚本入口仅作为元数据展示，不执行。",
   validator: "验证器仅归类展示，不运行。",
   "report-doc": "报告和文档仅展示路径、时间和大小元数据。",
-  "project-pack": "项目资源包元数据，保留在当前扫描结果内存中。",
+  "project-pack": "项目资源包元数据，完成扫描后写入本地资源库。",
   "policy-governance": "策略治理文件仅识别路径和名称，不读取策略正文。",
   "package-manifest": "包管理与项目 manifest，仅识别文件名。",
   "unknown-local-resource": "未匹配已知类别的本地条目，只保留安全元数据。"

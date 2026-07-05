@@ -1,10 +1,25 @@
+mod resource_store;
 mod scanner;
+
+use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(scanner::ScanState::default())
+        .setup(|app| {
+            app.manage(resource_store::ResourceStoreState::from_app_handle(
+                app.handle(),
+            )?);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            resource_store::get_resource_store_status,
+            resource_store::list_scan_sources,
+            resource_store::list_persisted_scan_jobs,
+            resource_store::get_resource_library_summary,
+            resource_store::list_persisted_resources,
+            resource_store::clear_resource_library,
             scanner::pick_scan_directory,
             scanner::scan_custom_directory,
             scanner::start_custom_scan_job,
