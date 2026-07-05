@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_SCAN_PROFILE_ID,
   applyScanJobProgressEvent,
+  canStartScanMode,
   createFallbackScanJobSnapshot,
   fallbackScanProfiles,
   getScanProfileById,
+  getScanModeById,
   isTerminalScanJobStatus,
   mapScanResourcesToAiosResources,
+  nextScanModeState,
   scanLifecycleFromSnapshot,
   type ScanJobEventPayload,
   type CustomScanResult
@@ -101,7 +104,7 @@ const projectProfile = getScanProfileById("project-root");
 const fallbackProfile = getScanProfileById(undefined);
 
 assert.equal(resources.length, 5);
-assert.equal(fallbackScanProfiles.length, 6);
+assert.equal(fallbackScanProfiles.length, 8);
 assert.equal(fallbackProfile.id, DEFAULT_SCAN_PROFILE_ID);
 assert.equal(projectProfile.id, "project-root");
 assert.ok(projectProfile.emphasizedResourceKinds.includes("package-manifest"));
@@ -119,6 +122,19 @@ assert.equal(resources[3].capabilityType, "mcp-client");
 assert.equal(resources[3].safetyProfile.executionRisk, "low");
 assert.equal(resources[4].capabilityType, "policy");
 assert.ok(resources.every((resource) => resource.metadata?.sourceKind === "custom-directory-scan"));
+
+const defaultMode = getScanModeById(undefined);
+const intelligentMode = getScanModeById("intelligent-discovery");
+const advancedMode = getScanModeById("advanced-full-disk");
+assert.equal(defaultMode.id, "custom-directory");
+assert.equal(intelligentMode.sourceKind, "intelligent-discovery");
+assert.equal(advancedMode.requiresConfirmation, true);
+assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: true, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
+assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), false);
+assert.equal(canStartScanMode("intelligent-discovery", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
+assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), false);
+assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: true, tauriAvailable: true, scanLocked: false }), true);
+assert.deepEqual(nextScanModeState("advanced-full-disk", { advancedConfirmed: true }), { modeId: "advanced-full-disk", advancedConfirmed: false });
 
 const fallbackSnapshot = createFallbackScanJobSnapshot("job-1", "project-root");
 assert.equal(fallbackSnapshot.status, "queued");

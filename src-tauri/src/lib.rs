@@ -31,6 +31,7 @@ pub fn run() {
             resource_store::remove_scan_source,
             scanner::pick_scan_directory,
             scanner::add_scan_sources,
+            scanner::add_discovery_scan_sources,
             scanner::scan_custom_directory,
             scanner::start_custom_scan_job,
             scanner::cancel_scan_job,

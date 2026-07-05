@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_SCAN_PROFILE_ID, isTauriRuntimeAvailable, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
+import { DEFAULT_SCAN_PROFILE_ID, isTauriRuntimeAvailable, type ScanModeId, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
 
 export interface ResourceStoreStatus {
   databaseReady: boolean;
@@ -51,6 +51,17 @@ export interface ResourceKindCount {
   count: number;
 }
 
+export interface ScanSkipReasonCount {
+  reason: string;
+  count: number;
+}
+
+export interface DiscoveryResourceKindStat {
+  resourceKind: string;
+  label: string;
+  count: number;
+}
+
 export interface ResourceLibrarySummary {
   sourceCount: number;
   enabledSourceCount: number;
@@ -60,6 +71,7 @@ export interface ResourceLibrarySummary {
   latestJob: PersistedScanJob | null;
   latestSuccessfulScan: PersistedScanJob | null;
   countsByKind: ResourceKindCount[];
+  skipCountsByReason: ScanSkipReasonCount[];
   skippedEntryTotal: number;
   errorTotal: number;
   metadataOnly: boolean;
@@ -119,6 +131,22 @@ export interface UpdateScanSourceInput {
 export interface AddScanSourcesResult {
   sources: PersistedScanSource[];
   selectedCount: number;
+}
+
+export interface StartScanSourcesBatchOptions {
+  advancedConfirmationAccepted?: boolean;
+}
+
+export interface DiscoveryResultStats {
+  totalResources: number;
+  resourcesByKind: DiscoveryResourceKindStat[];
+  scannedSources: number;
+  skippedEntries: number;
+  permissionDeniedCount: number;
+  excludedCount: number;
+  errors: number;
+  elapsedSeconds: number;
+  storedLibraryCount: number;
 }
 
 export type ScanBatchStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "failed";
@@ -190,6 +218,7 @@ export const fallbackResourceLibrarySummary: ResourceLibrarySummary = {
   latestJob: null,
   latestSuccessfulScan: null,
   countsByKind: [],
+  skipCountsByReason: [],
   skippedEntryTotal: 0,
   errorTotal: 0,
   metadataOnly: true,
@@ -231,6 +260,17 @@ export async function addScanSources(profileId: ScanProfileId | string = DEFAULT
   return invoke<AddScanSourcesResult>("add_scan_sources", { profileId, projectLabel: projectLabel?.trim() || null });
 }
 
+export async function addDiscoveryScanSources(mode: ScanModeId, advancedConfirmationAccepted: boolean, projectLabel?: string): Promise<AddScanSourcesResult> {
+  if (!isTauriRuntimeAvailable()) return { sources: [], selectedCount: 0 };
+  return invoke<AddScanSourcesResult>("add_discovery_scan_sources", {
+    input: {
+      mode,
+      advancedConfirmationAccepted,
+      projectLabel: projectLabel?.trim() || null
+    }
+  });
+}
+
 export async function updateScanSource(input: UpdateScanSourceInput): Promise<PersistedScanSource> {
   assertTauriResourceStore();
   return invoke<PersistedScanSource>("update_scan_source", { input });
@@ -241,9 +281,9 @@ export async function removeScanSource(sourceId: string): Promise<ResourceLibrar
   return invoke<ResourceLibrarySummary>("remove_scan_source", { sourceId });
 }
 
-export async function startScanSourcesBatch(sourceIds: string[]): Promise<ScanBatchStarted> {
+export async function startScanSourcesBatch(sourceIds: string[], options: StartScanSourcesBatchOptions = {}): Promise<ScanBatchStarted> {
   assertTauriResourceStore();
-  return invoke<ScanBatchStarted>("start_scan_sources_batch", { sourceIds });
+  return invoke<ScanBatchStarted>("start_scan_sources_batch", { sourceIds, advancedConfirmationAccepted: options.advancedConfirmationAccepted ?? false });
 }
 
 export async function cancelScanBatch(batchId: string): Promise<ScanBatchSnapshot> {
@@ -299,7 +339,7 @@ export function patchSourceInList(sources: PersistedScanSource[], updated: Persi
   return sources.map((source) => (source.id === updated.id ? updated : source));
 }
 
-export function isTerminalScanBatchStatus(status: ScanBatchStatus): boolean {
+export function isTerminalScanBatchStatus(status: ScanBatchStatus | ScanBatchSourceStatus): boolean {
   return status === "completed" || status === "cancelled" || status === "failed";
 }
 
@@ -310,6 +350,30 @@ export function scanBatchProgressPercent(snapshot: ScanBatchSnapshot | null): nu
 
 export function scanBatchStatusLabel(status: ScanBatchStatus | ScanBatchSourceStatus | string | null | undefined): string {
   return scanStatusLabels[status ?? ""] ?? "未扫描";
+}
+
+export function buildDiscoveryResultStats(summary: ResourceLibrarySummary, sources: PersistedScanSource[], batch: ScanBatchSnapshot | null): DiscoveryResultStats {
+  const batchSources = batch?.sources ?? [];
+  const scannedSourceIds = new Set(batchSources.filter((source) => isTerminalScanBatchStatus(source.status)).map((source) => source.scanSourceId));
+  const scannedSources = scannedSourceIds.size || sources.filter((source) => source.lastScanStatus === "completed").length;
+  const skippedEntries = batchSources.reduce((total, source) => total + source.skippedEntries, 0) || summary.skippedEntryTotal;
+  const errors = batchSources.reduce((total, source) => total + source.errorCount, 0) || summary.errorTotal;
+  const elapsedMs = batch ? (batch.completedAtMs ?? batch.updatedAtMs) - batch.startedAtMs : summary.latestJob?.elapsedMs ?? 0;
+
+  return {
+    totalResources: summary.resourceCount,
+    resourcesByKind: normalizeResourceKindCounts(summary.countsByKind).map((item) => ({
+      ...item,
+      label: resourceKindLabels[item.resourceKind] ?? item.resourceKind
+    })),
+    scannedSources,
+    skippedEntries,
+    permissionDeniedCount: skipReasonCount(summary, "permission_denied"),
+    excludedCount: skipReasonCount(summary, "excluded_directory"),
+    errors,
+    elapsedSeconds: Math.max(0, Math.round(elapsedMs / 1000)),
+    storedLibraryCount: summary.resourceCount
+  };
 }
 
 export function normalizeResourceKindCounts(counts: ResourceKindCount[]): Array<{ resourceKind: string; count: number }> {
@@ -354,6 +418,10 @@ const resourceKindLabels: Record<string, string> = {
 function resourceKindSortIndex(resourceKind: string): number {
   const index = resourceKindOrder.indexOf(resourceKind);
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function skipReasonCount(summary: ResourceLibrarySummary, reason: string): number {
+  return summary.skipCountsByReason.find((item) => item.reason === reason)?.count ?? 0;
 }
 
 function assertTauriResourceStore(): void {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildPersistedLibraryState,
+  buildDiscoveryResultStats,
   buildSelectedBatchSourceIds,
   clearResourceLibrary,
   fallbackResourceLibrarySummary,
@@ -38,6 +39,7 @@ assert.deepEqual(fallbackJobs, []);
 assert.deepEqual(fallbackResources, []);
 assert.deepEqual(clearedSummary, fallbackResourceLibrarySummary);
 await assert.rejects(() => startScanSourcesBatch(["source-1"]), /Tauri 桌面运行时/);
+await assert.rejects(() => startScanSourcesBatch(["source-1"], { advancedConfirmationAccepted: true }), /Tauri 桌面运行时/);
 
 const counts = normalizeResourceKindCounts([
   { resourceKind: "skill", count: 2 },
@@ -97,6 +99,10 @@ const summary: ResourceLibrarySummary = {
     { resourceKind: "script", count: 1 },
     { resourceKind: "unknown-local-resource", count: 1 }
   ],
+  skipCountsByReason: [
+    { reason: "excluded_directory", count: 2 },
+    { reason: "permission_denied", count: 1 }
+  ],
   skippedEntryTotal: 2,
   errorTotal: 0
 };
@@ -144,6 +150,26 @@ assert.equal(scanBatchProgressPercent(batchSnapshot), 25);
 assert.equal(scanBatchStatusLabel("running"), "扫描中");
 assert.equal(isTerminalScanBatchStatus("completed"), true);
 assert.equal(isTerminalScanBatchStatus("running"), false);
+
+const discoveryStats = buildDiscoveryResultStats(summary, [source], {
+  ...batchSnapshot,
+  status: "completed",
+  startedAtMs: 1_725_000_000_000,
+  updatedAtMs: 1_725_000_001_000,
+  completedAtMs: 1_725_000_001_000
+});
+assert.equal(discoveryStats.totalResources, 4);
+assert.equal(discoveryStats.scannedSources, 1);
+assert.equal(discoveryStats.skippedEntries, 2);
+assert.equal(discoveryStats.excludedCount, 2);
+assert.equal(discoveryStats.permissionDeniedCount, 1);
+assert.equal(discoveryStats.errors, 0);
+assert.equal(discoveryStats.elapsedSeconds, 1);
+assert.equal(discoveryStats.storedLibraryCount, 4);
+assert.deepEqual(discoveryStats.resourcesByKind.slice(0, 2), [
+  { resourceKind: "skill", label: "技能", count: 2 },
+  { resourceKind: "script", label: "脚本", count: 1 }
+]);
 
 const emptyState = buildPersistedLibraryState(fallbackResourceLibrarySummary, [], []);
 assert.equal(emptyState.canClear, false);

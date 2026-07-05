@@ -240,6 +240,13 @@ pub struct ResourceKindCount {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ScanSkipReasonCount {
+    pub reason: String,
+    pub count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceLibrarySummary {
     pub source_count: u64,
     pub enabled_source_count: u64,
@@ -249,6 +256,7 @@ pub struct ResourceLibrarySummary {
     pub latest_job: Option<PersistedScanJob>,
     pub latest_successful_scan: Option<PersistedScanJob>,
     pub counts_by_kind: Vec<ResourceKindCount>,
+    pub skip_counts_by_reason: Vec<ScanSkipReasonCount>,
     pub skipped_entry_total: u64,
     pub error_total: u64,
     pub metadata_only: bool,
@@ -975,6 +983,7 @@ pub fn get_library_summary_for_path(
     let latest_job = latest_scan_job(&conn)?;
     let latest_successful_scan = latest_successful_scan_job(&conn)?;
     let counts_by_kind = resource_kind_counts(&conn)?;
+    let skip_counts_by_reason = scan_skip_reason_counts(&conn)?;
 
     Ok(ResourceLibrarySummary {
         source_count: count_rows(&conn, "scan_sources")?,
@@ -988,6 +997,7 @@ pub fn get_library_summary_for_path(
         latest_job,
         latest_successful_scan,
         counts_by_kind,
+        skip_counts_by_reason,
         skipped_entry_total: scalar_count(&conn, "SELECT COALESCE(SUM(count), 0) FROM scan_skips")?,
         error_total: scalar_count(&conn, "SELECT COUNT(*) FROM scan_errors")?,
         metadata_only: true,
@@ -1667,6 +1677,24 @@ fn resource_kind_counts(conn: &Connection) -> Result<Vec<ResourceKindCount>, Res
     let rows = stmt.query_map([], |row| {
         Ok(ResourceKindCount {
             resource_kind: row.get(0)?,
+            count: i64_to_u64(row.get(1)?),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn scan_skip_reason_counts(
+    conn: &Connection,
+) -> Result<Vec<ScanSkipReasonCount>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT reason, COALESCE(SUM(count), 0)
+        FROM scan_skips
+        GROUP BY reason
+        ORDER BY reason ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(ScanSkipReasonCount {
+            reason: row.get(0)?,
             count: i64_to_u64(row.get(1)?),
         })
     })?;

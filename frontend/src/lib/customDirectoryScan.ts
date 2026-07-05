@@ -14,7 +14,8 @@ export type ScanResourceKind =
   | "package-manifest"
   | "unknown-local-resource";
 
-export type ScanProfileId = "custom-folder" | "project-root" | "ai-toolchain" | "skills-prompts-workspace" | "docs-reports-workspace" | "aios-workspace";
+export type ScanProfileId = "custom-folder" | "project-root" | "ai-toolchain" | "skills-prompts-workspace" | "docs-reports-workspace" | "aios-workspace" | "intelligent-discovery" | "advanced-full-disk";
+export type ScanModeId = "custom-directory" | "intelligent-discovery" | "advanced-full-disk";
 
 export interface ScanProfileDefinition {
   id: ScanProfileId;
@@ -37,7 +38,60 @@ export interface ScanProfileDefinition {
 }
 
 export const DEFAULT_SCAN_PROFILE_ID: ScanProfileId = "custom-folder";
+export const DEFAULT_SCAN_MODE_ID: ScanModeId = "custom-directory";
 export const SCAN_JOB_PROGRESS_EVENT = "aios://scan-job-progress";
+
+export interface ScanModeDefinition {
+  id: ScanModeId;
+  title: string;
+  sourceKind: ScanModeId;
+  profileId: ScanProfileId;
+  summary: string;
+  warning: string;
+  requiresConfirmation: boolean;
+}
+
+export interface ScanModeStartState {
+  hasSelectedSources: boolean;
+  advancedConfirmed: boolean;
+  tauriAvailable: boolean;
+  scanLocked: boolean;
+}
+
+export interface ScanModeUiState {
+  modeId: ScanModeId;
+  advancedConfirmed: boolean;
+}
+
+export const scanModeDefinitions: ScanModeDefinition[] = [
+  {
+    id: "custom-directory",
+    title: "Custom Directories",
+    sourceKind: "custom-directory",
+    profileId: DEFAULT_SCAN_PROFILE_ID,
+    summary: "Use the existing system folder picker for one or more explicit project folders.",
+    warning: "Strict root guards stay enabled for normal custom directory scans.",
+    requiresConfirmation: false
+  },
+  {
+    id: "intelligent-discovery",
+    title: "Intelligent Whole-Computer Discovery",
+    sourceKind: "intelligent-discovery",
+    profileId: "intelligent-discovery",
+    summary: "Guided discovery for common user workspaces such as Desktop, Documents, Downloads, Developer, Work, Projects, and AIOS workspace candidates.",
+    warning: "Runs only after Start. It does not scan system roots by default.",
+    requiresConfirmation: false
+  },
+  {
+    id: "advanced-full-disk",
+    title: "Advanced Full-Disk Discovery",
+    sourceKind: "advanced-full-disk",
+    profileId: "advanced-full-disk",
+    summary: "Advanced broad discovery path for users who explicitly accept slower, permission-sensitive scanning.",
+    warning: "Requires explicit confirmation and stores metadata-only results locally.",
+    requiresConfirmation: true
+  }
+];
 
 export interface ScannerPolicy {
   policyId: string;
@@ -163,7 +217,7 @@ export const fallbackScanPolicy: ScannerPolicy = {
   metadataOnly: true,
   contentReadingEnabled: false,
   executionEnabled: false,
-  fullDiskScanEnabled: false,
+  fullDiskScanEnabled: true,
   followSymlinks: false,
   respectsIgnoreFiles: true,
   maxDepth: 6,
@@ -172,7 +226,7 @@ export const fallbackScanPolicy: ScannerPolicy = {
   blockedRootExamples: ["/", "~", "/Users", "/Volumes", "/System", "/Library", "/Applications", "/private", "/tmp", "C:\\", "C:\\Users", "C:\\Windows"],
   excludedNames: [".git", "node_modules", "target", "dist", "build", ".next", ".nuxt", ".turbo", ".cache", ".venv", "venv", "__pycache__"],
   resourceKinds: ["skill", "prompt", "mcp-config", "script", "report-doc", "project-pack", "policy-governance", "validator", "package-manifest", "unknown-local-resource"],
-  profileIds: ["custom-folder", "project-root", "ai-toolchain", "skills-prompts-workspace", "docs-reports-workspace", "aios-workspace"]
+  profileIds: ["custom-folder", "project-root", "ai-toolchain", "skills-prompts-workspace", "docs-reports-workspace", "aios-workspace", "intelligent-discovery", "advanced-full-disk"]
 };
 
 export const fallbackScanProfiles: ScanProfileDefinition[] = [
@@ -289,6 +343,44 @@ export const fallbackScanProfiles: ScanProfileDefinition[] = [
     contentReadingEnabled: false,
     executionEnabled: false,
     fullDiskScanEnabled: false
+  },
+  {
+    id: "intelligent-discovery",
+    displayName: "智能全机发现",
+    shortDescription: "面向非技术用户的引导式发现，只从常见用户工作区候选目录创建来源。",
+    recommendedUseCase: "点击开始后解析 Desktop、Documents、Downloads、Developer、Work、Projects 和 AIOS 工作区候选目录。",
+    safetyBoundary: "不会扫描系统根、home 根、/Users、/Volumes 或磁盘根；候选目录不存在或不可访问时安全跳过。",
+    exampleFolderTypes: ["Desktop", "Documents", "Downloads", "Developer", "Work", "Projects", "AIOS 工作区"],
+    maxDepth: 5,
+    maxEntries: 1_500,
+    maxDepthEntryPolicy: "每个候选来源最多 5 层、1,500 个条目；候选来源按批次顺序扫描，可取消。",
+    excludePolicySummary: "继承强 exclude，并额外跳过 SSH/GPG/Kube、Keychains、Cookies 等敏感配置目录。",
+    classificationEmphasis: ["项目工作区", "AI 资源入口", "文档报告", "脚本与验证器"],
+    emphasizedResourceKinds: ["package-manifest", "skill", "prompt", "mcp-config", "script", "validator", "report-doc", "project-pack", "policy-governance"],
+    resultGroupLabel: "智能发现分类",
+    metadataOnly: true,
+    contentReadingEnabled: false,
+    executionEnabled: false,
+    fullDiskScanEnabled: false
+  },
+  {
+    id: "advanced-full-disk",
+    displayName: "高级全盘发现",
+    shortDescription: "高风险高级模式，只在用户勾选确认后创建 broad discovery 来源。",
+    recommendedUseCase: "仅在普通目录和智能发现无法定位资源时使用；受保护目录和权限失败会被跳过。",
+    safetyBoundary: "必须显式确认；仅保存元数据，不读取内容、不执行脚本/MCP、不跟随符号链接，并使用更强 exclude。",
+    exampleFolderTypes: ["用户 home 根", "受限 broad discovery 来源"],
+    maxDepth: 5,
+    maxEntries: 3_000,
+    maxDepthEntryPolicy: "高级模式每个来源最多 5 层、3,000 个条目；达到上限即停止并记录跳过摘要。",
+    excludePolicySummary: "额外跳过 Library、System、Applications、Volumes、SSH/GPG/Kube、Keychains、Cookies 等目录。",
+    classificationEmphasis: ["保守资源发现", "权限跳过统计", "敏感路径隐藏", "本地库可删除"],
+    emphasizedResourceKinds: ["skill", "prompt", "mcp-config", "script", "validator", "report-doc", "project-pack", "policy-governance", "package-manifest", "unknown-local-resource"],
+    resultGroupLabel: "高级发现分类",
+    metadataOnly: true,
+    contentReadingEnabled: false,
+    executionEnabled: false,
+    fullDiskScanEnabled: true
   }
 ];
 
@@ -341,6 +433,24 @@ export function getScanProfileById(profileId?: string | null, profiles: ScanProf
   const requested = profiles.find((profile) => profile.id === profileId);
   if (requested) return requested;
   return profiles.find((profile) => profile.id === DEFAULT_SCAN_PROFILE_ID) ?? fallbackScanProfiles[0];
+}
+
+export function getScanModeById(modeId?: string | null): ScanModeDefinition {
+  return scanModeDefinitions.find((mode) => mode.id === modeId) ?? scanModeDefinitions[0];
+}
+
+export function canStartScanMode(modeId: ScanModeId, state: ScanModeStartState): boolean {
+  if (!state.tauriAvailable || state.scanLocked) return false;
+  if (modeId === "custom-directory") return state.hasSelectedSources;
+  if (modeId === "advanced-full-disk") return state.advancedConfirmed;
+  return true;
+}
+
+export function nextScanModeState(modeId: ScanModeId, current: Pick<ScanModeUiState, "advancedConfirmed">): ScanModeUiState {
+  return {
+    modeId,
+    advancedConfirmed: modeId === "advanced-full-disk" ? false : current.advancedConfirmed
+  };
 }
 
 export function getScanProfileForResult(result: CustomScanResult, profiles: ScanProfileDefinition[] = fallbackScanProfiles): ScanProfileDefinition {

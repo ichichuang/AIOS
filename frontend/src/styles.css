@@ -917,10 +917,52 @@
 .scan-library-section,
 .scan-sources-section,
 .scan-progress-section,
+.scan-discovery-summary-section,
 .scan-result-section,
 .scan-skipped-summary-section,
 .scan-warning-section {
   min-width: 0;
+}
+
+.scan-mode-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+}
+
+.scan-mode-card.MuiButton-root {
+  justify-content: stretch;
+  min-width: 0;
+  min-height: 132px;
+  border-color: var(--aios-outline);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+  text-transform: none;
+}
+
+.scan-mode-card.active.MuiButton-root {
+  border-color: var(--aios-selected-outline);
+  background: var(--aios-selected-surface);
+}
+
+.scan-mode-card-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.scan-mode-card-copy strong {
+  overflow-wrap: anywhere;
+  color: var(--aios-text);
+  font-size: 13px;
+}
+
+.scan-mode-card-copy p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
 .scan-profile-selector {
@@ -1089,6 +1131,22 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.scan-advanced-confirmation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--aios-warning) 32%, var(--aios-outline));
+  border-radius: 12px;
+  background: var(--aios-warning-soft);
+  padding: 8px;
+}
+
+.scan-advanced-confirmation p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
 .scan-action-row .MuiButton-root {

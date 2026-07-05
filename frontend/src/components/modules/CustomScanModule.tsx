@@ -14,17 +14,23 @@ import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import {
   countSkippedEntries,
+  canStartScanMode,
   fallbackScanPolicy,
   fallbackScanProfiles,
+  DEFAULT_SCAN_MODE_ID,
   DEFAULT_SCAN_PROFILE_ID,
+  getScanModeById,
   getScanPolicy,
   getScanProfileById,
   getScanProfileForResult,
   getScanProfiles,
   isTauriRuntimeAvailable,
   mapScanResourcesToAiosResources,
+  nextScanModeState,
+  scanModeDefinitions,
   type CustomScanResult,
   type ScanJobSnapshot,
+  type ScanModeId,
   type ScanProfileDefinition,
   type ScanProfileId,
   type ScanResourceKind,
@@ -32,7 +38,9 @@ import {
 } from "../../lib/customDirectoryScan";
 import {
   addScanSources,
+  addDiscoveryScanSources,
   buildPersistedLibraryState,
+  buildDiscoveryResultStats,
   buildSelectedBatchSourceIds,
   cancelScanBatch,
   clearResourceLibrary,
@@ -66,7 +74,9 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }: AiosModuleProps) {
   const [policy, setPolicy] = useState<ScannerPolicy>(fallbackScanPolicy);
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
+  const [activeScanModeId, setActiveScanModeId] = useState<ScanModeId>(DEFAULT_SCAN_MODE_ID);
   const [activeProfileId, setActiveProfileId] = useState<ScanProfileId>(DEFAULT_SCAN_PROFILE_ID);
+  const [advancedConfirmed, setAdvancedConfirmed] = useState(false);
   const [scanResult, setScanResult] = useState<CustomScanResult | null>(null);
   const [resourceStoreStatus, setResourceStoreStatus] = useState<ResourceStoreStatus>(fallbackResourceStoreStatus);
   const [librarySummary, setLibrarySummary] = useState<ResourceLibrarySummary>(fallbackResourceLibrarySummary);
@@ -151,7 +161,8 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
     };
   }, [batchSnapshot, refreshResourceLibrary, tauriAvailable]);
 
-  const activeProfile = useMemo(() => getScanProfileById(activeProfileId, profiles), [activeProfileId, profiles]);
+  const activeScanMode = useMemo(() => getScanModeById(activeScanModeId), [activeScanModeId]);
+  const activeProfile = useMemo(() => getScanProfileById(activeScanMode.id === "custom-directory" ? activeProfileId : activeScanMode.profileId, profiles), [activeProfileId, activeScanMode.id, activeScanMode.profileId, profiles]);
   const scanResultProfile = useMemo(() => (scanResult ? getScanProfileForResult(scanResult, profiles) : null), [profiles, scanResult]);
   const profileForVisibleResults = scanResultProfile ?? activeProfile;
   const resources = useMemo(() => (scanResult ? mapScanResourcesToAiosResources(scanResult, profiles) : []), [profiles, scanResult]);
@@ -160,11 +171,26 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
   const categorySummary = useMemo(() => (scanResult ? buildProfileCategorySummary(scanResult, profileForVisibleResults) : []), [profileForVisibleResults, scanResult]);
   const persistedLibraryState = useMemo(() => buildPersistedLibraryState(librarySummary, persistedSources, persistedJobs, selectedSourceIds), [librarySummary, persistedJobs, persistedSources, selectedSourceIds]);
   const selectedBatchSourceIds = useMemo(() => buildSelectedBatchSourceIds(persistedSources, selectedSourceIds), [persistedSources, selectedSourceIds]);
+  const discoveryStats = useMemo(() => buildDiscoveryResultStats(librarySummary, persistedSources, batchSnapshot), [batchSnapshot, librarySummary, persistedSources]);
+  const hasDiscoverySources = persistedSources.some((source) => source.sourceKind === "intelligent-discovery" || source.sourceKind === "advanced-full-disk");
   const skippedCount = scanResult ? countSkippedEntries(scanResult.counts) : 0;
   const scanRunning = Boolean(batchSnapshot && !isTerminalScanBatchStatus(batchSnapshot.status) && batchSnapshot.status !== "cancelling");
   const scanCancelling = batchSnapshot?.status === "cancelling" || batchBusyState === "cancelling";
   const scanLocked = scanRunning || scanCancelling;
   const batchProgressPercent = scanBatchProgressPercent(batchSnapshot);
+  const canStartActiveScanMode = canStartScanMode(activeScanMode.id, {
+    hasSelectedSources: selectedBatchSourceIds.length > 0,
+    advancedConfirmed,
+    tauriAvailable,
+    scanLocked
+  }) && batchBusyState === "idle";
+
+  const handleScanModeChange = useCallback((modeId: ScanModeId) => {
+    const next = nextScanModeState(modeId, { advancedConfirmed });
+    setActiveScanModeId(next.modeId);
+    setAdvancedConfirmed(next.advancedConfirmed);
+    setError(null);
+  }, [advancedConfirmed]);
 
   const handleProfileChange = useCallback((_event: unknown, nextProfileId: ScanProfileId | null) => {
     if (!nextProfileId) return;
@@ -196,14 +222,40 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
     setError(null);
     setScanResult(null);
     try {
-      const started = await startScanSourcesBatch(selectedBatchSourceIds);
+      const started = await startScanSourcesBatch(selectedBatchSourceIds, { advancedConfirmationAccepted: advancedConfirmed });
       setBatchSnapshot(started.snapshot);
     } catch (scanError) {
       setError(formatCommandError(scanError));
     } finally {
       setBatchBusyState("idle");
     }
-  }, [selectedBatchSourceIds]);
+  }, [advancedConfirmed, selectedBatchSourceIds]);
+
+  const handleStartDiscovery = useCallback(async () => {
+    if (activeScanMode.id === "custom-directory") {
+      await handleStartBatch();
+      return;
+    }
+    setBatchBusyState("starting");
+    setError(null);
+    setScanResult(null);
+    try {
+      const added = await addDiscoveryScanSources(activeScanMode.id, advancedConfirmed, newProjectLabel);
+      const sourceIds = added.sources.filter((source) => source.enabled).map((source) => source.id);
+      if (sourceIds.length === 0) {
+        setError("未找到可扫描的发现来源。");
+        return;
+      }
+      setSelectedSourceIds((current) => Array.from(new Set([...current, ...sourceIds])));
+      const started = await startScanSourcesBatch(sourceIds, { advancedConfirmationAccepted: advancedConfirmed });
+      setBatchSnapshot(started.snapshot);
+      await refreshResourceLibrary();
+    } catch (scanError) {
+      setError(formatCommandError(scanError));
+    } finally {
+      setBatchBusyState("idle");
+    }
+  }, [activeScanMode.id, advancedConfirmed, handleStartBatch, newProjectLabel, refreshResourceLibrary]);
 
   const handleCancelBatch = useCallback(async () => {
     if (!batchSnapshot || isTerminalScanBatchStatus(batchSnapshot.status)) return;
@@ -312,20 +364,55 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
         <>
           <Chip className="status-chip status-ok" label="扫描管理" />
           <Chip label="仅元数据" variant="outlined" />
-          <Chip className="status-chip status-disabled" label="全盘扫描禁用" variant="outlined" />
+          <Chip className="status-chip status-disabled" label="显式启动" variant="outlined" />
         </>
       }
     >
       <AiosSection className="scan-profile-section">
         <AiosSectionHeader
-          title="扫描管理"
-          summary="先添加一个或多个用户授权目录，分别设置模板和项目标签，再手动启动顺序扫描。"
+          title="扫描模式"
+          summary="AIOS 首次启动不会扫描这台机器。必须选择模式、阅读边界说明，并手动点击开始。"
+          action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />}
+        />
+        {librarySummary.resourceCount === 0 && persistedSources.length === 0 && (
+          <Box className="scan-boundary-callout info">
+            <SecurityRounded fontSize="small" />
+            <Typography color="text.secondary" variant="body2">
+              AIOS 尚未扫描这台机器。你可以手动添加项目文件夹；非技术用户可运行智能全机发现；高级全盘发现更慢、受权限影响，并且必须显式确认。
+            </Typography>
+          </Box>
+        )}
+        <Box className="scan-mode-card-grid" aria-label="扫描模式选择">
+          {scanModeDefinitions.map((mode) => (
+            <Button
+              className={`scan-mode-card ${activeScanMode.id === mode.id ? "active" : ""}`}
+              disabled={scanLocked}
+              key={mode.id}
+              variant="outlined"
+              onClick={() => handleScanModeChange(mode.id)}
+            >
+              <Box className="scan-mode-card-copy">
+                <Typography component="strong">{mode.title}</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {mode.summary}
+                </Typography>
+                <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
+              </Box>
+            </Button>
+          ))}
+        </Box>
+      </AiosSection>
+
+      <AiosSection className="scan-profile-section">
+        <AiosSectionHeader
+          title={activeScanMode.id === "custom-directory" ? "扫描模板" : "发现模式边界"}
+          summary={activeScanMode.id === "custom-directory" ? "模板只改变分类重点；添加来源不会自动扫描。" : activeScanMode.warning}
           action={<Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />}
         />
         <Box className="scan-profile-selector" aria-label="扫描模板选择">
-          <ToggleButtonGroup disabled={scanLocked} exclusive value={activeProfile.id} onChange={handleProfileChange}>
+          <ToggleButtonGroup disabled={scanLocked || activeScanMode.id !== "custom-directory"} exclusive value={activeScanMode.id === "custom-directory" ? activeProfile.id : activeProfile.id} onChange={handleProfileChange}>
             {profiles.map((profile) => (
-              <ToggleButton disabled={scanLocked} key={profile.id} value={profile.id}>
+              <ToggleButton disabled={scanLocked || activeScanMode.id !== "custom-directory"} key={profile.id} value={profile.id}>
                 <Box component="span">{profile.displayName}</Box>
               </ToggleButton>
             ))}
@@ -368,15 +455,15 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
       </AiosSection>
 
       <AiosSection className="scan-control-section">
-        <AiosSectionHeader title="批次控制" summary={`默认新来源模板：${activeProfile.displayName}。批次扫描按已选择且已启用的来源顺序执行。`} />
+        <AiosSectionHeader title="批次控制" summary={activeScanMode.id === "custom-directory" ? `默认新来源模板：${activeProfile.displayName}。批次扫描按已选择且已启用的来源顺序执行。` : "发现模式会先创建用户确认的来源，再使用同一个可取消批次扫描运行时。"} />
         <Box className="scan-control-grid">
           <Box className="scan-control-card">
             <Box className="scan-control-heading">
               <FolderOpenRounded fontSize="small" />
               <Box className="scan-control-copy">
-                <Typography component="strong">添加扫描来源</Typography>
+                <Typography component="strong">{activeScanMode.id === "custom-directory" ? "添加扫描来源" : "启动发现扫描"}</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  系统目录选择器可一次选择多个目录；添加后不会自动扫描。
+                  {activeScanMode.id === "custom-directory" ? "系统目录选择器可一次选择多个目录；添加后不会自动扫描。" : "候选来源只在点击开始后解析；Web/Vite 预览不会运行真实发现扫描。"}
                 </Typography>
               </Box>
             </Box>
@@ -387,12 +474,22 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               value={newProjectLabel}
               onChange={(event) => setNewProjectLabel(event.target.value)}
             />
+            {activeScanMode.id === "advanced-full-disk" && (
+              <Box className="scan-advanced-confirmation">
+                <Checkbox checked={advancedConfirmed} disabled={scanLocked} onChange={(event) => setAdvancedConfirmed(event.target.checked)} />
+                <Typography color="text.secondary" variant="body2">
+                  I understand this scan may take time, may skip protected folders, and stores metadata-only results locally.
+                </Typography>
+              </Box>
+            )}
             <Box className="scan-action-row">
-              <Button disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
-                添加目录
-              </Button>
-              <Button disabled={!tauriAvailable || selectedBatchSourceIds.length === 0 || batchBusyState !== "idle" || scanLocked} startIcon={<PlayArrowRounded />} variant="contained" onClick={handleStartBatch}>
-                扫描所选
+              {activeScanMode.id === "custom-directory" && (
+                <Button disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
+                  添加目录
+                </Button>
+              )}
+              <Button disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
+                {activeScanMode.id === "custom-directory" ? "扫描所选" : "开始发现"}
               </Button>
               <Button disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
                 刷新
@@ -420,7 +517,8 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               <Chip className="status-chip status-ok" label="不读取内容" size="small" />
               <Chip className="status-chip status-ok" label="不执行脚本/MCP" size="small" />
               <Chip className="status-chip status-disabled" label="不跟随符号链接" size="small" />
-              <Chip className="status-chip status-disabled" label="全盘扫描非 MVP" size="small" />
+              <Chip className="status-chip status-disabled" label="本地 SQLite" size="small" />
+              <Chip className="status-chip status-disabled" label="可取消" size="small" />
             </Box>
           </Box>
         </Box>
@@ -453,6 +551,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                     <Box className="scan-source-chip-row">
                       <Chip className={`status-chip ${source.enabled ? "status-ok" : "status-disabled"}`} label={source.enabled ? "已启用" : "已停用"} size="small" />
                       <Chip label={scanBatchStatusLabel(status)} size="small" variant="outlined" />
+                      <Chip label={sourceKindLabel(source.sourceKind)} size="small" variant="outlined" />
                       {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
                     </Box>
                   </Box>
@@ -522,6 +621,41 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               <ProgressMetric label="失败" value={batchSnapshot.failedSources} />
               <ProgressMetric label="耗时" value={`${Math.max(0, Math.round(batchSnapshot.progress.elapsedMs / 1000))}s`} />
             </Box>
+          </Box>
+        </AiosSection>
+      )}
+
+      {(hasDiscoverySources || activeScanMode.id !== "custom-directory") && (
+        <AiosSection className="scan-discovery-summary-section">
+          <AiosSectionHeader title="发现结果统计" summary="来自同一个 SQLite 动态资源语料；仅展示聚合计数和安全分类。" count={discoveryStats.totalResources} />
+          <Box className="scan-summary-grid">
+            <AiosUsageCard title="总资源" purpose="已持久化的 metadata-only 资源数量。" technicalName={`${discoveryStats.totalResources}`} />
+            <AiosUsageCard title="扫描来源" purpose="本次或最近发现批次结束的来源数量。" technicalName={`${discoveryStats.scannedSources}`} />
+            <AiosUsageCard title="跳过条目" purpose="排除、权限、上限、取消、大小或符号链接等聚合计数。" technicalName={`${discoveryStats.skippedEntries}`} />
+            <AiosUsageCard title="权限拒绝" purpose="无法读取元数据或遍历失败的安全聚合计数。" technicalName={`${discoveryStats.permissionDeniedCount}`} />
+            <AiosUsageCard title="排除目录" purpose="命中强 exclude 的目录或条目计数。" technicalName={`${discoveryStats.excludedCount}`} />
+            <AiosUsageCard title="错误" purpose="保存到本地库的安全错误摘要数量。" technicalName={`${discoveryStats.errors}`} />
+            <AiosUsageCard title="耗时" purpose="最近发现批次的聚合耗时。" technicalName={`${discoveryStats.elapsedSeconds}s`} />
+            <AiosUsageCard title="本地库" purpose="当前 SQLite 动态资源库资源数量。" technicalName={`${discoveryStats.storedLibraryCount}`} />
+          </Box>
+          <Box className="scan-category-summary-grid compact" aria-label="发现资源分类计数">
+            {discoveryStats.resourcesByKind.length > 0 ? (
+              discoveryStats.resourcesByKind.map((item) => (
+                <Box className="scan-category-summary-item" key={item.resourceKind}>
+                  <Typography component="strong">{item.label}</Typography>
+                  <Typography className="scan-category-count" component="span">
+                    {item.count}
+                  </Typography>
+                </Box>
+              ))
+            ) : (
+              <Box className="scan-category-summary-item">
+                <Typography component="strong">暂无发现结果</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  选择发现模式并手动开始后，统计会从本地 SQLite 资源库读取。
+                </Typography>
+              </Box>
+            )}
           </Box>
         </AiosSection>
       )}
@@ -627,7 +761,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
       <Box className="scan-boundary-callout info">
         <SecurityRounded fontSize="small" />
         <Typography color="text.secondary" variant="body2">
-          智能全机发现仍未启用；未来如进入高级阶段，必须重新设计权限门控、限速、暂停恢复和隐私策略。
+          发现模式仅在扫描管理中可启动；Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators、Legacy 和 Inspector 只读取已持久化的动态资源语料。
         </Typography>
       </Box>
 
@@ -635,7 +769,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
         <Box className="scan-boundary-callout warn">
           <WarningAmberRounded fontSize="small" />
           <Typography color="text.secondary" variant="body2">
-            当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择和 Rust 扫描只在 Tauri 桌面应用中启用。
+            当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择、智能发现和高级全盘发现只在 Tauri 桌面应用中启用，不会模拟真实全盘扫描。
           </Typography>
         </Box>
       )}
@@ -827,7 +961,7 @@ function policyRows(policy: ScannerPolicy, profile: ScanProfileDefinition): Aios
     { label: "排除策略", value: profile.excludePolicySummary },
     { label: "内容读取", value: policy.contentReadingEnabled ? "启用" : "禁用" },
     { label: "执行能力", value: policy.executionEnabled ? "启用" : "禁用" },
-    { label: "全盘扫描", value: policy.fullDiskScanEnabled ? "启用" : "禁用" },
+    { label: "高级发现", value: profile.fullDiskScanEnabled ? "需显式确认" : "普通模式禁用" },
     { label: "忽略规则", value: policy.respectsIgnoreFiles ? "尊重 .ignore/.gitignore" : "未启用" }
   ];
 }
@@ -904,6 +1038,12 @@ function variantForGroup(group: ResourceGroupData): ResourceCardVariant {
 function formatCommandError(error: unknown): string {
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
   return String(error);
+}
+
+function sourceKindLabel(sourceKind: string): string {
+  if (sourceKind === "intelligent-discovery") return "智能发现";
+  if (sourceKind === "advanced-full-disk") return "高级发现";
+  return "自选目录";
 }
 
 function formatBytes(value: number): string {

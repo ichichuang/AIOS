@@ -3,7 +3,7 @@ use crate::resource_store::{
     PersistScanSkipInput, PersistScanSourceInput, UpsertScanSourceInput,
 };
 use ignore::WalkBuilder;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -18,6 +18,11 @@ use tauri_plugin_dialog::DialogExt;
 
 const POLICY_ID: &str = "custom-directory-metadata-scan-mvp";
 const DEFAULT_SCAN_PROFILE_ID: &str = "custom-folder";
+const INTELLIGENT_DISCOVERY_PROFILE_ID: &str = "intelligent-discovery";
+const ADVANCED_FULL_DISK_PROFILE_ID: &str = "advanced-full-disk";
+const CUSTOM_DIRECTORY_SOURCE_KIND: &str = "custom-directory";
+const INTELLIGENT_DISCOVERY_SOURCE_KIND: &str = "intelligent-discovery";
+const ADVANCED_FULL_DISK_SOURCE_KIND: &str = "advanced-full-disk";
 const MAX_DEPTH: usize = 6;
 const MAX_ENTRIES: usize = 2_000;
 const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
@@ -40,6 +45,8 @@ struct SelectedRoot {
     canonical_root: PathBuf,
     display_name: String,
     root_summary: String,
+    source_kind: String,
+    user_confirmed_mode: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -183,6 +190,21 @@ pub struct ScanStarted {
 pub struct AddScanSourcesResult {
     sources: Vec<resource_store::PersistedScanSource>,
     selected_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScanMode {
+    CustomDirectory,
+    IntelligentDiscovery,
+    AdvancedFullDisk,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDiscoveryScanSourcesInput {
+    mode: String,
+    advanced_confirmation_accepted: Option<bool>,
+    project_label: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -353,6 +375,7 @@ enum ScanError {
     BatchMissing(String),
     Cancelled,
     RejectedRoot(String),
+    AdvancedConfirmationRequired,
     Permission(String),
     SelectionMissing,
     Store(String),
@@ -385,6 +408,8 @@ pub async fn pick_scan_directory(
         canonical_root: root.canonical_root,
         display_name: root.display_name.clone(),
         root_summary: root.root_summary.clone(),
+        source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+        user_confirmed_mode: true,
     };
 
     let mut guard = state.selected_root.lock().map_err(|_| {
@@ -439,7 +464,7 @@ pub async fn add_scan_sources(
                 root_path: root.canonical_root.to_string_lossy().to_string(),
                 root_display_path: root.root_summary.clone(),
                 profile_id: profile.id.to_string(),
-                source_kind: "custom-directory".to_string(),
+                source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
                 project_label: normalize_optional_label(project_label.as_deref()),
                 enabled: true,
             },
@@ -452,6 +477,53 @@ pub async fn add_scan_sources(
     Ok(AddScanSourcesResult {
         sources,
         selected_count,
+    })
+}
+
+#[tauri::command]
+pub fn add_discovery_scan_sources(
+    input: AddDiscoveryScanSourcesInput,
+    store: State<'_, resource_store::ResourceStoreState>,
+) -> Result<AddScanSourcesResult, ScanCommandError> {
+    let mode = resolve_scan_mode(&input.mode).map_err(ScanCommandError::from)?;
+    if mode == ScanMode::CustomDirectory {
+        return Err(ScanCommandError::from(ScanError::InvalidInput(
+            "Custom Directories must be added through the system directory picker.".to_string(),
+        )));
+    }
+    let confirmed = input.advanced_confirmation_accepted.unwrap_or(false);
+    let profile = resolve_scan_profile(Some(mode.profile_id())).map_err(ScanCommandError::from)?;
+    let roots = resolve_discovery_scan_roots(&mode, confirmed).map_err(ScanCommandError::from)?;
+    if roots.is_empty() {
+        return Err(ScanCommandError::from(ScanError::InvalidInput(
+            "未找到可用的发现候选目录。".to_string(),
+        )));
+    }
+
+    let mut sources = Vec::new();
+    for root in roots {
+        let source = resource_store::upsert_scan_source_for_path(
+            &store.db_path(),
+            UpsertScanSourceInput {
+                id: None,
+                display_name: discovery_display_name(&mode, &root),
+                root_path: root.canonical_root.to_string_lossy().to_string(),
+                root_display_path: root.root_summary.clone(),
+                profile_id: profile.id.to_string(),
+                source_kind: mode.source_kind().to_string(),
+                project_label: normalize_optional_label(input.project_label.as_deref())
+                    .or_else(|| Some(mode.default_project_label().to_string())),
+                enabled: true,
+            },
+        )
+        .map_err(store_error_to_scan_error)
+        .map_err(ScanCommandError::from)?;
+        sources.push(source);
+    }
+
+    Ok(AddScanSourcesResult {
+        selected_count: sources.len(),
+        sources,
     })
 }
 
@@ -607,6 +679,7 @@ pub fn get_scan_job_snapshot(
 pub fn start_scan_sources_batch(
     app: tauri::AppHandle,
     source_ids: Vec<String>,
+    advanced_confirmation_accepted: Option<bool>,
     state: State<'_, ScanState>,
     store: State<'_, resource_store::ResourceStoreState>,
 ) -> Result<ScanBatchStarted, ScanCommandError> {
@@ -621,6 +694,15 @@ pub fn start_scan_sources_batch(
         return Err(ScanCommandError::from(ScanError::InvalidInput(
             "没有可扫描的已启用来源。".to_string(),
         )));
+    }
+    if sources
+        .iter()
+        .any(|source| source.source_kind == ADVANCED_FULL_DISK_SOURCE_KIND)
+        && !advanced_confirmation_accepted.unwrap_or(false)
+    {
+        return Err(ScanCommandError::from(
+            ScanError::AdvancedConfirmationRequired,
+        ));
     }
     ensure_no_active_jobs(&state.jobs).map_err(ScanCommandError::from)?;
     ensure_no_active_batches(&state.batches).map_err(ScanCommandError::from)?;
@@ -755,6 +837,41 @@ fn resolve_scan_profile(profile_id: Option<&str>) -> Result<ScanProfileDefinitio
         .into_iter()
         .find(|profile| profile.id == requested_id)
         .ok_or_else(|| ScanError::InvalidProfile(format!("未知扫描模板：{requested_id}")))
+}
+
+fn resolve_scan_mode(mode: &str) -> Result<ScanMode, ScanError> {
+    match mode.trim() {
+        CUSTOM_DIRECTORY_SOURCE_KIND | "custom" | "" => Ok(ScanMode::CustomDirectory),
+        INTELLIGENT_DISCOVERY_SOURCE_KIND | "intelligent" => Ok(ScanMode::IntelligentDiscovery),
+        ADVANCED_FULL_DISK_SOURCE_KIND | "advanced" => Ok(ScanMode::AdvancedFullDisk),
+        other => Err(ScanError::InvalidInput(format!("未知扫描模式：{other}"))),
+    }
+}
+
+impl ScanMode {
+    fn source_kind(&self) -> &'static str {
+        match self {
+            ScanMode::CustomDirectory => CUSTOM_DIRECTORY_SOURCE_KIND,
+            ScanMode::IntelligentDiscovery => INTELLIGENT_DISCOVERY_SOURCE_KIND,
+            ScanMode::AdvancedFullDisk => ADVANCED_FULL_DISK_SOURCE_KIND,
+        }
+    }
+
+    fn profile_id(&self) -> &'static str {
+        match self {
+            ScanMode::CustomDirectory => DEFAULT_SCAN_PROFILE_ID,
+            ScanMode::IntelligentDiscovery => INTELLIGENT_DISCOVERY_PROFILE_ID,
+            ScanMode::AdvancedFullDisk => ADVANCED_FULL_DISK_PROFILE_ID,
+        }
+    }
+
+    fn default_project_label(&self) -> &'static str {
+        match self {
+            ScanMode::CustomDirectory => "Custom Directories",
+            ScanMode::IntelligentDiscovery => "Intelligent Discovery",
+            ScanMode::AdvancedFullDisk => "Advanced Full-Disk Discovery",
+        }
+    }
 }
 
 impl ScanCancellation {
@@ -1590,7 +1707,7 @@ fn persist_completed_scan_result_for_source(
         skipped_entries: skipped_entries as u64,
         error_count: error_inputs.len() as u64,
         cancelled: false,
-        summary_json: completed_summary_json(result, profile),
+        summary_json: completed_summary_json(result, profile, selected_root),
         source: scan_source_input(selected_root, profile, source_id, project_label),
         resources: result
             .resources
@@ -1632,7 +1749,7 @@ fn persist_terminal_scan_snapshot_for_source(
         .collect::<Vec<_>>();
     let skips = if snapshot.status == ScanJobStatus::Cancelled {
         vec![PersistScanSkipInput {
-            reason: "skipped_by_cancellation".to_string(),
+            reason: "cancelled".to_string(),
             count: 1,
             sample_safe_path: None,
         }]
@@ -1653,7 +1770,7 @@ fn persist_terminal_scan_snapshot_for_source(
         skipped_entries: snapshot.progress.skipped_entries as u64,
         error_count: error_inputs.len() as u64,
         cancelled: snapshot.status == ScanJobStatus::Cancelled,
-        summary_json: terminal_summary_json(snapshot),
+        summary_json: terminal_summary_json(snapshot, selected_root),
         source: scan_source_input(selected_root, &profile, source_id, project_label),
         resources: Vec::new(),
         skips,
@@ -1675,7 +1792,7 @@ fn scan_source_input(
         root_path: selected_root.canonical_root.to_string_lossy().to_string(),
         root_display_path: selected_root.root_summary.clone(),
         profile_id: profile.id.to_string(),
-        source_kind: "custom-directory".to_string(),
+        source_kind: selected_root.source_kind.clone(),
         project_label: normalize_optional_label(project_label),
     }
 }
@@ -1714,35 +1831,37 @@ fn skip_inputs_from_counts(
 ) -> Vec<PersistScanSkipInput> {
     [
         (
-            "skipped_by_exclude",
+            "excluded_directory",
             counts.skipped_by_exclude,
             None::<&[&str]>,
         ),
-        ("skipped_by_guard", counts.skipped_by_guard, None::<&[&str]>),
         (
-            "skipped_by_metadata_error",
-            counts.skipped_by_metadata_error,
-            Some(&["metadata_denied", "walk_error"][..]),
-        ),
-        (
-            "skipped_by_limit",
-            counts.skipped_by_limit,
-            Some(&["max_entries_reached"][..]),
-        ),
-        (
-            "skipped_by_cancellation",
-            counts.skipped_by_cancellation,
+            "protected_system_path",
+            counts.skipped_by_guard,
             None::<&[&str]>,
         ),
         (
-            "skipped_by_size",
-            counts.skipped_by_size,
-            Some(&["max_file_size_skipped"][..]),
+            "permission_denied",
+            counts.denied_errors,
+            Some(&["metadata_denied", "walk_error"][..]),
         ),
         (
-            "skipped_symlinks",
-            counts.skipped_symlinks,
-            Some(&["symlink_skipped"][..]),
+            "metadata_error",
+            counts
+                .skipped_by_metadata_error
+                .saturating_sub(counts.denied_errors),
+            Some(&["metadata_denied", "walk_error"][..]),
+        ),
+        (
+            "entry_limit",
+            counts.skipped_by_limit,
+            Some(&["max_entries_reached"][..]),
+        ),
+        ("cancelled", counts.skipped_by_cancellation, None::<&[&str]>),
+        (
+            "metadata_policy_skip",
+            counts.skipped_by_size + counts.skipped_symlinks,
+            Some(&["max_file_size_skipped", "symlink_skipped"][..]),
         ),
     ]
     .into_iter()
@@ -1778,14 +1897,21 @@ fn sample_warning_path(warnings: &[ScanWarning], codes: &[&str]) -> Option<Strin
         .and_then(|warning| warning.relative_path.clone())
 }
 
-fn completed_summary_json(result: &CustomScanResult, profile: &ScanProfileDefinition) -> String {
+fn completed_summary_json(
+    result: &CustomScanResult,
+    profile: &ScanProfileDefinition,
+    selected_root: &SelectedRoot,
+) -> String {
     serde_json::json!({
         "policyId": result.policy_id,
         "profileId": profile.id,
+        "scanMode": selected_root.source_kind,
+        "sourceKind": selected_root.source_kind,
+        "userConfirmedMode": selected_root.user_confirmed_mode,
         "metadataOnly": true,
         "contentStored": false,
         "executionEnabled": false,
-        "fullDiskScanEnabled": false,
+        "fullDiskScanEnabled": selected_root.source_kind == ADVANCED_FULL_DISK_SOURCE_KIND,
         "visitedEntries": result.counts.visited_entries,
         "matchedResources": result.resources.len(),
         "warningCount": result.warnings.len(),
@@ -1794,14 +1920,17 @@ fn completed_summary_json(result: &CustomScanResult, profile: &ScanProfileDefini
     .to_string()
 }
 
-fn terminal_summary_json(snapshot: &ScanJobSnapshot) -> String {
+fn terminal_summary_json(snapshot: &ScanJobSnapshot, selected_root: &SelectedRoot) -> String {
     serde_json::json!({
         "profileId": snapshot.profile_id,
+        "scanMode": selected_root.source_kind,
+        "sourceKind": selected_root.source_kind,
+        "userConfirmedMode": selected_root.user_confirmed_mode,
         "status": scan_job_status_value(&snapshot.status),
         "metadataOnly": true,
         "contentStored": false,
         "executionEnabled": false,
-        "fullDiskScanEnabled": false,
+        "fullDiskScanEnabled": selected_root.source_kind == ADVANCED_FULL_DISK_SOURCE_KIND,
         "visitedEntries": snapshot.progress.visited_entries,
         "matchedResources": snapshot.progress.matched_resources,
         "skippedEntries": snapshot.progress.skipped_entries,
@@ -1851,12 +1980,16 @@ fn store_error_to_scan_error(error: resource_store::ResourceStoreError) -> ScanE
 fn selected_root_from_stored_source(
     source: &resource_store::StoredScanSource,
 ) -> Result<SelectedRoot, ScanError> {
-    let root = validate_scan_root_internal(Path::new(&source.root_path))?;
+    let mode = resolve_scan_mode(&source.source_kind)?;
+    let root = validate_scan_root_for_mode(Path::new(&source.root_path), &mode, true)?;
     Ok(SelectedRoot {
         selection_id: source.id.clone(),
         canonical_root: root.canonical_root,
         display_name: root.display_name,
         root_summary: root.root_summary,
+        source_kind: source.source_kind.clone(),
+        user_confirmed_mode: source.source_kind != ADVANCED_FULL_DISK_SOURCE_KIND
+            || source.profile_id == ADVANCED_FULL_DISK_PROFILE_ID,
     })
 }
 
@@ -1883,11 +2016,14 @@ fn persist_failed_batch_source_job(
         cancelled: false,
         summary_json: serde_json::json!({
             "profileId": source.profile_id.as_str(),
+            "scanMode": source.source_kind.as_str(),
+            "sourceKind": source.source_kind.as_str(),
+            "userConfirmedMode": source.source_kind != ADVANCED_FULL_DISK_SOURCE_KIND || source.profile_id == ADVANCED_FULL_DISK_PROFILE_ID,
             "status": "failed",
             "metadataOnly": true,
             "contentStored": false,
             "executionEnabled": false,
-            "fullDiskScanEnabled": false
+            "fullDiskScanEnabled": source.source_kind == ADVANCED_FULL_DISK_SOURCE_KIND
         })
         .to_string(),
         source: PersistScanSourceInput {
@@ -2064,6 +2200,106 @@ fn validate_scan_root_internal(path: &Path) -> Result<ValidatedRoot, ScanError> 
     })
 }
 
+fn validate_scan_root_for_mode(
+    path: &Path,
+    mode: &ScanMode,
+    advanced_confirmation_accepted: bool,
+) -> Result<ValidatedRoot, ScanError> {
+    match mode {
+        ScanMode::CustomDirectory | ScanMode::IntelligentDiscovery => {
+            validate_scan_root_internal(path)
+        }
+        ScanMode::AdvancedFullDisk => {
+            if !advanced_confirmation_accepted {
+                return Err(ScanError::AdvancedConfirmationRequired);
+            }
+            validate_advanced_scan_root_internal(path)
+        }
+    }
+}
+
+fn validate_advanced_scan_root_internal(path: &Path) -> Result<ValidatedRoot, ScanError> {
+    if path.as_os_str().is_empty() {
+        return Err(ScanError::InvalidPath("选择目录为空。".to_string()));
+    }
+
+    let symlink_metadata = fs::symlink_metadata(path)
+        .map_err(|error| ScanError::InvalidPath(format!("无法读取目录元数据：{error}")))?;
+    if symlink_metadata.file_type().is_symlink() {
+        return Err(ScanError::RejectedRoot(
+            "高级发现不允许选择符号链接目录。".to_string(),
+        ));
+    }
+    if !symlink_metadata.is_dir() {
+        return Err(ScanError::InvalidPath("只能扫描目录。".to_string()));
+    }
+
+    let canonical_root = fs::canonicalize(path)
+        .map_err(|error| ScanError::InvalidPath(format!("无法规范化目录：{error}")))?;
+    if is_protected_system_path(&canonical_root) && !is_allowed_advanced_broad_root(&canonical_root)
+    {
+        return Err(ScanError::RejectedRoot(
+            "高级发现不会直接以受保护系统目录作为扫描根。".to_string(),
+        ));
+    }
+
+    Ok(ValidatedRoot {
+        display_name: display_name_for_path(&canonical_root),
+        root_summary: summarize_root(&canonical_root),
+        canonical_root,
+    })
+}
+
+fn resolve_discovery_scan_roots(
+    mode: &ScanMode,
+    advanced_confirmation_accepted: bool,
+) -> Result<Vec<ValidatedRoot>, ScanError> {
+    let home = home_dir().ok_or_else(|| {
+        ScanError::InvalidPath("无法定位当前用户 home 目录，不能创建发现扫描来源。".to_string())
+    })?;
+    let roots = discovery_candidate_roots_for_home(&home, mode)?
+        .into_iter()
+        .filter_map(|path| {
+            validate_scan_root_for_mode(&path, mode, advanced_confirmation_accepted).ok()
+        })
+        .collect::<Vec<_>>();
+    Ok(roots)
+}
+
+fn discovery_candidate_roots_for_home(
+    home: &Path,
+    mode: &ScanMode,
+) -> Result<Vec<PathBuf>, ScanError> {
+    if matches!(mode, ScanMode::CustomDirectory) {
+        return Ok(Vec::new());
+    }
+
+    if matches!(mode, ScanMode::AdvancedFullDisk) {
+        return Ok(vec![home.to_path_buf()]);
+    }
+
+    let mut candidates = Vec::new();
+    for relative in [
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Developer",
+        "Work",
+        "Projects",
+        "Code",
+        "Workspace",
+        ".ai/AIOS",
+        ".ai/skill-modules",
+    ] {
+        let candidate = home.join(relative);
+        if candidate.is_dir() && !is_broad_or_system_root(&candidate) && !is_home_root(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+
+    Ok(candidates)
+}
+
 fn scan_validated_root(
     selected_root: &SelectedRoot,
     profile: &ScanProfileDefinition,
@@ -2077,16 +2313,9 @@ fn scan_validated_root_with_progress(
     mut progress_handle: Option<&mut ScanJobProgressHandle>,
 ) -> Result<CustomScanResult, ScanError> {
     let policy = scanner_policy();
-    let excluded_names_for_filter = policy
-        .excluded_names
-        .iter()
-        .copied()
-        .collect::<HashSet<_>>();
-    let excluded_names_for_loop = policy
-        .excluded_names
-        .iter()
-        .copied()
-        .collect::<HashSet<_>>();
+    let scan_mode = resolve_scan_mode(&selected_root.source_kind)?;
+    let excluded_names_for_filter = excluded_names_for_scan_mode(&scan_mode);
+    let excluded_names_for_loop = excluded_names_for_scan_mode(&scan_mode);
     let mut counts = ScanCounts::default();
     let mut resources = Vec::new();
     let mut warnings = Vec::new();
@@ -2276,7 +2505,7 @@ fn scanner_policy() -> ScannerPolicy {
         metadata_only: true,
         content_reading_enabled: false,
         execution_enabled: false,
-        full_disk_scan_enabled: false,
+        full_disk_scan_enabled: true,
         follow_symlinks: false,
         respects_ignore_files: true,
         max_depth: MAX_DEPTH,
@@ -2338,6 +2567,39 @@ fn scanner_policy() -> ScannerPolicy {
             .map(|profile| profile.id)
             .collect::<Vec<_>>(),
     }
+}
+
+fn excluded_names_for_scan_mode(mode: &ScanMode) -> HashSet<&'static str> {
+    let mut excluded_names = scanner_policy()
+        .excluded_names
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+    if matches!(
+        mode,
+        ScanMode::IntelligentDiscovery | ScanMode::AdvancedFullDisk
+    ) {
+        for name in [".ssh", ".gnupg", ".kube", "keychains", "cookies"] {
+            excluded_names.insert(name);
+        }
+    }
+
+    if matches!(mode, ScanMode::AdvancedFullDisk) {
+        for name in [
+            "library",
+            "system",
+            "applications",
+            "volumes",
+            "windows",
+            "program files",
+            "program files (x86)",
+            "programdata",
+        ] {
+            excluded_names.insert(name);
+        }
+    }
+
+    excluded_names
 }
 
 fn scan_profiles() -> Vec<ScanProfileDefinition> {
@@ -2504,6 +2766,65 @@ fn scan_profiles() -> Vec<ScanProfileDefinition> {
             execution_enabled: false,
             full_disk_scan_enabled: false,
         },
+        ScanProfileDefinition {
+            id: INTELLIGENT_DISCOVERY_PROFILE_ID,
+            display_name: "智能全机发现",
+            short_description: "面向非技术用户的引导式发现，只从常见用户工作区候选目录创建来源。",
+            recommended_use_case: "用户点击开始后解析 Desktop、Documents、Downloads、Developer、Work、Projects 和 AIOS 工作区候选目录。",
+            safety_boundary: "不会扫描系统根、home 根、/Users、/Volumes 或磁盘根；候选目录不存在或不可访问时安全跳过。",
+            example_folder_types: vec!["Desktop", "Documents", "Downloads", "Developer", "Work", "Projects", "AIOS 工作区"],
+            max_depth: 5,
+            max_entries: 1_500,
+            max_depth_entry_policy: "每个候选来源最多 5 层、1,500 个条目；候选来源按批次顺序扫描，可取消。",
+            exclude_policy_summary: "继承强 exclude，并额外跳过 SSH/GPG/Kube、Keychains、Cookies 等敏感配置目录。",
+            classification_emphasis: vec!["项目工作区", "AI 资源入口", "文档报告", "脚本与验证器"],
+            emphasized_resource_kinds: vec![
+                "package-manifest",
+                "skill",
+                "prompt",
+                "mcp-config",
+                "script",
+                "validator",
+                "report-doc",
+                "project-pack",
+                "policy-governance",
+            ],
+            result_group_label: "智能发现分类",
+            metadata_only: true,
+            content_reading_enabled: false,
+            execution_enabled: false,
+            full_disk_scan_enabled: false,
+        },
+        ScanProfileDefinition {
+            id: ADVANCED_FULL_DISK_PROFILE_ID,
+            display_name: "高级全盘发现",
+            short_description: "高风险高级模式，只在用户勾选确认后创建 broad discovery 来源。",
+            recommended_use_case: "仅在普通目录和智能发现无法定位资源时使用；受保护目录和权限失败会被跳过。",
+            safety_boundary: "必须显式确认；仅保存元数据，不读取内容、不执行脚本/MCP、不跟随符号链接，并使用更强 exclude。",
+            example_folder_types: vec!["用户 home 根", "受限 broad discovery 来源"],
+            max_depth: 5,
+            max_entries: 3_000,
+            max_depth_entry_policy: "高级模式每个来源最多 5 层、3,000 个条目；达到上限即停止并记录跳过摘要。",
+            exclude_policy_summary: "除依赖、缓存和构建产物外，额外跳过 Library、System、Applications、Volumes、SSH/GPG/Kube、Keychains、Cookies 等目录。",
+            classification_emphasis: vec!["保守资源发现", "权限跳过统计", "敏感路径隐藏", "本地库可删除"],
+            emphasized_resource_kinds: vec![
+                "skill",
+                "prompt",
+                "mcp-config",
+                "script",
+                "validator",
+                "report-doc",
+                "project-pack",
+                "policy-governance",
+                "package-manifest",
+                "unknown-local-resource",
+            ],
+            result_group_label: "高级发现分类",
+            metadata_only: true,
+            content_reading_enabled: false,
+            execution_enabled: false,
+            full_disk_scan_enabled: true,
+        },
     ]
 }
 
@@ -2652,6 +2973,43 @@ fn is_broad_or_system_root(path: &Path) -> bool {
     )
 }
 
+fn is_protected_system_path(path: &Path) -> bool {
+    let normalized = normalize_for_policy(path);
+    matches_denied_root_or_descendant(
+        &normalized,
+        &[
+            "/system",
+            "/library",
+            "/applications",
+            "/private",
+            "/var",
+            "/etc",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/opt",
+            "/dev",
+            "/proc",
+            "/run",
+            "c:/windows",
+            "c:/program files",
+            "c:/program files (x86)",
+            "c:/programdata",
+        ],
+    )
+}
+
+fn is_allowed_advanced_broad_root(path: &Path) -> bool {
+    let normalized = normalize_for_policy(path);
+    if matches!(normalized.as_str(), "/" | "/users" | "/volumes") {
+        return true;
+    }
+    if is_windows_broad_or_system_root(&normalized) {
+        return true;
+    }
+    is_home_root(path)
+}
+
 fn is_windows_broad_or_system_root(normalized: &str) -> bool {
     let bytes = normalized.as_bytes();
     if bytes.len() < 2 || bytes[1] != b':' || !bytes[0].is_ascii_alphabetic() {
@@ -2709,6 +3067,14 @@ fn display_name_for_path(path: &Path) -> String {
         })
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "已选择目录".to_string())
+}
+
+fn discovery_display_name(mode: &ScanMode, root: &ValidatedRoot) -> String {
+    match mode {
+        ScanMode::CustomDirectory => root.display_name.clone(),
+        ScanMode::IntelligentDiscovery => format!("智能发现 · {}", root.display_name),
+        ScanMode::AdvancedFullDisk => format!("高级发现 · {}", root.display_name),
+    }
 }
 
 fn summarize_root(path: &Path) -> String {
@@ -2854,6 +3220,10 @@ impl From<ScanError> for ScanCommandError {
                 message: "扫描已取消。".to_string(),
             },
             ScanError::RejectedRoot(message) => Self { code, message },
+            ScanError::AdvancedConfirmationRequired => Self {
+                code,
+                message: "高级全盘发现需要先勾选显式确认。".to_string(),
+            },
             ScanError::Permission(message) => Self { code, message },
             ScanError::SelectionMissing => Self {
                 code,
@@ -2875,6 +3245,7 @@ impl ScanError {
             ScanError::BatchMissing(_) => "batch_missing",
             ScanError::Cancelled => "cancelled",
             ScanError::RejectedRoot(_) => "rejected_root",
+            ScanError::AdvancedConfirmationRequired => "advanced_confirmation_required",
             ScanError::Permission(_) => "permission_error",
             ScanError::SelectionMissing => "selection_missing",
             ScanError::Store(_) => "resource_store_error",
@@ -2885,12 +3256,14 @@ impl ScanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_scan_job_event_payload, classify_resource_kind, current_time_ms, get_scan_profiles,
+        build_scan_job_event_payload, classify_resource_kind, current_time_ms,
+        discovery_candidate_roots_for_home, excluded_names_for_scan_mode, get_scan_profiles,
         normalize_source_ids, persist_completed_scan_result, recompute_batch_counters,
-        redact_relative_path, resolve_scan_profile, scan_validated_root, validate_scan_root,
-        ScanBatchProgress, ScanBatchSnapshot, ScanBatchSourceSnapshot, ScanBatchSourceStatus,
-        ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus, ScanProgress, SelectedRoot,
-        DEFAULT_SCAN_PROFILE_ID,
+        redact_relative_path, resolve_scan_profile, scan_validated_root, skip_inputs_from_counts,
+        validate_scan_root, validate_scan_root_for_mode, ScanBatchProgress, ScanBatchSnapshot,
+        ScanBatchSourceSnapshot, ScanBatchSourceStatus, ScanBatchStatus, ScanCancellation,
+        ScanCounts, ScanJobStatus, ScanMode, ScanProgress, SelectedRoot,
+        CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -2918,6 +3291,82 @@ mod tests {
             let result = validate_scan_root(Path::new(root));
             assert!(result.is_err(), "expected {root} to be rejected");
         }
+    }
+
+    #[test]
+    fn advanced_full_disk_rejects_without_confirmation() {
+        let error = validate_scan_root_for_mode(Path::new("/"), &ScanMode::AdvancedFullDisk, false)
+            .expect_err("advanced full-disk mode must require explicit confirmation");
+
+        assert_eq!(error.command_code(), "advanced_confirmation_required");
+    }
+
+    #[test]
+    fn advanced_full_disk_uses_stronger_excludes() {
+        let advanced_excludes = excluded_names_for_scan_mode(&ScanMode::AdvancedFullDisk);
+        let custom_excludes = excluded_names_for_scan_mode(&ScanMode::CustomDirectory);
+
+        for expected in ["library", ".ssh", ".gnupg", "keychains", "cookies"] {
+            assert!(
+                advanced_excludes.contains(expected),
+                "missing advanced exclude {expected}"
+            );
+        }
+        assert!(!custom_excludes.contains("library"));
+    }
+
+    #[test]
+    fn intelligent_discovery_candidates_avoid_system_roots() {
+        let home = temp_discovery_home();
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(home.join("Desktop")).expect("create Desktop");
+        fs::create_dir_all(home.join("Projects")).expect("create Projects");
+
+        let candidates = discovery_candidate_roots_for_home(&home, &ScanMode::IntelligentDiscovery)
+            .expect("candidate resolver should succeed");
+
+        assert!(candidates.iter().any(|root| root.ends_with("Desktop")));
+        assert!(candidates.iter().any(|root| root.ends_with("Projects")));
+        assert!(
+            candidates
+                .iter()
+                .all(|root| !root.starts_with("/System") && !root.starts_with("/Library")),
+            "intelligent discovery must not propose system roots"
+        );
+
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn discovery_skip_summaries_use_safe_reason_names() {
+        let counts = ScanCounts {
+            skipped_by_exclude: 2,
+            skipped_by_guard: 1,
+            skipped_by_metadata_error: 3,
+            skipped_by_limit: 1,
+            skipped_by_cancellation: 1,
+            skipped_by_size: 1,
+            skipped_symlinks: 1,
+            denied_errors: 3,
+            ..ScanCounts::default()
+        };
+        let skips = skip_inputs_from_counts(&counts, &[]);
+        let reasons = skips
+            .iter()
+            .map(|skip| skip.reason.as_str())
+            .collect::<HashSet<_>>();
+
+        for expected in [
+            "excluded_directory",
+            "protected_system_path",
+            "permission_denied",
+            "entry_limit",
+            "cancelled",
+            "metadata_policy_skip",
+        ] {
+            assert!(reasons.contains(expected), "missing skip reason {expected}");
+        }
+        assert!(skips.iter().all(|skip| skip.sample_safe_path.is_none()));
     }
 
     #[test]
@@ -2949,7 +3398,7 @@ mod tests {
             .map(|profile| profile.id)
             .collect::<HashSet<_>>();
 
-        assert_eq!(profiles.len(), 6);
+        assert_eq!(profiles.len(), 8);
         for expected in [
             "custom-folder",
             "project-root",
@@ -2957,15 +3406,22 @@ mod tests {
             "skills-prompts-workspace",
             "docs-reports-workspace",
             "aios-workspace",
+            "intelligent-discovery",
+            "advanced-full-disk",
         ] {
             assert!(ids.contains(expected), "missing scan profile {expected}");
         }
         assert!(
+            profiles.iter().all(
+                |profile| profile.id == "advanced-full-disk" || !profile.full_disk_scan_enabled
+            ),
+            "only advanced full-disk profile may enable the full-disk capability flag"
+        );
+        assert!(
             profiles
                 .iter()
-                .all(|profile| !profile.full_disk_scan_enabled
-                    && profile.content_reading_enabled == false),
-            "profiles must not enable full-disk or content scanning"
+                .all(|profile| profile.content_reading_enabled == false),
+            "profiles must not enable content scanning"
         );
     }
 
@@ -3066,6 +3522,8 @@ mod tests {
             canonical_root,
             display_name: "custom-scan-basic".to_string(),
             root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
         };
 
         let profile = resolve_scan_profile(Some("skills-prompts-workspace"))
@@ -3115,6 +3573,8 @@ mod tests {
             canonical_root,
             display_name: "custom-scan-basic".to_string(),
             root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
         };
         let profile =
             resolve_scan_profile(Some("project-root")).expect("known profile should resolve");
@@ -3158,6 +3618,47 @@ mod tests {
         let cleared =
             resource_store::clear_resource_library_for_path(&db_path).expect("clear should work");
         assert_eq!(cleared.resource_count, 0);
+        cleanup_resource_store(db_path);
+    }
+
+    #[test]
+    fn dynamic_corpus_receives_intelligent_discovery_resources() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "persist-discovery-fixture".to_string(),
+            canonical_root,
+            display_name: "Fixture Intelligent Discovery".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: "intelligent-discovery".to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile = resolve_scan_profile(Some("intelligent-discovery"))
+            .expect("discovery profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("fixture scan should succeed");
+        let db_path = temp_resource_store_path();
+        resource_store::initialize_database(&db_path).expect("resource DB should initialize");
+
+        let started_at_ms = current_time_ms();
+        persist_completed_scan_result(
+            &db_path,
+            "scan-job-intelligent-persist",
+            "scanner-test",
+            started_at_ms,
+            started_at_ms + 250,
+            &selected,
+            &profile,
+            &result,
+        )
+        .expect("discovery result should persist");
+
+        let sources =
+            resource_store::list_scan_sources_for_path(&db_path).expect("sources should load");
+        assert_eq!(sources[0].source_kind, "intelligent-discovery");
+
+        let corpus_summary = resource_store::get_active_resource_corpus_summary_for_path(&db_path)
+            .expect("corpus summary should load");
+        assert_eq!(corpus_summary.resource_count, result.resources.len() as u64);
+
         cleanup_resource_store(db_path);
     }
 
@@ -3227,6 +3728,8 @@ mod tests {
             canonical_root,
             display_name: "custom-scan-basic".to_string(),
             root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
         };
         let mut profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
             .expect("default profile should resolve");
@@ -3253,6 +3756,8 @@ mod tests {
             canonical_root,
             display_name: "custom-scan-basic".to_string(),
             root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
         };
         let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
             .expect("default profile should resolve");
@@ -3298,6 +3803,8 @@ mod tests {
             canonical_root: root.clone(),
             display_name: "scanner-symlink-test".to_string(),
             root_summary: "~/scanner-symlink-test".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
         };
 
         let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
@@ -3325,6 +3832,10 @@ mod tests {
             .join("../test-fixtures/custom-scan-basic")
             .canonicalize()
             .expect("fixture root should exist")
+    }
+
+    fn temp_discovery_home() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/scanner-discovery-home")
     }
 
     #[test]
