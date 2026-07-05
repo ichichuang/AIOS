@@ -36,14 +36,14 @@
   gap: 6px;
   padding: 12px 6px;
   min-height: 68px;
-  border: 1px solid color-mix(in srgb, var(--aios-primary) 20%, var(--aios-outline));
+  border: 1px solid var(--aios-accent-border);
   border-radius: 18px;
   background: linear-gradient(180deg, 
-    color-mix(in srgb, var(--aios-primary-soft) 85%, var(--aios-surface)) 0%, 
-    color-mix(in srgb, var(--aios-primary-soft) 40%, var(--aios-surface)) 100%
+    color-mix(in srgb, var(--aios-accent-soft) 64%, var(--aios-surface)) 0%,
+    color-mix(in srgb, var(--aios-selected-bg) 52%, var(--aios-surface)) 100%
   );
-  color: var(--aios-primary);
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--aios-primary) 6%, transparent);
+  color: var(--aios-accent);
+  box-shadow: none;
   transition: border-color var(--aios-motion-fast) ease,
               box-shadow var(--aios-motion-fast) ease,
               background var(--aios-motion-fast) ease,
@@ -52,11 +52,11 @@
 }
 
 .rail-brand:hover {
-  border-color: color-mix(in srgb, var(--aios-primary) 36%, var(--aios-outline-strong));
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--aios-primary) 12%, transparent);
+  border-color: var(--aios-selected-border);
+  box-shadow: none;
   background: linear-gradient(180deg, 
-    color-mix(in srgb, var(--aios-primary-soft) 95%, var(--aios-surface)) 0%, 
-    color-mix(in srgb, var(--aios-primary-soft) 55%, var(--aios-surface)) 100%
+    color-mix(in srgb, var(--aios-accent-soft) 72%, var(--aios-surface)) 0%,
+    color-mix(in srgb, var(--aios-selected-bg) 60%, var(--aios-surface)) 100%
   );
 }
 
@@ -113,7 +113,7 @@
 }
 
 .rail-group.active .rail-group-marker {
-  background: color-mix(in srgb, var(--aios-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--aios-accent) 28%, transparent);
 }
 
 .rail-group-items {
@@ -128,10 +128,10 @@
   top: 0;
   left: 0;
   z-index: 0;
-  border: 1px solid color-mix(in srgb, var(--aios-primary) 28%, var(--aios-selected-outline));
+  border: 1px solid var(--aios-selected-border);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--aios-primary-soft) 48%, var(--aios-surface));
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--aios-primary) 8%, transparent);
+  background: var(--aios-selected-bg);
+  box-shadow: none;
   opacity: 0;
   pointer-events: none;
 }
@@ -159,19 +159,19 @@
 }
 
 .rail-item:hover {
-  border-color: color-mix(in srgb, var(--aios-primary) 18%, var(--aios-outline-strong));
-  background: color-mix(in srgb, var(--aios-primary-soft) 58%, transparent);
-  color: var(--aios-primary);
+  border-color: var(--aios-accent-border);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .rail-item.active {
   border-color: transparent;
   background: transparent;
-  color: var(--aios-primary);
+  color: var(--aios-accent);
 }
 
 .rail-item:focus-visible {
-  outline: 2px solid var(--aios-primary);
+  outline: 2px solid var(--aios-accent);
   outline-offset: 2px;
 }
 
@@ -189,10 +189,10 @@
   max-width: 32px;
   height: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--aios-primary) 30%, transparent);
+  border: 1px solid var(--aios-neutral-chip-border);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aios-surface) 82%, var(--aios-primary-soft));
-  color: var(--aios-primary);
+  background: var(--aios-neutral-chip-bg);
+  color: var(--aios-chip-text);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
@@ -235,9 +235,9 @@
 
 .theme-mode-button.MuiIconButton-root:hover,
 .theme-mode-button.MuiIconButton-root:focus-visible {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .theme-mode-button.MuiIconButton-root:active {
@@ -417,9 +417,9 @@
 }
 
 .resource-scope-tab.active {
-  border-color: color-mix(in srgb, var(--aios-primary) 30%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-primary-soft) 42%, var(--aios-surface));
-  color: var(--aios-primary);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .resource-scope-tab span {
@@ -444,6 +444,12 @@
   height: 22px;
   font-size: 10px;
   font-weight: 700;
+}
+
+.resource-scope-tab.active .MuiChip-root {
+  border-color: var(--aios-selected-border);
+  background: var(--aios-neutral-chip-bg);
+  color: var(--aios-chip-text);
 }
 
 .module-workspace,
@@ -664,7 +670,7 @@
 }
 
 .aios-usage-card:hover {
-  border-color: var(--aios-selected-outline);
+  border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
   transform: translateY(-1px);
 }
@@ -675,9 +681,9 @@
 .resource-card.selected:hover,
 .compact-skill-row-inner.selected,
 .compact-skill-row-inner.selected:hover {
-  border-color: var(--aios-selected-outline) !important;
-  background: color-mix(in srgb, var(--aios-selected-surface) 68%, var(--aios-surface));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 18%, transparent);
+  border-color: var(--aios-selected-border) !important;
+  background: var(--aios-selected-bg);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
 }
 
 .aios-usage-action,
@@ -740,8 +746,8 @@
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  background: var(--aios-accent-soft);
+  color: var(--aios-accent);
 }
 
 .aios-usage-main,
@@ -938,8 +944,8 @@
 .local-library-cta {
   align-items: center;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  border-color: color-mix(in srgb, var(--aios-primary) 22%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-primary-soft) 28%, var(--aios-surface));
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
   padding: 14px;
 }
 
@@ -963,8 +969,9 @@
 }
 
 .resource-map-card.active {
-  border-color: color-mix(in srgb, var(--aios-primary) 28%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-primary-soft) 26%, var(--aios-surface));
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
 }
 
 .resource-map-card-heading {
@@ -1077,20 +1084,32 @@
 }
 
 .scan-mode-card.MuiButton-root {
+  position: relative;
   justify-content: stretch;
   min-width: 0;
   min-height: 190px;
+  overflow: hidden;
   border-color: var(--aios-outline);
   border-radius: 12px;
+  color: var(--aios-text);
   padding: 14px;
   text-align: left;
   text-transform: none;
 }
 
 .scan-mode-card.active.MuiButton-root {
-  border-color: color-mix(in srgb, var(--aios-primary) 34%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-primary-soft) 32%, var(--aios-surface));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 10%, transparent);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  box-shadow: none;
+}
+
+.scan-mode-card.active.MuiButton-root::before {
+  position: absolute;
+  inset: 12px auto 12px 0;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--aios-selected-marker);
+  content: "";
 }
 
 .scan-mode-card-copy {
@@ -1108,6 +1127,7 @@
 
 .scan-mode-card-copy p {
   overflow-wrap: anywhere;
+  color: var(--aios-text-muted);
   font-size: 12px;
 }
 
@@ -1149,9 +1169,9 @@
 }
 
 .scan-profile-selector .MuiToggleButton-root.Mui-selected {
-  border-color: color-mix(in srgb, var(--aios-primary) 42%, var(--aios-outline)) !important;
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  border-color: var(--aios-selected-border) !important;
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .scan-profile-selector .MuiToggleButton-root span {
@@ -1207,12 +1227,12 @@
 }
 
 .scan-first-use-item.ok {
-  border-color: color-mix(in srgb, var(--aios-success) 22%, var(--aios-outline));
+  border-color: var(--aios-success-border);
 }
 
 .scan-first-use-item.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-warning-soft) 46%, var(--aios-surface-muted));
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 55%, var(--aios-surface-muted));
 }
 
 .scan-control-grid {
@@ -1260,8 +1280,8 @@
   width: 28px;
   height: 28px;
   border-radius: 10px;
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  background: var(--aios-accent-soft);
+  color: var(--aios-accent);
   padding: 6px;
 }
 
@@ -1298,9 +1318,9 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
+  border: 1px solid var(--aios-warning-border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
+  background: color-mix(in srgb, var(--aios-warning-bg) 52%, var(--aios-surface));
   padding: 8px;
 }
 
@@ -1407,11 +1427,15 @@
 }
 
 .scan-boundary-callout.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 52%, var(--aios-surface));
 }
 
-.scan-boundary-callout svg {
+.scan-boundary-callout.info svg {
+  color: var(--aios-accent);
+}
+
+.scan-boundary-callout.warn svg {
   color: var(--aios-warning);
 }
 
@@ -1443,7 +1467,7 @@
 }
 
 .scan-category-count {
-  color: var(--aios-primary);
+  color: var(--aios-accent);
   font-size: 22px;
   font-weight: 950;
   line-height: 1;
@@ -1699,17 +1723,17 @@
 }
 
 .risk-meter-segment.risk-low {
-  background: var(--aios-success-soft);
+  background: color-mix(in srgb, var(--aios-success-bg) 60%, var(--aios-surface));
   color: var(--aios-success);
 }
 
 .risk-meter-segment.risk-medium {
-  background: var(--aios-warning-soft);
+  background: color-mix(in srgb, var(--aios-warning-bg) 60%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
 .risk-meter-segment.risk-high {
-  background: var(--aios-error-soft);
+  background: color-mix(in srgb, var(--aios-error-bg) 60%, var(--aios-surface));
   color: var(--aios-error);
 }
 
@@ -1742,7 +1766,7 @@
 }
 
 .aios-capability-launcher-card:hover {
-  border-color: var(--aios-selected-outline);
+  border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
   transform: translateY(-1px);
 }
@@ -1770,8 +1794,8 @@
   width: 40px;
   height: 40px;
   border-radius: 14px;
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  background: var(--aios-accent-soft);
+  color: var(--aios-accent);
 }
 
 .aios-capability-launcher-copy {
@@ -1855,8 +1879,8 @@
 }
 
 .quick-entry:hover {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-primary-soft);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
 }
 
 .aios-usage-card.quick-entry {
@@ -1869,7 +1893,7 @@
 }
 
 .quick-entry svg {
-  color: var(--aios-primary);
+  color: var(--aios-accent);
 }
 
 .resource-group {
@@ -1952,8 +1976,8 @@
 
 .skill-grouping-switch .MuiToggleButton-root.Mui-selected,
 .skill-grouping-switch .MuiToggleButton-root.Mui-selected:hover {
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .skill-group-index.horizontal-rail {
@@ -2000,8 +2024,8 @@
 
 .skill-group-button:hover,
 .skill-group-button.active {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-primary-soft);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
 }
 
 .skill-group-button:active {
@@ -2062,19 +2086,19 @@
 }
 
 .compact-skill-row-inner:hover {
-  border-color: var(--aios-selected-outline);
+  border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
 }
 
 .compact-skill-row-inner.selected,
 .compact-skill-row-inner.selected:hover {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-selected-surface);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
 }
 
 .compact-skill-row-inner:focus-visible {
-  outline: 2px solid var(--aios-primary);
+  outline: 2px solid var(--aios-accent);
   outline-offset: 2px;
 }
 
@@ -2206,9 +2230,9 @@
 
 .source-chip.MuiChip-root {
   max-width: 104px;
-  border-color: var(--aios-outline-strong);
-  background: var(--aios-surface-muted);
-  color: var(--aios-muted);
+  border-color: var(--aios-neutral-chip-border);
+  background: var(--aios-neutral-chip-bg);
+  color: var(--aios-chip-text);
   font-weight: 800;
 }
 
@@ -2217,26 +2241,30 @@
 .source-chip.source-codex.MuiChip-root,
 .source-chip.source-agents.MuiChip-root,
 .source-chip.source-claude.MuiChip-root {
-  background: var(--aios-primary-soft);
-  color: var(--aios-primary);
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .source-chip.source-custom-registry.MuiChip-root,
 .source-chip.source-filesystem.MuiChip-root,
 .source-chip.source-project-pack.MuiChip-root,
 .source-chip.source-view-mode.MuiChip-root {
-  background: var(--aios-info-soft);
+  border-color: var(--aios-info-border);
+  background: color-mix(in srgb, var(--aios-info-bg) 62%, var(--aios-surface));
   color: var(--aios-info);
 }
 
 .source-chip.source-distillation.MuiChip-root {
-  background: var(--aios-warning-soft);
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 62%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
 .source-chip.source-archived.MuiChip-root,
 .source-chip.source-unindexed.MuiChip-root {
-  background: var(--aios-error-soft);
+  border-color: var(--aios-error-border);
+  background: color-mix(in srgb, var(--aios-error-bg) 62%, var(--aios-surface));
   color: var(--aios-error);
 }
 
@@ -2247,8 +2275,8 @@
 
 .capability-chip.MuiChip-root {
   max-width: 100%;
-  border-color: var(--aios-outline-strong);
-  background: var(--aios-info-soft);
+  border-color: var(--aios-info-border);
+  background: color-mix(in srgb, var(--aios-info-bg) 58%, var(--aios-surface));
   color: var(--aios-info);
   font-weight: 800;
 }
@@ -2265,26 +2293,29 @@
 
 .quality-chip.MuiChip-root {
   max-width: 104px;
-  border-color: var(--aios-outline-strong);
-  background: var(--aios-surface-muted);
-  color: var(--aios-muted);
+  border-color: var(--aios-neutral-chip-border);
+  background: var(--aios-neutral-chip-bg);
+  color: var(--aios-chip-text);
   font-weight: 800;
 }
 
 .quality-chip.quality-complete.MuiChip-root,
 .quality-chip.quality-usable.MuiChip-root {
-  background: var(--aios-success-soft);
+  border-color: var(--aios-success-border);
+  background: color-mix(in srgb, var(--aios-success-bg) 58%, var(--aios-surface));
   color: var(--aios-success);
 }
 
 .quality-chip.quality-weak.MuiChip-root,
 .quality-chip.quality-inferred.MuiChip-root {
-  background: var(--aios-warning-soft);
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 58%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
 .quality-chip.quality-needs-review.MuiChip-root {
-  background: var(--aios-error-soft);
+  border-color: var(--aios-error-border);
+  background: color-mix(in srgb, var(--aios-error-bg) 58%, var(--aios-surface));
   color: var(--aios-error);
 }
 
@@ -2306,16 +2337,16 @@
 
 .resource-card:hover,
 .resource-card.selected {
-  border-color: var(--aios-selected-outline) !important;
+  border-color: var(--aios-selected-border) !important;
   background: var(--aios-surface-hover);
   transform: translateY(-1px);
 }
 
 .resource-card.selected,
 .resource-card.selected:hover {
-  border-color: var(--aios-selected-outline) !important;
-  background: var(--aios-selected-surface);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
+  border-color: var(--aios-selected-border) !important;
+  background: var(--aios-selected-bg);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
 }
 
 .resource-card .MuiCardContent-root {
@@ -2351,16 +2382,16 @@
 }
 
 .timeline-row:hover {
-  border-color: var(--aios-selected-outline);
+  border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
   transform: translateY(-1px);
 }
 
 .timeline-row.selected,
 .timeline-row.selected:hover {
-  border-color: var(--aios-selected-outline) !important;
-  background: var(--aios-selected-surface);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
+  border-color: var(--aios-selected-border) !important;
+  background: var(--aios-selected-bg);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
 }
 
 .timeline-row-action,
@@ -2668,13 +2699,17 @@
 
 .status-chip.MuiChip-root,
 .risk-chip.MuiChip-root {
+  border-color: var(--aios-neutral-chip-border);
+  background: var(--aios-neutral-chip-bg);
+  color: var(--aios-chip-text);
   font-weight: 800;
 }
 
 .status-ok.MuiChip-root,
 .status-active.MuiChip-root,
 .status-available.MuiChip-root {
-  background: var(--aios-success-soft);
+  border-color: var(--aios-success-border);
+  background: color-mix(in srgb, var(--aios-success-bg) 58%, var(--aios-surface));
   color: var(--aios-success);
 }
 
@@ -2682,22 +2717,26 @@
 .status-unknown.MuiChip-root,
 .status-missing.MuiChip-root,
 .status-disabled.MuiChip-root {
-  background: color-mix(in srgb, var(--aios-warning-soft) 58%, var(--aios-surface));
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 48%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
 .risk-low.MuiChip-root {
-  background: var(--aios-success-soft);
+  border-color: var(--aios-success-border);
+  background: color-mix(in srgb, var(--aios-success-bg) 58%, var(--aios-surface));
   color: var(--aios-success);
 }
 
 .risk-medium.MuiChip-root {
-  background: color-mix(in srgb, var(--aios-warning-soft) 58%, var(--aios-surface));
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 52%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
 .risk-high.MuiChip-root {
-  background: var(--aios-error-soft);
+  border-color: var(--aios-error-border);
+  background: color-mix(in srgb, var(--aios-error-bg) 58%, var(--aios-surface));
   color: var(--aios-error);
 }
 
@@ -2740,7 +2779,8 @@
 }
 
 .validator-notice.known {
-  background: var(--aios-warning-soft);
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 48%, var(--aios-surface));
 }
 
 .aios-inspector-sheet {
@@ -2956,13 +2996,13 @@
 }
 
 .inspector-boundary-callout.info {
-  border-color: color-mix(in srgb, var(--aios-info) 34%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-info-soft) 58%, var(--aios-surface));
+  border-color: var(--aios-info-border);
+  background: color-mix(in srgb, var(--aios-info-bg) 48%, var(--aios-surface));
 }
 
 .inspector-boundary-callout.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 24%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
+  border-color: var(--aios-warning-border);
+  background: color-mix(in srgb, var(--aios-warning-bg) 50%, var(--aios-surface));
 }
 
 .inspector-boundary-callout-copy {
@@ -3042,10 +3082,10 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-  border: 1px solid var(--aios-selected-outline);
+  border: 1px solid var(--aios-selected-border);
   border-radius: 16px;
-  background: var(--aios-surface);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 12%, transparent);
+  background: var(--aios-selected-bg);
+  box-shadow: none;
   padding: 14px;
   text-align: left;
 }
@@ -3141,7 +3181,7 @@
 }
 
 .aios-inspector-empty-guide {
-  border-color: color-mix(in srgb, var(--aios-primary) 16%, var(--aios-outline));
+  border-color: var(--aios-selected-border);
   background: var(--aios-surface);
 }
 
@@ -3190,7 +3230,7 @@
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aios-primary) 72%, var(--aios-muted));
+  background: var(--aios-selected-marker);
   content: "";
 }
 
@@ -3280,7 +3320,7 @@
 .eyebrow,
 .caption {
   margin: 0;
-  color: var(--aios-primary);
+  color: var(--aios-accent);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
@@ -3488,9 +3528,7 @@
   }
 
   .rail-selected-pill {
-    box-shadow:
-      inset 0 -3px 0 var(--aios-primary),
-      0 6px 18px color-mix(in srgb, var(--aios-primary) 12%, transparent);
+    box-shadow: inset 0 -2px 0 var(--aios-selected-marker);
   }
 
   .aios-top-command-bar {

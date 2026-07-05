@@ -103,14 +103,31 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           "--aios-primary": palette.primary,
           "--aios-primary-dark": palette.primaryDark,
           "--aios-primary-soft": palette.primarySoft,
+          "--aios-accent": palette.primary,
+          "--aios-accent-soft": palette.primarySoft,
+          "--aios-accent-border": alpha(palette.primary, resolvedMode === "dark" ? 0.36 : 0.28),
+          "--aios-selected-bg": palette.selectedSurface,
+          "--aios-selected-border": alpha(palette.primary, resolvedMode === "dark" ? 0.32 : 0.24),
+          "--aios-selected-marker": alpha(palette.primary, resolvedMode === "dark" ? 0.72 : 0.62),
           "--aios-success": palette.success,
           "--aios-success-soft": palette.successSoft,
+          "--aios-success-bg": palette.successSoft,
+          "--aios-success-border": alpha(palette.success, resolvedMode === "dark" ? 0.34 : 0.24),
           "--aios-warning": palette.warning,
           "--aios-warning-soft": palette.warningSoft,
+          "--aios-warning-bg": palette.warningSoft,
+          "--aios-warning-border": alpha(palette.warning, resolvedMode === "dark" ? 0.36 : 0.28),
           "--aios-error": palette.error,
           "--aios-error-soft": palette.errorSoft,
+          "--aios-error-bg": palette.errorSoft,
+          "--aios-error-border": alpha(palette.error, resolvedMode === "dark" ? 0.34 : 0.24),
           "--aios-info": palette.info,
           "--aios-info-soft": palette.infoSoft,
+          "--aios-info-bg": palette.infoSoft,
+          "--aios-info-border": alpha(palette.info, resolvedMode === "dark" ? 0.34 : 0.24),
+          "--aios-neutral-chip-bg": palette.surfaceMuted,
+          "--aios-neutral-chip-border": palette.outline,
+          "--aios-chip-text": palette.textMuted,
           "--aios-shadow": palette.shadowSurface,
           "--aios-shadow-lifted": palette.shadowLifted,
           "--aios-scrollbar-track": palette.scrollbarTrack,
@@ -217,15 +234,28 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
         root: {
           borderRadius: 999,
           fontWeight: 700,
-          letterSpacing: 0
+          letterSpacing: 0,
+          border: `1px solid ${palette.outline}`,
+          "&.MuiChip-colorPrimary": {
+            borderColor: alpha(palette.primary, resolvedMode === "dark" ? 0.32 : 0.24),
+            backgroundColor: palette.selectedSurface,
+            color: palette.primary
+          },
+          "&.MuiChip-colorWarning": {
+            borderColor: alpha(palette.warning, resolvedMode === "dark" ? 0.36 : 0.28),
+            backgroundColor: palette.warningSoft,
+            color: palette.warning
+          }
         },
         outlined: {
-          borderColor: palette.outlineStrong,
+          borderColor: palette.outline,
+          backgroundColor: "transparent",
           color: palette.textMuted
         },
         filled: {
-          backgroundColor: palette.primarySoft,
-          color: palette.primary
+          borderColor: palette.outline,
+          backgroundColor: palette.surfaceMuted,
+          color: palette.textMuted
         }
       }
     },
@@ -243,12 +273,25 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           borderColor: palette.outlineStrong,
           color: palette.primary,
           "&:hover": {
-            borderColor: palette.selectedOutline,
-            backgroundColor: palette.primarySoft
+            borderColor: alpha(palette.primary, resolvedMode === "dark" ? 0.36 : 0.28),
+            backgroundColor: palette.selectedSurface
+          },
+          "&.Mui-disabled": {
+            borderColor: palette.outline,
+            color: palette.textSubtle,
+            backgroundColor: "transparent"
           }
         },
         contained: {
-          color: resolvedMode === "dark" ? "#101418" : "#ffffff"
+          backgroundColor: palette.primary,
+          color: resolvedMode === "dark" ? "#101418" : "#ffffff",
+          "&:hover": {
+            backgroundColor: palette.primaryDark
+          },
+          "&.Mui-disabled": {
+            backgroundColor: palette.surfaceMuted,
+            color: palette.textSubtle
+          }
         }
       }
     },
@@ -257,7 +300,7 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
         root: {
           color: palette.textMuted,
           "&:hover": {
-            backgroundColor: palette.primarySoft,
+            backgroundColor: palette.selectedSurface,
             color: palette.primary
           }
         }
@@ -278,7 +321,7 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
             borderColor: palette.outline
           },
           "&:hover .MuiOutlinedInput-notchedOutline": {
-            borderColor: palette.selectedOutline
+            borderColor: alpha(palette.primary, resolvedMode === "dark" ? 0.32 : 0.24)
           },
           "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
             borderColor: palette.primary
@@ -326,7 +369,7 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
         root: {
           height: 10,
           borderRadius: 999,
-          backgroundColor: palette.primarySoft
+          backgroundColor: palette.surfaceMuted
         },
         bar: {
           borderRadius: 999
