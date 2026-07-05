@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  ADVANCED_FULL_DISK_CONFIRMATION_COPY,
   DEFAULT_SCAN_PROFILE_ID,
+  WEB_DISCOVERY_UNAVAILABLE_COPY,
   applyScanJobProgressEvent,
   canStartScanMode,
+  customDirectoryScanProfiles,
   createFallbackScanJobSnapshot,
   fallbackScanProfiles,
   getScanProfileById,
@@ -105,6 +108,14 @@ const fallbackProfile = getScanProfileById(undefined);
 
 assert.equal(resources.length, 5);
 assert.equal(fallbackScanProfiles.length, 8);
+assert.deepEqual(customDirectoryScanProfiles(fallbackScanProfiles).map((profile) => profile.id), [
+  "custom-folder",
+  "project-root",
+  "ai-toolchain",
+  "skills-prompts-workspace",
+  "docs-reports-workspace",
+  "aios-workspace"
+]);
 assert.equal(fallbackProfile.id, DEFAULT_SCAN_PROFILE_ID);
 assert.equal(projectProfile.id, "project-root");
 assert.ok(projectProfile.emphasizedResourceKinds.includes("package-manifest"));
@@ -129,12 +140,18 @@ const advancedMode = getScanModeById("advanced-full-disk");
 assert.equal(defaultMode.id, "custom-directory");
 assert.equal(intelligentMode.sourceKind, "intelligent-discovery");
 assert.equal(advancedMode.requiresConfirmation, true);
+assert.match(advancedMode.warning, /explicit confirmation/i);
+assert.match(ADVANCED_FULL_DISK_CONFIRMATION_COPY, /metadata-only results locally/);
+assert.match(WEB_DISCOVERY_UNAVAILABLE_COPY, /不会模拟真实全盘扫描/);
 assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: true, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
 assert.equal(canStartScanMode("custom-directory", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), false);
 assert.equal(canStartScanMode("intelligent-discovery", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), true);
 assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: true, scanLocked: false }), false);
 assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: true, tauriAvailable: true, scanLocked: false }), true);
+assert.equal(canStartScanMode("intelligent-discovery", { hasSelectedSources: false, advancedConfirmed: false, tauriAvailable: false, scanLocked: false }), false);
+assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false, advancedConfirmed: true, tauriAvailable: false, scanLocked: false }), false);
 assert.deepEqual(nextScanModeState("advanced-full-disk", { advancedConfirmed: true }), { modeId: "advanced-full-disk", advancedConfirmed: false });
+assert.deepEqual(nextScanModeState("intelligent-discovery", { advancedConfirmed: false }), { modeId: "intelligent-discovery", advancedConfirmed: false });
 
 const fallbackSnapshot = createFallbackScanJobSnapshot("job-1", "project-root");
 assert.equal(fallbackSnapshot.status, "queued");

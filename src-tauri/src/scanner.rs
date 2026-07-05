@@ -129,9 +129,12 @@ pub struct ScanCounts {
     skipped_by_guard: usize,
     skipped_by_metadata_error: usize,
     skipped_by_limit: usize,
+    skipped_by_depth_limit: usize,
     skipped_by_cancellation: usize,
     skipped_by_size: usize,
     skipped_symlinks: usize,
+    skipped_unsupported_roots: usize,
+    skipped_duplicate_sources: usize,
     denied_errors: usize,
     truncated: bool,
 }
@@ -432,7 +435,8 @@ pub async fn add_scan_sources(
     project_label: Option<String>,
     store: State<'_, resource_store::ResourceStoreState>,
 ) -> Result<AddScanSourcesResult, ScanCommandError> {
-    let profile = resolve_scan_profile(profile_id.as_deref()).map_err(ScanCommandError::from)?;
+    let profile = resolve_custom_directory_scan_profile(profile_id.as_deref())
+        .map_err(ScanCommandError::from)?;
     let selected = app
         .dialog()
         .file()
@@ -837,6 +841,21 @@ fn resolve_scan_profile(profile_id: Option<&str>) -> Result<ScanProfileDefinitio
         .into_iter()
         .find(|profile| profile.id == requested_id)
         .ok_or_else(|| ScanError::InvalidProfile(format!("未知扫描模板：{requested_id}")))
+}
+
+fn resolve_custom_directory_scan_profile(
+    profile_id: Option<&str>,
+) -> Result<ScanProfileDefinition, ScanError> {
+    let profile = resolve_scan_profile(profile_id)?;
+    if matches!(
+        profile.id,
+        INTELLIGENT_DISCOVERY_PROFILE_ID | ADVANCED_FULL_DISK_PROFILE_ID
+    ) {
+        return Err(ScanError::InvalidInput(
+            "发现扫描模板不能用于普通自选目录来源。".to_string(),
+        ));
+    }
+    Ok(profile)
 }
 
 fn resolve_scan_mode(mode: &str) -> Result<ScanMode, ScanError> {
@@ -1857,7 +1876,22 @@ fn skip_inputs_from_counts(
             counts.skipped_by_limit,
             Some(&["max_entries_reached"][..]),
         ),
+        (
+            "depth_limit",
+            counts.skipped_by_depth_limit,
+            Some(&["max_depth_reached"][..]),
+        ),
         ("cancelled", counts.skipped_by_cancellation, None::<&[&str]>),
+        (
+            "unsupported_root",
+            counts.skipped_unsupported_roots,
+            None::<&[&str]>,
+        ),
+        (
+            "duplicate_source",
+            counts.skipped_duplicate_sources,
+            None::<&[&str]>,
+        ),
         (
             "metadata_policy_skip",
             counts.skipped_by_size + counts.skipped_symlinks,
@@ -2442,6 +2476,22 @@ fn scan_validated_root_with_progress(
         } else {
             "other"
         };
+
+        if metadata.is_dir() && entry.depth() >= profile.max_depth {
+            counts.skipped_by_depth_limit += 1;
+            warnings.push(ScanWarning {
+                code: "max_depth_reached",
+                message: format!(
+                    "目录达到 {} 层深度上限，后代条目未继续遍历。",
+                    profile.max_depth
+                ),
+                relative_path: None,
+            });
+            if let Some(handle) = progress_handle.as_deref_mut() {
+                handle.publish(&counts, resources.len(), "walking", false);
+            }
+            continue;
+        }
 
         if metadata.is_file() && metadata.len() > policy.max_file_size_bytes {
             counts.skipped_by_size += 1;
@@ -3258,12 +3308,14 @@ mod tests {
     use super::{
         build_scan_job_event_payload, classify_resource_kind, current_time_ms,
         discovery_candidate_roots_for_home, excluded_names_for_scan_mode, get_scan_profiles,
-        normalize_source_ids, persist_completed_scan_result, recompute_batch_counters,
-        redact_relative_path, resolve_scan_profile, scan_validated_root, skip_inputs_from_counts,
-        validate_scan_root, validate_scan_root_for_mode, ScanBatchProgress, ScanBatchSnapshot,
-        ScanBatchSourceSnapshot, ScanBatchSourceStatus, ScanBatchStatus, ScanCancellation,
-        ScanCounts, ScanJobStatus, ScanMode, ScanProgress, SelectedRoot,
-        CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID,
+        home_dir, normalize_source_ids, persist_completed_scan_result, recompute_batch_counters,
+        redact_relative_path, resolve_custom_directory_scan_profile, resolve_scan_profile,
+        scan_validated_root, skip_inputs_from_counts, validate_scan_root,
+        validate_scan_root_for_mode, ScanBatchProgress, ScanBatchSnapshot, ScanBatchSourceSnapshot,
+        ScanBatchSourceStatus, ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus,
+        ScanMode, ScanProgress, SelectedRoot, ADVANCED_FULL_DISK_PROFILE_ID,
+        ADVANCED_FULL_DISK_SOURCE_KIND, CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID,
+        INTELLIGENT_DISCOVERY_PROFILE_ID,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -3344,9 +3396,12 @@ mod tests {
             skipped_by_guard: 1,
             skipped_by_metadata_error: 3,
             skipped_by_limit: 1,
+            skipped_by_depth_limit: 1,
             skipped_by_cancellation: 1,
             skipped_by_size: 1,
             skipped_symlinks: 1,
+            skipped_unsupported_roots: 1,
+            skipped_duplicate_sources: 1,
             denied_errors: 3,
             ..ScanCounts::default()
         };
@@ -3361,12 +3416,43 @@ mod tests {
             "protected_system_path",
             "permission_denied",
             "entry_limit",
+            "depth_limit",
             "cancelled",
+            "unsupported_root",
+            "duplicate_source",
             "metadata_policy_skip",
         ] {
             assert!(reasons.contains(expected), "missing skip reason {expected}");
         }
         assert!(skips.iter().all(|skip| skip.sample_safe_path.is_none()));
+    }
+
+    #[test]
+    fn custom_directory_mode_never_accepts_advanced_broad_roots() {
+        let home = home_dir().expect("test environment should provide home");
+
+        for mode in [ScanMode::CustomDirectory, ScanMode::IntelligentDiscovery] {
+            let error = validate_scan_root_for_mode(&home, &mode, true).expect_err(
+                "non-advanced modes must reject home root even if confirmation is true",
+            );
+            assert_eq!(error.command_code(), "rejected_root");
+        }
+    }
+
+    #[test]
+    fn custom_directory_source_creation_rejects_discovery_profiles() {
+        for profile_id in [
+            INTELLIGENT_DISCOVERY_PROFILE_ID,
+            ADVANCED_FULL_DISK_PROFILE_ID,
+        ] {
+            let error = resolve_custom_directory_scan_profile(Some(profile_id))
+                .expect_err("custom directory source creation must reject discovery profiles");
+            assert_eq!(error.command_code(), "invalid_input");
+        }
+
+        let profile = resolve_custom_directory_scan_profile(Some("project-root"))
+            .expect("normal custom profile should resolve");
+        assert_eq!(profile.id, "project-root");
     }
 
     #[test]
@@ -3462,9 +3548,12 @@ mod tests {
                 skipped_by_guard: 0,
                 skipped_by_metadata_error: 1,
                 skipped_by_limit: 0,
+                skipped_by_depth_limit: 0,
                 skipped_by_cancellation: 0,
                 skipped_by_size: 1,
                 skipped_symlinks: 2,
+                skipped_unsupported_roots: 0,
+                skipped_duplicate_sources: 0,
                 denied_errors: 1,
                 truncated: false,
             },
@@ -3654,6 +3743,48 @@ mod tests {
         let sources =
             resource_store::list_scan_sources_for_path(&db_path).expect("sources should load");
         assert_eq!(sources[0].source_kind, "intelligent-discovery");
+
+        let corpus_summary = resource_store::get_active_resource_corpus_summary_for_path(&db_path)
+            .expect("corpus summary should load");
+        assert_eq!(corpus_summary.resource_count, result.resources.len() as u64);
+
+        cleanup_resource_store(db_path);
+    }
+
+    #[test]
+    fn dynamic_corpus_receives_advanced_discovery_resources_from_fixture() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "persist-advanced-discovery-fixture".to_string(),
+            canonical_root,
+            display_name: "Fixture Advanced Discovery".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+            source_kind: ADVANCED_FULL_DISK_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile = resolve_scan_profile(Some(ADVANCED_FULL_DISK_PROFILE_ID))
+            .expect("advanced profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("fixture scan should succeed");
+        let db_path = temp_resource_store_path();
+        resource_store::initialize_database(&db_path).expect("resource DB should initialize");
+
+        let started_at_ms = current_time_ms();
+        persist_completed_scan_result(
+            &db_path,
+            "scan-job-advanced-persist",
+            "scanner-test",
+            started_at_ms,
+            started_at_ms + 250,
+            &selected,
+            &profile,
+            &result,
+        )
+        .expect("advanced discovery result should persist");
+
+        let sources =
+            resource_store::list_scan_sources_for_path(&db_path).expect("sources should load");
+        assert_eq!(sources[0].source_kind, ADVANCED_FULL_DISK_SOURCE_KIND);
+        assert_eq!(sources[0].profile_id, ADVANCED_FULL_DISK_PROFILE_ID);
 
         let corpus_summary = resource_store::get_active_resource_corpus_summary_for_path(&db_path)
             .expect("corpus summary should load");

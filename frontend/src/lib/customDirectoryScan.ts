@@ -40,6 +40,8 @@ export interface ScanProfileDefinition {
 export const DEFAULT_SCAN_PROFILE_ID: ScanProfileId = "custom-folder";
 export const DEFAULT_SCAN_MODE_ID: ScanModeId = "custom-directory";
 export const SCAN_JOB_PROGRESS_EVENT = "aios://scan-job-progress";
+export const ADVANCED_FULL_DISK_CONFIRMATION_COPY = "I understand this scan may take time, may skip protected folders, and stores metadata-only results locally.";
+export const WEB_DISCOVERY_UNAVAILABLE_COPY = "当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择、智能发现和高级全盘发现只在 Tauri 桌面应用中启用，不会模拟真实全盘扫描。";
 
 export interface ScanModeDefinition {
   id: ScanModeId;
@@ -433,6 +435,10 @@ export function getScanProfileById(profileId?: string | null, profiles: ScanProf
   const requested = profiles.find((profile) => profile.id === profileId);
   if (requested) return requested;
   return profiles.find((profile) => profile.id === DEFAULT_SCAN_PROFILE_ID) ?? fallbackScanProfiles[0];
+}
+
+export function customDirectoryScanProfiles(profiles: ScanProfileDefinition[] = fallbackScanProfiles): ScanProfileDefinition[] {
+  return profiles.filter((profile) => profile.id !== "intelligent-discovery" && profile.id !== "advanced-full-disk");
 }
 
 export function getScanModeById(modeId?: string | null): ScanModeDefinition {

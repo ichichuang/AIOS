@@ -15,10 +15,13 @@ import { filterResourceList } from "../../lib/filtering";
 import {
   countSkippedEntries,
   canStartScanMode,
+  ADVANCED_FULL_DISK_CONFIRMATION_COPY,
   fallbackScanPolicy,
   fallbackScanProfiles,
   DEFAULT_SCAN_MODE_ID,
   DEFAULT_SCAN_PROFILE_ID,
+  WEB_DISCOVERY_UNAVAILABLE_COPY,
+  customDirectoryScanProfiles,
   getScanModeById,
   getScanPolicy,
   getScanProfileById,
@@ -162,6 +165,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
   }, [batchSnapshot, refreshResourceLibrary, tauriAvailable]);
 
   const activeScanMode = useMemo(() => getScanModeById(activeScanModeId), [activeScanModeId]);
+  const customProfiles = useMemo(() => customDirectoryScanProfiles(profiles), [profiles]);
   const activeProfile = useMemo(() => getScanProfileById(activeScanMode.id === "custom-directory" ? activeProfileId : activeScanMode.profileId, profiles), [activeProfileId, activeScanMode.id, activeScanMode.profileId, profiles]);
   const scanResultProfile = useMemo(() => (scanResult ? getScanProfileForResult(scanResult, profiles) : null), [profiles, scanResult]);
   const profileForVisibleResults = scanResultProfile ?? activeProfile;
@@ -411,7 +415,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
         />
         <Box className="scan-profile-selector" aria-label="扫描模板选择">
           <ToggleButtonGroup disabled={scanLocked || activeScanMode.id !== "custom-directory"} exclusive value={activeScanMode.id === "custom-directory" ? activeProfile.id : activeProfile.id} onChange={handleProfileChange}>
-            {profiles.map((profile) => (
+            {customProfiles.map((profile) => (
               <ToggleButton disabled={scanLocked || activeScanMode.id !== "custom-directory"} key={profile.id} value={profile.id}>
                 <Box component="span">{profile.displayName}</Box>
               </ToggleButton>
@@ -478,7 +482,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               <Box className="scan-advanced-confirmation">
                 <Checkbox checked={advancedConfirmed} disabled={scanLocked} onChange={(event) => setAdvancedConfirmed(event.target.checked)} />
                 <Typography color="text.secondary" variant="body2">
-                  I understand this scan may take time, may skip protected folders, and stores metadata-only results locally.
+                  {ADVANCED_FULL_DISK_CONFIRMATION_COPY}
                 </Typography>
               </Box>
             )}
@@ -533,6 +537,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
               const sourceBusy = sourceBusyId === source.id || scanLocked;
               const batchSource = batchSnapshot?.sources.find((candidate) => candidate.scanSourceId === source.id);
               const status = batchSource?.status ?? row?.status ?? "idle";
+              const sourceProfileOptions = source.sourceKind === "custom-directory" ? customProfiles : [getScanProfileById(source.profileId, profiles)];
               return (
                 <Box className={`scan-source-row ${source.enabled ? "" : "disabled"}`} key={source.id}>
                   <Checkbox
@@ -555,8 +560,8 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                       {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
                     </Box>
                   </Box>
-                  <TextField disabled={sourceBusy} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
-                    {profiles.map((profile) => (
+                  <TextField disabled={sourceBusy || source.sourceKind !== "custom-directory"} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
+                    {sourceProfileOptions.map((profile) => (
                       <MenuItem key={profile.id} value={profile.id}>
                         {profile.displayName}
                       </MenuItem>
@@ -769,7 +774,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
         <Box className="scan-boundary-callout warn">
           <WarningAmberRounded fontSize="small" />
           <Typography color="text.secondary" variant="body2">
-            当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择、智能发现和高级全盘发现只在 Tauri 桌面应用中启用，不会模拟真实全盘扫描。
+            {WEB_DISCOVERY_UNAVAILABLE_COPY}
           </Typography>
         </Box>
       )}
