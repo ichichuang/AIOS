@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mapScanResourcesToAiosResources, type CustomScanResult } from "./customDirectoryScan";
+import {
+  DEFAULT_SCAN_PROFILE_ID,
+  fallbackScanProfiles,
+  getScanProfileById,
+  mapScanResourcesToAiosResources,
+  type CustomScanResult
+} from "./customDirectoryScan";
 
 const sampleResult: CustomScanResult = {
   policyId: "custom-directory-metadata-scan-mvp",
@@ -86,10 +92,18 @@ const sampleResult: CustomScanResult = {
 };
 
 const resources = mapScanResourcesToAiosResources(sampleResult);
+const projectProfile = getScanProfileById("project-root");
+const fallbackProfile = getScanProfileById(undefined);
 
 assert.equal(resources.length, 5);
+assert.equal(fallbackScanProfiles.length, 6);
+assert.equal(fallbackProfile.id, DEFAULT_SCAN_PROFILE_ID);
+assert.equal(projectProfile.id, "project-root");
+assert.ok(projectProfile.emphasizedResourceKinds.includes("package-manifest"));
 assert.equal(resources[0].capabilityType, "skill");
 assert.equal(resources[0].toolType, "project-local");
+assert.equal(resources[0].metadata?.scanProfileId, DEFAULT_SCAN_PROFILE_ID);
+assert.equal(resources[0].metadata?.scanProfileName, fallbackProfile.displayName);
 assert.equal(resources[1].capabilityType, "validator");
 assert.equal(resources[1].safetyProfile.executionRisk, "medium");
 assert.equal(resources[2].path, "configs/[sensitive]");

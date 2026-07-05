@@ -7,7 +7,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scanner::pick_scan_directory,
             scanner::scan_custom_directory,
-            scanner::get_scan_policy
+            scanner::get_scan_policy,
+            scanner::get_scan_profiles
         ])
         .run(tauri::generate_context!())
         .expect("error while running AIOS Desktop");

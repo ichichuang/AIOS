@@ -830,10 +830,98 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
 }
 
+.scan-profile-section,
+.scan-first-use-section,
 .scan-control-section,
 .scan-result-section,
 .scan-warning-section {
   min-width: 0;
+}
+
+.scan-profile-selector {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.scan-profile-selector .MuiToggleButtonGroup-root {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.scan-profile-selector .MuiToggleButton-root {
+  min-height: 34px;
+  border: 1px solid var(--aios-outline) !important;
+  border-radius: 999px !important;
+  color: var(--aios-text-muted);
+  padding: 7px 12px;
+  text-transform: none;
+}
+
+.scan-profile-selector .MuiToggleButton-root.Mui-selected {
+  border-color: color-mix(in srgb, var(--aios-primary) 42%, var(--aios-outline)) !important;
+  background: var(--aios-primary-soft);
+  color: var(--aios-primary);
+}
+
+.scan-profile-selector .MuiToggleButton-root span {
+  max-width: 180px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-profile-detail-grid,
+.scan-first-use-grid,
+.scan-category-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+}
+
+.scan-profile-detail,
+.scan-first-use-item,
+.scan-category-summary-item {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface-muted);
+  padding: 12px;
+}
+
+.scan-profile-detail strong,
+.scan-first-use-item strong,
+.scan-category-summary-item strong {
+  color: var(--aios-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.scan-profile-detail p,
+.scan-first-use-item p,
+.scan-category-summary-item p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.scan-first-use-item.ok {
+  border-color: color-mix(in srgb, var(--aios-success) 22%, var(--aios-outline));
+}
+
+.scan-first-use-item.warn {
+  border-color: color-mix(in srgb, var(--aios-warning) 32%, var(--aios-outline));
+  background: var(--aios-warning-soft);
 }
 
 .scan-control-grid {
@@ -942,7 +1030,7 @@
 
 .scan-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: var(--aios-card-gap, 10px);
   min-width: 0;
 }
@@ -950,6 +1038,17 @@
 .scan-summary-grid .aios-usage-action,
 .scan-summary-grid .aios-usage-action.static {
   min-height: 96px;
+}
+
+.scan-category-summary-grid {
+  margin-top: 10px;
+}
+
+.scan-category-count {
+  color: var(--aios-primary);
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
 }
 
 .scan-warning-list {

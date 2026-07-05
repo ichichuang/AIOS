@@ -6,80 +6,37 @@ AIOS Desktop 扫描器用于发现和解释本地 AI 能力资源。它默认只
 
 扫描器不是默认全盘扫描器，不执行脚本，不连接 MCP，不修改全局配置，不同步 skill 入口。
 
-## 扫描 profile
+## 扫描模板 / profiles
 
-### AIOS Root
+Phase 2B 已实现静态扫描模板。模板是用户选择目录前的说明和分类预设，不是自动扫描根目录。
 
-默认推荐 profile。
+所有模板都遵守同一条硬边界：
 
-范围：
+- 用户必须通过 Tauri 系统目录选择器显式选择一个目录。
+- 模板选择不会自动选择、探测或扫描 `~/.codex`、`~/.claude`、`~/.ai`、home root、项目根、系统根或磁盘根。
+- 模板不会绕过 broad/system/home root guard。
+- 模板不会启用全盘扫描、文件内容读取、脚本执行、MCP 启动、SQLite、扫描历史或持久索引。
+- 模板只影响 UI 说明、分类重点、结果分组说明和有界 max depth / max entries 上限。
 
-- `/Users/cc/.ai`
-- 当前仓库 `/Users/cc/.ai/AIOS`
+当前模板：
 
-目标：
+| ID | 显示名 | 推荐场景 | 分类重点 | 上限 |
+| --- | --- | --- | --- | --- |
+| `custom-folder` | 通用自选目录 | 不确定目录类型时先选择一个小而明确的工作文件夹 | 通用资源识别、敏感路径隐藏、未知资源保守归类 | 6 层 / 2,000 项 |
+| `project-root` | 项目根目录 | 用户手动选择一个代码仓库或产品项目根目录 | manifest、repo-local skills/prompts、脚本、验证器、docs/reports | 6 层 / 2,000 项 |
+| `ai-toolchain` | AI 工具链目录 | 用户手动选择小范围工具链工作目录、插件元数据目录或 prompts/skills 子目录 | MCP/config 元数据、技能入口、提示词入口、策略边界 | 5 层 / 1,500 项 |
+| `skills-prompts-workspace` | 技能 / 提示词工作区 | 用户手动选择 skills、prompts 或二者混合目录 | 技能、提示词、验证器、策略说明 | 6 层 / 1,500 项 |
+| `docs-reports-workspace` | 文档 / 报告工作区 | 用户手动选择 docs、reports 或交付物目录 | 报告与文档、策略治理、项目资源包 | 5 层 / 1,500 项 |
+| `aios-workspace` | AIOS 工作区 | 用户手动选择 AIOS 相关工作区或本仓库内局部目录 | AIOS skills/prompts、报告、脚本、策略治理、验证器 | 6 层 / 2,000 项 |
 
-- AIOS shared skills。
-- reports。
-- scripts metadata。
-- generated views metadata。
-- policy 和 governance metadata。
+`get_scan_profiles` 只返回这些静态定义，不检查文件系统。`scan_custom_directory` 接受可选 `profileId`；缺省值保持 `custom-folder` 以兼容 Phase 2A 调用。
 
-限制：
+### Custom Folder / Profile Templates
 
-- 不修改 `/Users/cc/.ai`。
-- 不读取 credential、auth、session、env 原始值。
-- 不执行任何 `.mjs`、`.sh`、validator 或 automation。
-
-### AI Toolchain
-
-范围示例：
-
-- `/Users/cc/.codex`
-- `/Users/cc/.claude`
-- `/Users/cc/.agents`
-- `/Users/cc/.serena`
-- 受限 `.config` AI 工具配置路径
-
-目标：
-
-- skill entrypoint metadata。
-- MCP 配置中的 server 名称、command 名称、env var 名称。
-- 本地工具链漂移提示。
-
-限制：
-
-- 不打印、保存或展示 auth/session/token/env value。
-- 不修改 Codex、Claude、Agents、MCP 配置。
-- 不启动 MCP server。
-
-### Project Roots
-
-范围：
-
-- 用户明确配置的项目根目录。
-- repo-local `.agents/skills` 或项目资源包。
-
-目标：
-
-- project-local skills。
-- prompt/report metadata。
-- package scripts 名称。
-- validators 名称。
-- AIOS 相关配置入口。
-
-限制：
-
-- 尊重 `.gitignore` / `.ignore`。
-- 默认跳过 `node_modules`、`dist`、`build`、`coverage`、cache、logs、tmp。
-- 不对外部项目执行 build/test/lint。
-- 不把项目本地 skill 复制到全局入口。
-
-### Custom Folder
-
-Phase 2A 状态：
+Phase 2A / 2B 状态：
 
 - 已实现最小 MVP：用户通过 Tauri 系统目录选择器选择一个目录。
+- 已实现静态扫描模板：用户先选择模板，再选择目录，再手动运行扫描。
 - Rust 侧只执行 metadata-only traversal，不读取文件内容。
 - 扫描结果只保存在当前前端内存中，不写入 SQLite，不保留扫描历史。
 - 每次扫描只使用一个用户选择目录，不支持多根目录批量扫描。
@@ -97,8 +54,8 @@ Phase 2A 状态：
 
 - 每个 custom root 都必须记录授权来源和 policy decision。
 - 默认继承强 exclude、metadata-first 和 redaction 规则。
-- Phase 2A 不保存 profile，不保存本地索引，不提供扫描历史。
-- SQLite、scan history、profile 管理和 diff view 仍是未来阶段。
+- Phase 2B 模板不持久化授权路径，不保存本地索引，不提供扫描历史。
+- SQLite、scan history、持久 profile 管理和 diff view 仍是未来阶段。
 
 ## 全盘扫描策略
 
@@ -173,11 +130,11 @@ Redaction 输出必须显示：
 默认策略：
 
 - `follow_links = false`。
-- profile-specific `max_depth`。
+- profile-specific `max_depth` / `max_entries`，但不得超过当前 MVP 的安全边界。
 - 小文件 metadata parser 限制大小。
 - project profile 尊重 ignore 文件。
 - explicit AIOS roots 可以读取隐藏目录 metadata。
-- custom profile 只扫用户授权 root。
+- custom/profile template 只扫用户授权 root。
 - Phase 2A custom profile 默认只使用 L0 路径 metadata，不解析 manifest 字段。
 
 Phase 2A custom profile 边界：

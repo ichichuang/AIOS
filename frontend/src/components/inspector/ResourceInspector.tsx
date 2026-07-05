@@ -282,6 +282,9 @@ function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentity
   const sourceBadges = getSkillSourceBadges(resource);
   if (sourceBadges.length > 0) return sourceBadges.map((badge) => badge.label).join(" / ");
 
+  const scanProfileName = getDiscoveryMetadataString(resource, "scanProfileName");
+  if (scanProfileName) return `目录扫描 · ${scanProfileName}`;
+
   const sourceKind = getDiscoveryMetadataString(resource, "sourceKind");
   if (sourceKind) return sourceKind;
 
@@ -468,6 +471,15 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
 
   const root = getMetadataString(resource, "root");
   if (root) rows.push({ label: "资源根", value: root, code: true });
+
+  const scanProfileName = getMetadataString(resource, "scanProfileName");
+  if (scanProfileName) rows.push({ label: "扫描模板", value: scanProfileName });
+
+  const scanProfileId = getMetadataString(resource, "scanProfileId");
+  if (scanProfileId) rows.push({ label: "模板 ID", value: scanProfileId, code: true });
+
+  const scanProfileBoundary = getMetadataString(resource, "scanProfileBoundary");
+  if (scanProfileBoundary) rows.push({ label: "模板边界", value: scanProfileBoundary });
 
   if (hasDiscoveryMetadata(resource)) {
     const sourceBadges = getSkillSourceBadges(resource);
