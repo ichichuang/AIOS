@@ -13,6 +13,7 @@
 - 当前不提供 `workflow_dispatch`、branch push、pull_request、schedule 或 release trigger。
 - GitHub Release assets 上传需要 `contents: write`，workflow 权限只保留该最小写权限。
 - 当前 `src-tauri/tauri.conf.json` 的 updater artifacts 仍为 `createUpdaterArtifacts: false`。
+- Windows packaging 需要 `src-tauri/icons/icon.ico`，该文件由现有 `src-tauri/icons/icon.png` 通过 repo-local Tauri CLI 生成。
 - 当前没有 signing、notarization、stapling、Windows code signing 或 Tauri updater 配置。
 - 当前没有新增 Tauri filesystem、shell、process、SQL、autostart、global-shortcut、notification 或 updater plugin。
 
@@ -37,6 +38,10 @@ workflow 使用 `fail-fast: false`，并设置 `max-parallel: 1`，降低多个 
 | macOS Apple Silicon | `macos-latest` | `aarch64-apple-darwin` | unsigned `.app` / `.dmg` | `--target aarch64-apple-darwin --bundles app,dmg --no-sign` |
 | macOS Intel | `macos-15-intel` | `x86_64-apple-darwin` | unsigned `.app` / `.dmg` | `--target x86_64-apple-darwin --bundles app,dmg --no-sign` |
 | Windows x64 | `windows-latest` | `x86_64-pc-windows-msvc` | unsigned NSIS / MSI | `--target x86_64-pc-windows-msvc --bundles nsis,msi` |
+
+## 已知内部运行结果
+
+`v0.1.0-internal.1` 是一次部分 dry-run：macOS Apple Silicon 与 macOS Intel assets 已上传到内部 prerelease；Windows x64 在 `cargo check` 阶段因缺少 `src-tauri/icons/icon.ico` 未进入 installer 上传步骤。
 
 ## Workflow 步骤
 

@@ -14,6 +14,7 @@
 - Rust binary：`aios-desktop`。
 - 当前 bundle targets：`app`, `dmg`。
 - 当前 updater artifacts：关闭，`createUpdaterArtifacts: false`。
+- Windows packaging icon：`src-tauri/icons/icon.ico`，由现有 `src-tauri/icons/icon.png` 通过 repo-local Tauri CLI 生成。
 - 当前签名状态：unsigned。
 - 当前公开分发状态：无。
 - 当前 CI 打包入口：tag-triggered internal prerelease workflow。
@@ -80,7 +81,12 @@ pnpm desktop:bundle:mac
 - Target：`x86_64-pc-windows-msvc`。
 - 产物：unsigned NSIS 与 MSI installer。
 - Tauri args：`--target x86_64-pc-windows-msvc --bundles nsis,msi`。
+- Packaging 前置资源：`src-tauri/icons/icon.ico` 必须存在，否则 Tauri Windows resource generation 会在 `cargo check` 阶段失败。
 - 限制：未配置 Windows code signing，可能触发 SmartScreen 或企业安全策略。
+
+## 已知内部运行结果
+
+`v0.1.0-internal.1` 是一次部分 dry-run：macOS Apple Silicon 与 macOS Intel assets 已上传到内部 prerelease；Windows x64 因缺少 `src-tauri/icons/icon.ico` 在 `Cargo check` 步骤失败，未上传 Windows installer。
 
 ## macOS 内部 smoke
 
