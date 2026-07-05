@@ -2,7 +2,7 @@
   "name": "aios-control-center",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-only read-only AIOS Control Center MVP.",
+  "description": "Local-first AIOS Desktop for metadata-only AI resource discovery.",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "pnpm inventory:generate && pnpm --filter @aios-control/frontend dev",
@@ -12,7 +12,8 @@
     "validate": "pnpm typecheck && pnpm build",
     "tauri": "tauri",
     "desktop:dev": "pnpm tauri dev",
-    "desktop:build": "pnpm tauri build"
+    "desktop:build": "pnpm tauri build --no-bundle",
+    "desktop:bundle:mac": "pnpm tauri build --bundles app,dmg --no-sign"
   },
   "engines": {
     "node": ">=22"

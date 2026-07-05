@@ -1,7 +1,7 @@
 [package]
 name = "aios-desktop"
 version = "0.1.0"
-description = "AIOS Desktop read-only shell"
+description = "Local-first AIOS Desktop metadata workspace"
 authors = ["AIOS"]
 edition = "2021"
 rust-version = "1.77.2"

@@ -27,6 +27,13 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["app", "dmg"],
+    "createUpdaterArtifacts": false,
+    "publisher": "ichichuang",
+    "category": "DeveloperTool",
+    "shortDescription": "Local-first AIOS Desktop metadata workspace.",
+    "longDescription": "AIOS Desktop is a local-first desktop workspace for understanding AIOS resources. It stores app-owned metadata locally, never starts scans automatically, and keeps signing, notarization, and updater distribution out of this local dry run.",
+    "icon": ["icons/icon.png", "icons/icon.icns"]
   }
 }
