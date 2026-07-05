@@ -1,44 +1,38 @@
-name: AIOS Desktop internal build artifacts
+name: AIOS Desktop internal release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*-internal.*'
 
 permissions:
-  contents: read
+  contents: write
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  build-artifacts:
+  build-release:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
 
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - name: macOS Apple Silicon unsigned app/dmg
             runner: macos-latest
-            platform: macos
-            arch: arm64
             target: aarch64-apple-darwin
-            bundles: app,dmg
             tauri_args: --target aarch64-apple-darwin --bundles app,dmg --no-sign
           - name: macOS Intel unsigned app/dmg
             runner: macos-15-intel
-            platform: macos
-            arch: x64
             target: x86_64-apple-darwin
-            bundles: app,dmg
             tauri_args: --target x86_64-apple-darwin --bundles app,dmg --no-sign
           - name: Windows x64 unsigned nsis/msi
             runner: windows-latest
-            platform: windows
-            arch: x64
             target: x86_64-pc-windows-msvc
-            bundles: nsis,msi
             tauri_args: --target x86_64-pc-windows-msvc --bundles nsis,msi
 
     steps:
@@ -71,15 +65,23 @@ jobs:
         run: pnpm typecheck
 
       - name: Cargo check
-        working-directory: src-tauri
-        run: cargo check --target "${{ matrix.target }}"
+        run: cd src-tauri && cargo check --target "${{ matrix.target }}"
 
-      - name: Build Tauri artifacts
+      - name: Build and upload internal prerelease assets
         uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: pnpm tauri
           args: ${{ matrix.tauri_args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: aios-desktop-[version]-[platform]-[arch]-[bundle]
+          tagName: ${{ github.ref_name }}
+          releaseName: AIOS Desktop ${{ github.ref_name }} Internal
+          releaseBody: |
+            This is an unsigned internal testing build for AIOS Desktop.
+            It is not a public signed release. macOS Gatekeeper, Windows SmartScreen, or enterprise policy may warn or block installation.
+            Tauri updater artifacts remain disabled. Signing, notarization, stapling, code signing, and updater distribution remain deferred.
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: false
           uploadUpdaterJson: false
           uploadUpdaterSignatures: false
