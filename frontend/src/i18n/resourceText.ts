@@ -17,7 +17,7 @@ export interface ResourceDisplay {
 }
 
 export function getResourceUiGroup(resource: AiosResource): ResourceUiGroup {
-  if (resource.toolType === "legacy") return "legacy";
+  if (isLegacyResource(resource)) return "legacy";
   if (resource.capabilityType === "mcp-server" || resource.capabilityType === "mcp-client") return "mcp";
   if (resource.capabilityType === "skill" || resource.capabilityType === "runtime-view" || resource.capabilityType === "registry") return "skills";
   if (resource.capabilityType === "script") return "scripts";
@@ -25,8 +25,11 @@ export function getResourceUiGroup(resource: AiosResource): ResourceUiGroup {
   if (resource.capabilityType === "report") return "reports";
   if (resource.capabilityType === "project-pack") return "project-packs";
   if (resource.capabilityType === "policy") return "policies";
-  if (resource.capabilityType === "usage-prompt") return "legacy";
   return "dashboard";
+}
+
+function isLegacyResource(resource: AiosResource): boolean {
+  return resource.toolType === "legacy" || resource.metadata?.corpusSource === "legacy-snapshot" || resource.metadata?.legacySnapshot === true;
 }
 
 export function getPathPreview(resource: AiosResource): string {

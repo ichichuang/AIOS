@@ -43,7 +43,7 @@ const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
 export function belongsToView(resource: AiosResource, view: ResourceView): boolean {
   if (view === "dashboard") return true;
   if (view === "custom-scan") return false;
-  if (view === "legacy") return resource.toolType === "legacy" || resource.capabilityType === "usage-prompt";
+  if (view === "legacy") return isLegacyViewResource(resource);
   const capabilities = capabilityByView[view];
   return capabilities ? capabilities.includes(resource.capabilityType) : true;
 }
@@ -133,4 +133,8 @@ export function getViewCountsForDataSource(
   _legacySnapshotResources: AiosResource[] = []
 ): Record<ResourceView, number> {
   return countResourcesByView(buildResourcesByView(getDefaultResourcesForDataSource(state, dynamicResources)));
+}
+
+function isLegacyViewResource(resource: AiosResource): boolean {
+  return resource.toolType === "legacy" || resource.metadata?.corpusSource === "legacy-snapshot" || resource.metadata?.legacySnapshot === true;
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  asLegacySnapshotDataSource,
   buildLocalResourceLibraryViewState,
   buildResourceDataSourceState,
   buildCorpusScopeTabs,
@@ -29,6 +30,7 @@ import {
   type ScanSourceResourceMapEntry
 } from "./resourceCorpus";
 import { buildResourcesByView, countResourcesByView, getModuleResourcesForDataSource, getViewCountsForDataSource } from "./filtering";
+import { getResourceDisplay } from "../i18n/resourceText";
 import { moduleEmptyStateCopy } from "../components/modules/moduleUtils";
 import type { AiosResource } from "../types/inventory";
 
@@ -310,6 +312,15 @@ const dynamicScript = {
     corpusSource: "dynamic-resource-corpus"
   }
 } satisfies AiosResource;
+const dynamicPrompt = makeDynamicCorpusResource({
+  id: "dynamic-prompt",
+  name: "draft.prompt.md",
+  capabilityType: "usage-prompt",
+  toolType: "project-local",
+  projectLabel: "Project Alpha",
+  scanSourceId: "source-alpha",
+  scanSourceName: "alpha-workspace"
+});
 const legacySnapshotSkill = {
   ...dynamicSkill,
   id: "legacy-skill",
@@ -359,4 +370,202 @@ assert.equal(dynamicCounts.legacy, 0);
 assert.deepEqual(getModuleResourcesForDataSource("skills", dynamicDataSource, [dynamicSkill, dynamicScript], [legacySnapshotSkill]), [dynamicSkill]);
 assert.deepEqual(getModuleResourcesForDataSource("legacy", dynamicDataSource, [dynamicSkill], [legacySnapshotSkill, legacySnapshotPrompt]), [legacySnapshotSkill, legacySnapshotPrompt]);
 
+const promptCounts = getViewCountsForDataSource(dynamicDataSource, [dynamicPrompt], [legacySnapshotSkill, legacySnapshotPrompt]);
+assert.equal(promptCounts.dashboard, 1);
+assert.equal(promptCounts.legacy, 0, "dynamic prompt metadata must not appear as Legacy count");
+assert.equal(getResourceDisplay(dynamicPrompt).uiGroup, "dashboard", "dynamic prompt metadata must not be labeled as Legacy UI data");
+
+const legacyModeCounts = getViewCountsForDataSource(asLegacySnapshotDataSource(dynamicDataSource), [], [legacySnapshotSkill, legacySnapshotPrompt]);
+assert.equal(legacyModeCounts.dashboard, 0);
+assert.equal(legacyModeCounts.skills, 0);
+assert.equal(legacyModeCounts.legacy, 0, "navigation counts must stay dynamic-only even when viewing Legacy");
+
+const projectAlphaScope: ResourceCorpusScope = {
+  id: "project:alpha",
+  scopeKind: "project",
+  label: "Project Alpha",
+  description: "项目 scope：Project Alpha",
+  resourceCount: 3,
+  projectLabel: "Project Alpha",
+  scanSourceId: null,
+  rootDisplayPath: "~/alpha-workspace",
+  profileId: "project-root",
+  enabled: null
+};
+const sourceAlphaScope: ResourceCorpusScope = {
+  id: "source:alpha",
+  scopeKind: "source",
+  label: "alpha-workspace",
+  description: "~/alpha-workspace",
+  resourceCount: 3,
+  projectLabel: "Project Alpha",
+  scanSourceId: "source-alpha",
+  rootDisplayPath: "~/alpha-workspace",
+  profileId: "project-root",
+  enabled: true
+};
+const projectBetaScope: ResourceCorpusScope = {
+  id: "project:beta",
+  scopeKind: "project",
+  label: "Project Beta",
+  description: "项目 scope：Project Beta",
+  resourceCount: 4,
+  projectLabel: "Project Beta",
+  scanSourceId: null,
+  rootDisplayPath: "~/beta-tooling",
+  profileId: "ai-toolchain",
+  enabled: null
+};
+const sourceBetaScope: ResourceCorpusScope = {
+  id: "source:beta",
+  scopeKind: "source",
+  label: "beta-tooling",
+  description: "~/beta-tooling",
+  resourceCount: 4,
+  projectLabel: "Project Beta",
+  scanSourceId: "source-beta",
+  rootDisplayPath: "~/beta-tooling",
+  profileId: "ai-toolchain",
+  enabled: true
+};
+const twoProjectSummary: ResourceCorpusSummary = {
+  ...fallbackResourceCorpusSummary,
+  sourceCount: 2,
+  enabledSourceCount: 2,
+  projectScopeCount: 2,
+  resourceCount: 7,
+  locationCount: 7,
+  countsByKind: [
+    { resourceKind: "skill", count: 1 },
+    { resourceKind: "prompt", count: 1 },
+    { resourceKind: "script", count: 1 },
+    { resourceKind: "mcp-config", count: 1 },
+    { resourceKind: "policy-governance", count: 1 },
+    { resourceKind: "validator", count: 1 },
+    { resourceKind: "report-doc", count: 1 }
+  ],
+  countsByScope: [
+    { scopeId: "global", scopeKind: "global", label: "全局", count: 7 },
+    { scopeId: projectAlphaScope.id, scopeKind: "project", label: projectAlphaScope.label, count: 3 },
+    { scopeId: projectBetaScope.id, scopeKind: "project", label: projectBetaScope.label, count: 4 },
+    { scopeId: sourceAlphaScope.id, scopeKind: "source", label: sourceAlphaScope.label, count: 3 },
+    { scopeId: sourceBetaScope.id, scopeKind: "source", label: sourceBetaScope.label, count: 4 }
+  ]
+};
+const projectAlphaResources = [
+  makeDynamicCorpusResource({ id: "alpha-skill", name: "writer/SKILL.md", capabilityType: "skill", toolType: "project-local", projectLabel: "Project Alpha", scanSourceId: "source-alpha", scanSourceName: "alpha-workspace" }),
+  makeDynamicCorpusResource({ id: "alpha-script", name: "scan-helper.mjs", capabilityType: "script", toolType: "script", projectLabel: "Project Alpha", scanSourceId: "source-alpha", scanSourceName: "alpha-workspace" }),
+  dynamicPrompt
+];
+const projectBetaResources = [
+  makeDynamicCorpusResource({ id: "beta-mcp", name: "servers.json", capabilityType: "mcp-client", toolType: "mcp", projectLabel: "Project Beta", scanSourceId: "source-beta", scanSourceName: "beta-tooling" }),
+  makeDynamicCorpusResource({ id: "beta-policy", name: "local-policy.md", capabilityType: "policy", toolType: "aios-root", projectLabel: "Project Beta", scanSourceId: "source-beta", scanSourceName: "beta-tooling" }),
+  makeDynamicCorpusResource({ id: "beta-validator", name: "validate-basic.mjs", capabilityType: "validator", toolType: "validator", projectLabel: "Project Beta", scanSourceId: "source-beta", scanSourceName: "beta-tooling" }),
+  makeDynamicCorpusResource({ id: "beta-report", name: "phase-2a.md", capabilityType: "report", toolType: "report", projectLabel: "Project Beta", scanSourceId: "source-beta", scanSourceName: "beta-tooling" })
+];
+const twoProjectResources = [...projectAlphaResources, ...projectBetaResources];
+const twoProjectDataSource = buildResourceDataSourceState(twoProjectSummary, 2);
+const twoProjectTabs = buildCorpusScopeTabs([{ ...globalCorpusScope, resourceCount: 7 }, projectAlphaScope, projectBetaScope, sourceAlphaScope, sourceBetaScope], twoProjectSummary);
+assert.deepEqual(
+  twoProjectTabs.map((tab) => `${tab.scope.scopeKind}:${tab.label}:${tab.count}`),
+  ["global:全局:7", "project:Project Alpha:3", "project:Project Beta:4", "source:alpha-workspace:3", "source:beta-tooling:4"]
+);
+assert.deepEqual(scopeToResourceQuery(projectBetaScope, 25), {
+  scopeKind: "project",
+  scopeId: "project:beta",
+  projectLabel: "Project Beta",
+  scanSourceId: null,
+  limit: 25,
+  offset: 0
+});
+assert.deepEqual(scopeToResourceQuery(sourceAlphaScope, 25), {
+  scopeKind: "source",
+  scopeId: "source:alpha",
+  projectLabel: "Project Alpha",
+  scanSourceId: "source-alpha",
+  limit: 25,
+  offset: 0
+});
+
+const twoProjectGlobalCounts = getViewCountsForDataSource(twoProjectDataSource, twoProjectResources, [legacySnapshotSkill, legacySnapshotPrompt]);
+assert.equal(twoProjectGlobalCounts.dashboard, 7);
+assert.equal(twoProjectGlobalCounts.skills, 1);
+assert.equal(twoProjectGlobalCounts.mcp, 1);
+assert.equal(twoProjectGlobalCounts.scripts, 1);
+assert.equal(twoProjectGlobalCounts.reports, 1);
+assert.equal(twoProjectGlobalCounts["project-packs"], 0);
+assert.equal(twoProjectGlobalCounts.policies, 1);
+assert.equal(twoProjectGlobalCounts.validators, 1);
+assert.equal(twoProjectGlobalCounts.legacy, 0);
+
+const alphaCounts = getViewCountsForDataSource(twoProjectDataSource, projectAlphaResources, [legacySnapshotSkill, legacySnapshotPrompt]);
+assert.equal(alphaCounts.dashboard, 3);
+assert.equal(alphaCounts.skills, 1);
+assert.equal(alphaCounts.scripts, 1);
+assert.equal(alphaCounts.mcp, 0);
+assert.equal(alphaCounts.policies, 0);
+assert.equal(alphaCounts.validators, 0);
+assert.equal(alphaCounts.legacy, 0);
+assert.deepEqual(getModuleResourcesForDataSource("skills", twoProjectDataSource, projectAlphaResources, [legacySnapshotSkill]), [projectAlphaResources[0]]);
+assert.deepEqual(getModuleResourcesForDataSource("mcp", twoProjectDataSource, projectAlphaResources, [legacySnapshotSkill]), []);
+
+const betaCounts = getViewCountsForDataSource(twoProjectDataSource, projectBetaResources, [legacySnapshotSkill, legacySnapshotPrompt]);
+assert.equal(betaCounts.dashboard, 4);
+assert.equal(betaCounts.skills, 0);
+assert.equal(betaCounts.mcp, 1);
+assert.equal(betaCounts.scripts, 0);
+assert.equal(betaCounts.reports, 1);
+assert.equal(betaCounts.policies, 1);
+assert.equal(betaCounts.validators, 1);
+assert.equal(betaCounts.legacy, 0);
+assert.deepEqual(getModuleResourcesForDataSource("mcp", twoProjectDataSource, projectBetaResources, [legacySnapshotSkill]), [projectBetaResources[0]]);
+assert.deepEqual(getModuleResourcesForDataSource("skills", twoProjectDataSource, projectBetaResources, [legacySnapshotSkill]), []);
+
 console.log("resourceCorpus client tests passed");
+
+function makeDynamicCorpusResource(input: {
+  id: string;
+  name: string;
+  capabilityType: AiosResource["capabilityType"];
+  toolType: AiosResource["toolType"];
+  projectLabel: string;
+  scanSourceId: string;
+  scanSourceName: string;
+}): AiosResource {
+  return {
+    id: input.id,
+    name: input.name,
+    toolType: input.toolType,
+    capabilityType: input.capabilityType,
+    status: "available",
+    risk: "low",
+    paths: [input.name],
+    path: input.name,
+    description: `${input.name} dynamic metadata`,
+    safetyProfile: {
+      readOnly: true,
+      writesGlobalState: false,
+      secretExposureRisk: "low",
+      executionRisk: input.capabilityType === "script" || input.capabilityType === "validator" ? "medium" : "low",
+      notes: ["metadata-only persistence"]
+    },
+    tokenPressure: {
+      estimatedTokens: 0,
+      level: "low",
+      reason: "fixture"
+    },
+    prompts: [],
+    metadata: {
+      corpusSource: "dynamic-resource-corpus",
+      corpusResourceId: input.id,
+      projectLabel: input.projectLabel,
+      scanSourceId: input.scanSourceId,
+      scanSourceName: input.scanSourceName,
+      scanProfileId: "project-root",
+      scanJobId: `job-${input.scanSourceId}`,
+      scanJobStatus: "completed",
+      rootDisplayPath: `~/${input.scanSourceName}`,
+      relativePath: input.name
+    }
+  };
+}

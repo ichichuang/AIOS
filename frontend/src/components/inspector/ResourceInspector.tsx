@@ -127,7 +127,7 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
       )}
 
       <Box className="inspector-technical-stack" aria-label="技术细节">
-        <AiosInspectorSection title="来源与路径">
+        <AiosInspectorSection title="来源与路径" defaultExpanded>
           <AiosTechnicalDetails rows={sourceRows}>
             <Box className="inspector-path-list">
               <Typography variant="body2">路径详情</Typography>
