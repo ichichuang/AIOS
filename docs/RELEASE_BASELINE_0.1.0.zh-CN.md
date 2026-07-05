@@ -2,7 +2,9 @@
 
 ## 基线摘要
 
-本文件记录 AIOS Desktop Phase 4C.1 同步门的本地发行基线。当前产品状态是本机 unsigned AIOS Desktop 0.1.0：Tauri v2 桌面壳承载现有 React/Vite 前端，扫描只能由用户在扫描管理中显式启动，扫描结果以 metadata-only 形式写入 Rust-owned SQLite 本地资源库，主资源模块优先读取动态资源语料，未扫描时保留 repo-local snapshot fallback。
+本文件记录 AIOS Desktop Phase 4C.1 同步门的本地发行基线。当前产品状态是本机 unsigned AIOS Desktop 0.1.0：Tauri v2 桌面壳承载现有 React/Vite 前端，扫描只能由用户在扫描管理中显式启动，扫描结果以 metadata-only 形式写入 Rust-owned SQLite 本地资源库，主资源模块以 dynamic-corpus 为产品数据源；未扫描时默认显示空资源库和 0 计数，repo-local snapshot 只作为 Legacy 示例/兼容数据显式查看。
+
+Phase 4C.2 修正说明：AIOS Desktop 不再把内置 snapshot 作为空动态语料的普通 fallback。Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators、Inspector、导航计数、顶部计数、全局 scope 和 project/source scope 均只使用 Rust-owned SQLite 动态资源库。Legacy snapshot 必须明确标注为“示例 / Legacy snapshot / 不代表当前电脑扫描结果”，且不自动写入 SQLite、不参与默认统计。
 
 本阶段是同步和发行基线文档步骤，不改变 scanner 行为、不扩大扫描范围、不新增 Tauri 插件、不配置签名、公证、stapling、updater 或公开发布。
 
@@ -40,7 +42,7 @@
 - Progress and cancellation：扫描批次有当前运行时进度、终态快照和取消路径。
 - SQLite local resource store：扫描来源、任务摘要、资源元数据、scope 和 app setting 写入 Rust-owned SQLite。
 - Multi-directory scan management：可管理多个来源、启用状态、项目标签、来源删除、顺序批次扫描和本地库清空。
-- Dynamic resource corpus and project/source scopes：Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators、Legacy 和 Inspector 优先读取动态语料，支持 global/project/source/unclassified scope。
+- Dynamic resource corpus and project/source scopes：Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators 和 Inspector 读取动态语料，支持 global/project/source/unclassified scope；Legacy snapshot 与动态语料隔离。
 - Intelligent discovery：用户点击开始后，从安全的常见工作区候选创建来源；默认不扫描系统根、home 根、`/Users`、`/Volumes` 或磁盘根。
 - Advanced discovery：高级全盘发现必须显式确认，前端和 Rust command path 都保留确认门控。
 - Onboarding, privacy controls, reset behavior：首次/空库引导说明尚未扫描；隐私与数据控制展示本地库状态、metadata-only 边界和清空说明；reset 只删除 AIOS 数据库记录。
@@ -121,7 +123,7 @@ Bounded app smoke 结果：
 - 初始页面 title 为 `AIOS Desktop`，显示“无自动扫描”“尚未扫描任何目录”和 scan management count `0`。
 - 扫描管理可打开，显示 `0 项可见`、无扫描来源、无持久资源、`添加目录` / `扫描所选` 禁用、metadata-only/no-content/no-execution 文案可见。
 - Advanced Full-Disk Discovery 模式显示显式 checkbox；未勾选时 `开始发现` 禁用，发现统计保持 0。
-- Skills 模块可加载，仍走当前 corpus/fallback 展示路径。
+- Skills 模块可加载，空动态语料时保持 0 计数；Legacy 示例数据不参与默认技能库展示。
 - 隐私与数据控制显示“仅保存元数据”“不保存文件内容”“不执行脚本或 MCP”“清空只删除 AIOS 应用记录，不会删除用户文件”。
 - Playwright snapshots 未出现文件内容、raw secrets、env/auth/session/provider token values。
 - 验证结束后 `pgrep -fl aios-desktop` 无输出，端口 `4173` 无监听，Playwright browser PID 已退出。

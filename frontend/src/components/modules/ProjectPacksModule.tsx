@@ -4,7 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup, type ResourceGroupData } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { moduleAriaLabel } from "./moduleUtils";
+import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -33,7 +33,7 @@ export function ProjectPacksModule({ resourceCorpus, resources, selectedId, onSe
         </>
       }
     >
-      {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="project-pack" onSelect={onSelect} />)}
+      {groups.length === 0 ? <ModuleEmptyState {...moduleEmptyStateCopy("project-packs")} /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="project-pack" onSelect={onSelect} />)}
     </AiosModuleFrame>
   );
 }

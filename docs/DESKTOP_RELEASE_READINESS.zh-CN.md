@@ -84,7 +84,7 @@ Bounded native smoke 结果：
 - Dashboard 首次/空库引导和无自动扫描边界可见。
 - 扫描管理可打开，显示 `0 项可见`，未出现自动扫描或运行中批次。
 - Advanced Full-Disk Discovery 仍显示显式确认边界和 `需要确认`。
-- Skills 动态 / fallback 模块可切换加载。
+- Skills 空动态语料保持 0 计数；Legacy 示例数据仅在旧入口查看，不参与默认技能库计数。
 - 未运行真实 root、home root、`/Users`、`/Volumes`、系统盘或 full-disk 扫描。
 - 未发现文件内容泄露；UI 仍只显示 resource metadata 和安全说明。
 - 进程输出仅出现既有 macOS IMK wakeup warning，未出现 Rust panic 或前端 error。

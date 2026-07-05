@@ -95,6 +95,7 @@ function getUsageChips(resource: AiosResource, server: McpServerRecord | null, v
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
   if (isDynamicCorpusResource(resource)) return ["动态资源库", getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "未归类"];
+  if (isLegacySnapshotResource(resource)) return ["Legacy 示例数据", "非本机扫描"];
   if (variant === "mcp" && server) return [server.transport, ...getMcpRiskLabels(server)];
   if (variant === "skill") return [getSkillRuntimeLabel(resource)];
   if (variant === "script") return [getScriptKind(resource), "只读清单"];
@@ -107,6 +108,7 @@ function getExtraChips(resource: AiosResource, server: McpServerRecord | null, v
 }
 
 function getBoundaryChip(resource: AiosResource, variant: ResourceCardVariant): AiosUsageChip | null {
+  if (isLegacySnapshotResource(resource)) return { label: "示例", className: "status-chip status-warn" };
   if (resource.safetyProfile.writesGlobalState) return { label: "写入需复核", className: "status-chip status-warn", variant: "filled" };
   if (variant === "legacy" || resource.toolType === "legacy" || resource.capabilityType === "usage-prompt") return { label: "兼容", className: "status-chip status-warn" };
   if (variant === "mcp" || resource.capabilityType === "mcp-server" || resource.capabilityType === "mcp-client") return { label: "仅元数据", className: "status-chip status-disabled" };
@@ -127,6 +129,7 @@ function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord
   if (isDynamicCorpusResource(resource)) {
     return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
   }
+  if (isLegacySnapshotResource(resource)) return "Legacy 示例数据";
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
   if (variant === "report") return "本地报告";
   if (variant === "project-pack") return getProjectPackArea(resource);
@@ -142,6 +145,7 @@ function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord
 
 function getBoundaryLabel(resource: AiosResource, variant: ResourceCardVariant): string {
   if (isDynamicCorpusResource(resource)) return "SQLite 元数据";
+  if (isLegacySnapshotResource(resource)) return "示例快照，只读";
   if (resource.safetyProfile.writesGlobalState) return "写入需复核";
   if (variant === "mcp") return "只读元数据";
   if (variant === "legacy" || resource.toolType === "legacy") return "兼容只读";
@@ -156,6 +160,7 @@ function getUsageTitle(server: McpServerRecord | null, variant: ResourceCardVari
 
 function getUsagePurpose(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): string {
   if (isDynamicCorpusResource(resource)) return `${display.zhDescription} 来源：${getMetadataString(resource, "scanSourceName") ?? "动态资源库"}；详情只使用已持久化元数据。`;
+  if (isLegacySnapshotResource(resource)) return `${display.zhDescription} 这是内置示例/兼容快照，不代表当前电脑扫描结果。`;
   if (variant === "mcp" && server) return `MCP ${server.transport} 服务；${getMcpRiskLabels(server)[0]}，仅查看用途与风险摘要，不启动或连接。`;
   if (variant === "script") return `本地只读工具；${display.zhDescription} 执行需要用户显式命令。`;
   if (variant === "report") return `${formatDate(resource.updatedAt)} · ${display.zhDescription}`;
@@ -205,6 +210,10 @@ function getMcpServer(resource: AiosResource): McpServerRecord | null {
 
 function isDynamicCorpusResource(resource: AiosResource): boolean {
   return getMetadataString(resource, "corpusSource") === "dynamic-resource-corpus";
+}
+
+function isLegacySnapshotResource(resource: AiosResource): boolean {
+  return getMetadataString(resource, "corpusSource") === "legacy-snapshot" || resource.metadata?.legacySnapshot === true;
 }
 
 function getMetadataString(resource: AiosResource, key: string): string | null {

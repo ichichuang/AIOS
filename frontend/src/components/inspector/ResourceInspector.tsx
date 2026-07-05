@@ -207,16 +207,31 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
   }
 
   const moduleName = VIEW_LABELS[activeView];
+  if (activeView === "legacy") {
+    return {
+      title: "正在查看 Legacy 示例数据",
+      summary: "这是内置示例/兼容快照，不代表当前电脑扫描结果。",
+      hints: [`Legacy 示例上下文中有 ${visibleCount} 项可见资源。`, "选择资源可查看示例 provenance。", "这些数据不会写入 SQLite 动态资源库，也不参与默认模块计数。"],
+      badge: "Legacy 示例"
+    };
+  }
+  if (visibleCount === 0) {
+    return {
+      title: `${moduleName} 为空`,
+      summary: "尚未扫描任何目录；当前模块只读取 SQLite 动态资源库。",
+      hints: ["请到扫描管理添加项目目录或运行智能发现。", "Legacy 示例数据只在旧入口查看。", "此面板不会触发扫描、脚本执行或 MCP 启动。"],
+      badge: "空资源库"
+    };
+  }
   const promptCopyHint =
-    activeView === "skills" || activeView === "legacy"
+    activeView === "skills"
       ? "选中含提示词的资源后，可复制 Codex / Claude 调用。"
       : "此模块默认不提供提示词复制，仅展示只读详情。";
-  const legacyHint = activeView === "legacy" ? "旧入口只用于兼容识别，不恢复旧全局基线。" : "详情面板不会触发全盘扫描或后台执行。";
 
   return {
     title: `${moduleName} 使用指南`,
     summary: zhCN.moduleSummaries[activeView],
-    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、来源、路径和安全边界。", promptCopyHint, legacyHint],
+    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、来源、路径和安全边界。", promptCopyHint, "详情面板不会触发全盘扫描或后台执行。"],
     badge: moduleName
   };
 }
@@ -231,6 +246,15 @@ function getPrimaryMetaRows(resource: AiosResource, display: ReturnType<typeof g
 }
 
 function getBoundaryChips(resource: AiosResource): Array<{ label: string; className?: string; variant?: "filled" | "outlined" }> {
+  if (isLegacySnapshotResource(resource)) {
+    return [
+      { label: "Legacy 示例", className: "status-chip status-warn", variant: "filled" },
+      { label: "非本机扫描" },
+      { label: "仅元数据" },
+      { label: "UI 不执行" },
+      { label: "不写入 SQLite", className: "status-chip status-disabled" }
+    ];
+  }
   return [
     { label: resource.safetyProfile.readOnly ? "本地只读" : "只读需复核", className: resource.safetyProfile.readOnly ? "status-chip status-ok" : "status-chip status-warn", variant: "filled" },
     { label: "仅元数据" },
@@ -248,6 +272,16 @@ function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTech
       chipLabel: "动态资源库",
       chipClassName: "status-chip status-ok",
       tone: "info"
+    };
+  }
+
+  if (isLegacySnapshotResource(resource)) {
+    return {
+      title: "Legacy 示例数据",
+      body: "这是内置示例/兼容快照，不代表当前电脑扫描结果，不写入动态资源库。",
+      chipLabel: "Legacy 示例",
+      chipClassName: "status-chip status-warn",
+      tone: "warn"
     };
   }
 
@@ -288,6 +322,7 @@ function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentity
   if (isDynamicCorpusResource(resource)) {
     return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
   }
+  if (isLegacySnapshotResource(resource)) return "Legacy 示例数据 / 非当前电脑扫描";
 
   const server = getMcpServer(resource);
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
@@ -307,6 +342,7 @@ function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentity
 }
 
 function getBoundaryLabel(resource: AiosResource): string {
+  if (isLegacySnapshotResource(resource)) return "示例快照，只读";
   if (resource.safetyProfile.readOnly && !resource.safetyProfile.writesGlobalState) return "本地只读";
   if (resource.safetyProfile.writesGlobalState) return "写入风险需复核";
   return "只读状态需复核";
@@ -492,6 +528,15 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
     const findings = resource.metadata?.corpusFindings;
     if (Array.isArray(findings)) rows.push({ label: "安全发现", value: findings.length });
   }
+  if (isLegacySnapshotResource(resource)) {
+    rows.push(
+      { label: "语料来源", value: "Legacy 示例数据" },
+      { label: "当前电脑扫描结果", value: "否" },
+      { label: "动态资源库", value: "不计入" }
+    );
+    const snapshotGeneratedAt = getMetadataString(resource, "snapshotGeneratedAt");
+    if (snapshotGeneratedAt) rows.push({ label: "示例快照时间", value: formatDate(snapshotGeneratedAt) });
+  }
 
   const server = getMcpServer(resource);
   if (server) {
@@ -564,6 +609,10 @@ function hasDiscoveryMetadata(resource: AiosResource): boolean {
 
 function isDynamicCorpusResource(resource: AiosResource): boolean {
   return getMetadataString(resource, "corpusSource") === "dynamic-resource-corpus";
+}
+
+function isLegacySnapshotResource(resource: AiosResource): boolean {
+  return getMetadataString(resource, "corpusSource") === "legacy-snapshot" || resource.metadata?.legacySnapshot === true;
 }
 
 function formatDate(value: string): string {

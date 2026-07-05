@@ -4,7 +4,7 @@ import { shortHash, zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageRow } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { moduleAriaLabel } from "./moduleUtils";
+import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -45,7 +45,7 @@ export function PoliciesModule({ baseline, resourceCorpus, resources, selectedId
           </Box>
         </AiosSection>
 
-        {resources.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="policy" onSelect={onSelect} />)}
+        {resources.length === 0 ? <ModuleEmptyState {...moduleEmptyStateCopy("policies")} /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="policy" onSelect={onSelect} />)}
     </AiosModuleFrame>
   );
 }

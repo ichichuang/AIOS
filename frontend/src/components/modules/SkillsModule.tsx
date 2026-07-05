@@ -11,7 +11,7 @@ import { buildSkillIdentityRows, buildSkillSourceRows, filterSkillIdentityRows, 
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
 import { AiosModuleFrame, AiosPillRail } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { moduleAriaLabel } from "./moduleUtils";
+import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -184,6 +184,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     setAnchorEl(null);
   };
   const showOptions = Boolean(anchorEl);
+  const emptyCopy = moduleEmptyStateCopy("skills");
 
   return (
     <AiosModuleFrame
@@ -225,7 +226,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       }
     >
         {groups.length === 0 ? (
-          <ModuleEmptyState />
+          <ModuleEmptyState {...emptyCopy} />
         ) : (
           <>
             <Popover
@@ -316,7 +317,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
             )}
             <Box className="compact-skill-list-shell">
               {visibleRows.length === 0 ? (
-                <ModuleEmptyState />
+                <ModuleEmptyState {...emptyCopy} />
               ) : (
                 <List
                   className="compact-skill-window"

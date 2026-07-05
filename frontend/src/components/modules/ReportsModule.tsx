@@ -4,7 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { moduleAriaLabel, sortByUpdatedAt } from "./moduleUtils";
+import { moduleAriaLabel, moduleEmptyStateCopy, sortByUpdatedAt } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -24,7 +24,7 @@ export function ReportsModule({ resourceCorpus, resources, selectedId, onSelect 
         </>
       }
     >
-      {resources.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="report" timeline onSelect={onSelect} />)}
+      {resources.length === 0 ? <ModuleEmptyState {...moduleEmptyStateCopy("reports")} /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="report" timeline onSelect={onSelect} />)}
     </AiosModuleFrame>
   );
 }

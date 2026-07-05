@@ -21,7 +21,7 @@ interface AiosResourceScopeBarProps {
 export function AiosResourceScopeBar({ activeScopeId, loading, mode, scopes, summary, error, onScopeChange }: AiosResourceScopeBarProps) {
   const tabs = buildCorpusScopeTabs(scopes, summary);
   const sourceLabel = getCorpusSourceLabel(mode);
-  const helper = error || (mode === "legacy" ? getCorpusEmptyMessage(mode) : "按全局、项目或扫描来源查看动态资源库。");
+  const helper = error || (mode === "empty" ? getCorpusEmptyMessage(mode) : "全局、项目和来源 scope 只来自 SQLite 动态资源库。");
 
   return (
     <Box className="resource-scope-bar" aria-label="资源库 scope 过滤">
@@ -38,7 +38,7 @@ export function AiosResourceScopeBar({ activeScopeId, loading, mode, scopes, sum
             <ButtonBase
               aria-selected={active}
               className={["resource-scope-tab", active ? "active" : ""].filter(Boolean).join(" ")}
-              disabled={mode === "legacy" && tab.scope.scopeKind !== "global"}
+              disabled={mode !== "dynamic-corpus" && tab.scope.scopeKind !== "global"}
               key={tab.id}
               role="tab"
               title={tab.description}

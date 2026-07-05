@@ -2,7 +2,7 @@ import { Box } from "@mui/material";
 import type { ReactNode } from "react";
 import { AiosInventory, AiosResource } from "../../types/inventory";
 import type { ResourceView } from "../../lib/filtering";
-import type { ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary } from "../../lib/resourceCorpus";
+import { getCorpusSourceLabel, type ResourceCorpusScope, type ResourceCorpusSourceMode, type ResourceCorpusSummary } from "../../lib/resourceCorpus";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { AiosInspectorSheet } from "./AiosInspectorSheet";
@@ -25,6 +25,7 @@ interface AiosConsoleShellProps {
   selectedSkillIdentity: SkillIdentityRow | null;
   selectedSkillCapability: SkillCapabilityClassification | null;
   shownCount: number;
+  inspectorVisibleCount?: number;
   viewCounts: Record<ResourceView, number>;
   onClearSelection: () => void;
   onQueryChange: (query: string) => void;
@@ -47,6 +48,7 @@ export function AiosConsoleShell({
   selectedSkillIdentity,
   selectedSkillCapability,
   shownCount,
+  inspectorVisibleCount,
   viewCounts,
   onClearSelection,
   onQueryChange,
@@ -62,6 +64,7 @@ export function AiosConsoleShell({
           inventory={inventory}
           query={query}
           shownCount={shownCount}
+          sourceLabel={getCorpusSourceLabel(corpusMode)}
           onQueryChange={onQueryChange}
           onViewChange={onViewChange}
         />
@@ -81,7 +84,7 @@ export function AiosConsoleShell({
         resource={selectedResource}
         skillIdentity={selectedSkillIdentity}
         skillCapability={selectedSkillCapability}
-        visibleCount={shownCount}
+        visibleCount={inspectorVisibleCount ?? shownCount}
         onMobileClose={onClearSelection}
       />
     </Box>

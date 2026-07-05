@@ -4,7 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { makeGroups, moduleAriaLabel } from "./moduleUtils";
+import { makeGroups, moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -38,7 +38,7 @@ export function ScriptsModule({ resourceCorpus, resources, selectedId, onSelect 
         </>
       }
     >
-      {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="script" onSelect={onSelect} />)}
+      {groups.length === 0 ? <ModuleEmptyState {...moduleEmptyStateCopy("scripts")} /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="script" onSelect={onSelect} />)}
     </AiosModuleFrame>
   );
 }

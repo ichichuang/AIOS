@@ -4,7 +4,16 @@ import type { AiosResource, CapabilityType, ResourceStatus, RiskLevel, ToolType 
 import type { PersistedScanJob, ResourceKindCount } from "./resourceStore";
 
 export type ResourceCorpusScopeKind = "global" | "project" | "source" | "unclassified";
-export type ResourceCorpusSourceMode = "dynamic" | "legacy";
+export type ResourceCorpusSourceMode = "dynamic-corpus" | "legacy-snapshot" | "empty";
+
+export interface ResourceDataSourceState {
+  activeSource: ResourceCorpusSourceMode;
+  dynamicResourceCount: number;
+  legacySnapshotCount: number;
+  hasDynamicCorpus: boolean;
+  hasLegacySnapshot: boolean;
+  displayLabel: string;
+}
 
 export interface ResourceCorpusScope {
   id: string;
@@ -202,15 +211,42 @@ export function shouldShowFirstRunOnboarding(summary: ResourceCorpusSummary, dis
 }
 
 export function getCorpusSourceMode(summary: ResourceCorpusSummary): ResourceCorpusSourceMode {
-  return hasDynamicCorpus(summary) ? "dynamic" : "legacy";
+  return hasDynamicCorpus(summary) ? "dynamic-corpus" : "empty";
 }
 
 export function getCorpusSourceLabel(mode: ResourceCorpusSourceMode): string {
-  return mode === "dynamic" ? "动态资源库" : "示例/Legacy snapshot";
+  if (mode === "dynamic-corpus") return "动态资源库";
+  if (mode === "legacy-snapshot") return "Legacy 示例数据";
+  return "空资源库";
 }
 
 export function getCorpusEmptyMessage(mode: ResourceCorpusSourceMode): string {
-  return mode === "dynamic" ? "当前 scope 下没有匹配的动态资源。" : "尚未扫描任何目录；请到扫描管理添加目录并手动开始扫描.";
+  if (mode === "dynamic-corpus") return "当前 scope 下没有匹配的动态资源。";
+  if (mode === "legacy-snapshot") return "这是内置示例/兼容快照，不代表当前电脑扫描结果。";
+  return "尚未扫描任何目录；请到扫描管理添加项目目录或运行智能发现。";
+}
+
+export function buildResourceDataSourceState(summary: ResourceCorpusSummary, legacySnapshotCount: number, activeSource: ResourceCorpusSourceMode = getCorpusSourceMode(summary)): ResourceDataSourceState {
+  const dynamicResourceCount = Math.max(0, summary.resourceCount);
+  const safeLegacySnapshotCount = Math.max(0, legacySnapshotCount);
+  const hasDynamic = dynamicResourceCount > 0;
+  const safeActiveSource = activeSource === "legacy-snapshot" ? activeSource : hasDynamic ? "dynamic-corpus" : "empty";
+  return {
+    activeSource: safeActiveSource,
+    dynamicResourceCount,
+    legacySnapshotCount: safeLegacySnapshotCount,
+    hasDynamicCorpus: hasDynamic,
+    hasLegacySnapshot: safeLegacySnapshotCount > 0,
+    displayLabel: getCorpusSourceLabel(safeActiveSource)
+  };
+}
+
+export function asLegacySnapshotDataSource(state: ResourceDataSourceState): ResourceDataSourceState {
+  return {
+    ...state,
+    activeSource: "legacy-snapshot",
+    displayLabel: getCorpusSourceLabel("legacy-snapshot")
+  };
 }
 
 export function buildCorpusScopeTabs(scopes: ResourceCorpusScope[], summary: ResourceCorpusSummary): CorpusScopeTabItem[] {
@@ -240,6 +276,23 @@ export function scopeToResourceQuery(scope: ResourceCorpusScope, limit = 300, of
 
 export function mapCorpusResourcesToAiosResources(resources: ResourceCorpusResource[]): AiosResource[] {
   return resources.map((resource) => mapCorpusResourceToAiosResource(resource));
+}
+
+export function markLegacySnapshotResource(resource: AiosResource, snapshotGeneratedAt?: string): AiosResource {
+  const sourceKind = typeof resource.metadata?.sourceKind === "string" ? resource.metadata.sourceKind : null;
+  const sourceKinds = Array.isArray(resource.metadata?.sourceKinds) ? resource.metadata.sourceKinds.filter((value): value is string => typeof value === "string") : [];
+  return {
+    ...resource,
+    id: `legacy-snapshot:${resource.id}`,
+    metadata: {
+      ...resource.metadata,
+      sourceKind: sourceKind ?? "legacy-snapshot",
+      sourceKinds: uniqueStrings(["legacy-snapshot", ...sourceKinds]),
+      corpusSource: "legacy-snapshot",
+      legacySnapshot: true,
+      snapshotGeneratedAt
+    }
+  };
 }
 
 export function mapCorpusResourceToAiosResource(resource: ResourceCorpusResource): AiosResource {
@@ -341,6 +394,10 @@ export function mergeResourceWithCorpusDetail(resource: AiosResource, detail: Re
 
 export function isDynamicCorpusResource(resource: AiosResource | null): boolean {
   return resource?.metadata?.corpusSource === "dynamic-resource-corpus" && typeof resource.metadata?.corpusResourceId === "string";
+}
+
+export function isLegacySnapshotResource(resource: AiosResource | null): boolean {
+  return resource?.metadata?.corpusSource === "legacy-snapshot" || resource?.metadata?.legacySnapshot === true;
 }
 
 export function getDynamicCorpusResourceId(resource: AiosResource): string | null {

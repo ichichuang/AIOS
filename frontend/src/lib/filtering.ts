@@ -2,6 +2,7 @@ import type { AiosResource, CapabilityType } from "../types/inventory";
 import { zhCN } from "../i18n/zh-CN";
 import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
 import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
+import type { ResourceDataSourceState } from "./resourceCorpus";
 
 export type ResourceView =
   | "dashboard"
@@ -110,4 +111,26 @@ export function buildResourcesByView(resources: AiosResource[]): Record<Resource
 
 export function countResourcesByView(resourcesByView: Record<ResourceView, AiosResource[]>): Record<ResourceView, number> {
   return Object.fromEntries(Object.entries(resourcesByView).map(([view, resources]) => [view, resources.length])) as Record<ResourceView, number>;
+}
+
+export function getDefaultResourcesForDataSource(state: ResourceDataSourceState, dynamicResources: AiosResource[]): AiosResource[] {
+  return state.activeSource === "dynamic-corpus" ? dynamicResources : [];
+}
+
+export function getModuleResourcesForDataSource(
+  view: ResourceView,
+  state: ResourceDataSourceState,
+  dynamicResources: AiosResource[],
+  legacySnapshotResources: AiosResource[]
+): AiosResource[] {
+  if (view === "legacy") return legacySnapshotResources;
+  return buildResourcesByView(getDefaultResourcesForDataSource(state, dynamicResources))[view];
+}
+
+export function getViewCountsForDataSource(
+  state: ResourceDataSourceState,
+  dynamicResources: AiosResource[],
+  _legacySnapshotResources: AiosResource[] = []
+): Record<ResourceView, number> {
+  return countResourcesByView(buildResourcesByView(getDefaultResourcesForDataSource(state, dynamicResources)));
 }

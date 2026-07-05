@@ -13,19 +13,21 @@ import { SkillsModule } from "./components/modules/SkillsModule";
 import { ValidatorsModule } from "./components/modules/ValidatorsModule";
 import type { AiosModuleProps, ResourceSelectionContext } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
-import { buildResourceDisplayMap, buildResourcesByView, countResourcesByView, filterResourceList, type ResourceView } from "./lib/filtering";
+import { buildResourceDisplayMap, filterResourceList, getDefaultResourcesForDataSource, getModuleResourcesForDataSource, getViewCountsForDataSource, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
 import { markAiosPerf } from "./lib/perf";
 import {
+  asLegacySnapshotDataSource,
+  buildResourceDataSourceState,
   fallbackResourceCorpusSummary,
   getActiveResourceCorpusSummary,
-  getCorpusSourceMode,
   getDynamicCorpusResourceId,
   getResourceDetail,
   globalCorpusScope,
   isDynamicCorpusResource,
   listResourceCorpusScopes,
   listResourcesByScope,
+  markLegacySnapshotResource,
   mapCorpusResourcesToAiosResources,
   mergeResourceWithCorpusDetail,
   scopeToResourceQuery,
@@ -89,7 +91,7 @@ export default function App() {
         setCorpusSummary(summary);
         setCorpusScopes(safeScopes);
         setCorpusError(null);
-        setActiveCorpusScope((current) => safeScopes.find((scope) => scope.id === current.id) ?? safeScopes[0] ?? globalCorpusScope);
+        setActiveCorpusScope((current) => (summary.resourceCount > 0 ? safeScopes.find((scope) => scope.id === current.id) ?? safeScopes[0] ?? globalCorpusScope : globalCorpusScope));
       })
       .catch((loadError: unknown) => {
         if (!active) return;
@@ -106,11 +108,14 @@ export default function App() {
     };
   }, [corpusRefreshToken]);
 
-  const corpusMode = getCorpusSourceMode(corpusSummary);
+  const legacySnapshotResources = useMemo(() => (inventory ? inventory.resources.map((resource) => markLegacySnapshotResource(resource, inventory.generatedAt)) : []), [inventory]);
+  const corpusDataSource = useMemo(() => buildResourceDataSourceState(corpusSummary, legacySnapshotResources.length), [corpusSummary, legacySnapshotResources.length]);
+  const legacySnapshotDataSource = useMemo(() => asLegacySnapshotDataSource(corpusDataSource), [corpusDataSource]);
+  const corpusMode = corpusDataSource.activeSource;
 
   useEffect(() => {
     let active = true;
-    if (corpusMode !== "dynamic") {
+    if (corpusMode !== "dynamic-corpus") {
       setCorpusResources([]);
       return () => {
         active = false;
@@ -138,16 +143,16 @@ export default function App() {
     };
   }, [activeCorpusScope, corpusMode, corpusRefreshToken]);
 
-  const activeResources = useMemo(() => (corpusMode === "dynamic" ? corpusResources : inventory?.resources ?? []), [corpusMode, corpusResources, inventory]);
+  const activeResources = useMemo(() => getDefaultResourcesForDataSource(corpusDataSource, corpusResources), [corpusDataSource, corpusResources]);
+  const selectableResources = useMemo(() => [...activeResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources]);
   const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
-  const displayById = useMemo(() => buildResourceDisplayMap(activeResources), [activeResources]);
+  const displayById = useMemo(() => buildResourceDisplayMap(selectableResources), [selectableResources]);
   const skillCapabilityById = useMemo(
     () => buildSkillCapabilityClassificationMap(activeResources, displayById),
     [activeResources, displayById]
   );
-  const resourcesByView = useMemo(() => buildResourcesByView(activeResources), [activeResources]);
-  const viewCounts = useMemo(() => (resourcesByView ? countResourcesByView(resourcesByView) : null), [resourcesByView]);
-  const moduleResources = useMemo(() => (resourcesByView ? resourcesByView[renderedView] : []), [renderedView, resourcesByView]);
+  const viewCounts = useMemo(() => getViewCountsForDataSource(corpusDataSource, activeResources, legacySnapshotResources), [activeResources, corpusDataSource, legacySnapshotResources]);
+  const moduleResources = useMemo(() => getModuleResourcesForDataSource(renderedView, corpusDataSource, activeResources, legacySnapshotResources), [activeResources, corpusDataSource, legacySnapshotResources, renderedView]);
   const filteredResources = useMemo(
     () => (renderedView === "skills" ? moduleResources : filterResourceList(moduleResources, deferredQuery, displayById)),
     [deferredQuery, displayById, moduleResources, renderedView]
@@ -210,10 +215,10 @@ export default function App() {
 
   useEffect(() => {
     if (!selection) return;
-    if (!activeResources.some((resource) => resource.id === selection.resource.id)) {
+    if (!selectableResources.some((resource) => resource.id === selection.resource.id)) {
       setSelection(null);
     }
-  }, [activeResources, selection]);
+  }, [selectableResources, selection]);
 
   if (error) {
     return (
@@ -237,25 +242,35 @@ export default function App() {
     );
   }
 
+  const defaultResourceCorpusState = {
+    activeScope: activeCorpusScope,
+    dataSource: corpusDataSource,
+    error: corpusError,
+    firstRunOnboardingDismissed,
+    loading: corpusLoading,
+    mode: corpusMode,
+    onSetFirstRunOnboardingDismissed: handleSetFirstRunOnboardingDismissed,
+    refresh: refreshResourceCorpus,
+    summary: corpusSummary
+  };
+  const moduleResourceCorpusState =
+    renderedView === "legacy"
+      ? {
+          ...defaultResourceCorpusState,
+          dataSource: legacySnapshotDataSource,
+          mode: "legacy-snapshot" as const
+        }
+      : defaultResourceCorpusState;
   const moduleProps: AiosModuleProps = {
     allResources: activeResources,
     baseline: inventory.baseline,
-    resourceCorpus: {
-      activeScope: activeCorpusScope,
-      error: corpusError,
-      firstRunOnboardingDismissed,
-      loading: corpusLoading,
-      mode: corpusMode,
-      onSetFirstRunOnboardingDismissed: handleSetFirstRunOnboardingDismissed,
-      refresh: refreshResourceCorpus,
-      summary: corpusSummary
-    },
+    resourceCorpus: moduleResourceCorpusState,
     displayById,
     query: deferredQuery,
     resources: filteredResources,
     selectedId,
     skillCapabilityById,
-    viewCounts: viewCounts ?? countResourcesByView(buildResourcesByView([])),
+    viewCounts,
     onClearSelection: clearSelection,
     onSelect: selectResource,
     onViewChange: handleViewChange,
@@ -276,7 +291,8 @@ export default function App() {
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
-      shownCount={filteredResources.length}
+      shownCount={renderedView === "legacy" ? 0 : filteredResources.length}
+      inspectorVisibleCount={filteredResources.length}
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}
       onQueryChange={handleQueryChange}

@@ -384,11 +384,19 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
           summary="AIOS 首次启动不会扫描这台机器。必须选择模式、阅读边界说明，并手动点击开始。"
           action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />}
         />
-        {(resourceCorpus.summary.resourceCount === 0 || persistedSources.length === 0) && (
+        {resourceCorpus.summary.resourceCount === 0 && (
           <Box className="scan-boundary-callout info">
             <SecurityRounded fontSize="small" />
             <Typography color="text.secondary" variant="body2">
-              AIOS 尚未扫描这台机器。AIOS 不会自动扫描；可以手动添加项目文件夹，或让非技术用户使用智能全机发现。高级全盘发现更慢、受权限影响，并且必须显式确认。所有扫描都是本地 metadata-only。
+              AIOS 尚未扫描任何目录或尚未产生动态资源。AIOS 不会自动扫描；可以手动添加项目文件夹，或让非技术用户使用智能全机发现。高级全盘发现更慢、受权限影响，并且必须显式确认。所有扫描都是本地 metadata-only。
+            </Typography>
+          </Box>
+        )}
+        {resourceCorpus.summary.resourceCount > 0 && (
+          <Box className="scan-boundary-callout info">
+            <StorageRounded fontSize="small" />
+            <Typography color="text.secondary" variant="body2">
+              本机已有 AIOS 本地资源库：{resourceCorpus.summary.resourceCount} 项动态资源。清空本地数据仍需用户手动触发，不会自动删除或重置。
             </Typography>
           </Box>
         )}

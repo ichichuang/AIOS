@@ -3,7 +3,7 @@ import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import type { KeyboardEvent } from "react";
-import { formatSnapshotDate, zhCN } from "../../i18n/zh-CN";
+import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import type { AiosInventory } from "../../types/inventory";
 import { consoleViews } from "./moduleConfig";
@@ -14,11 +14,12 @@ interface AiosTopCommandBarProps {
   inventory: AiosInventory;
   query: string;
   shownCount: number;
+  sourceLabel: string;
   onQueryChange: (query: string) => void;
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosTopCommandBar({ activeView, inventory, query, shownCount, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
+export function AiosTopCommandBar({ activeView, inventory, query, shownCount, sourceLabel, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
   const activeModuleLabel = VIEW_LABELS[activeView];
   const boundaryLabel = "本地只读 · 显式扫描 · 高级发现需确认";
 
@@ -72,9 +73,9 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, on
       <Box className="command-status">
         <Box className="command-meta">
           <Typography className="caption" component="p">
-            {zhCN.app.generatedAt}
+            数据来源
           </Typography>
-          <Typography component="strong">{formatSnapshotDate(inventory.generatedAt)}</Typography>
+          <Typography component="strong">{sourceLabel}</Typography>
         </Box>
         <Box className="command-meta compact">
           <Typography className="caption" component="p">

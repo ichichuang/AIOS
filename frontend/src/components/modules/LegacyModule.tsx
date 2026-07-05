@@ -4,7 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { makeGroups, moduleAriaLabel } from "./moduleUtils";
+import { makeGroups, moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
@@ -25,17 +25,18 @@ export function LegacyModule({ resourceCorpus, resources, selectedId, onSelect }
   return (
     <AiosModuleFrame
       view="legacy"
-      summary={zhCN.moduleSummaries.legacy}
+      summary="这是内置示例/兼容快照，不代表当前电脑扫描结果。"
       count={resources.length}
       ariaLabel={moduleAriaLabel("legacy")}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />
-          <Chip label="兼容说明，不恢复" variant="outlined" />
+          <Chip className="status-chip status-warn" label="Legacy snapshot" variant="outlined" />
+          <Chip label="不代表当前电脑扫描结果" variant="outlined" />
         </>
       }
     >
-      {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="legacy" onSelect={onSelect} />)}
+      {groups.length === 0 ? <ModuleEmptyState {...moduleEmptyStateCopy("legacy")} /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="legacy" onSelect={onSelect} />)}
     </AiosModuleFrame>
   );
 }

@@ -107,7 +107,7 @@ const desktopBoundaryCards: Array<{
   },
   {
     title: "SQLite 本地索引",
-    purpose: "Phase 3C 将扫描结果作为动态资源库优先展示；静态 snapshot 保留为未扫描时的兼容路径。",
+    purpose: "扫描结果写入动态资源库；未扫描时主模块保持空资源库，不使用示例快照充数。",
     icon: <StorageRounded fontSize="small" />,
     chips: [
       { label: "Phase 3C", className: "status-chip status-ok", variant: "filled" },
@@ -129,6 +129,10 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
   const risks = useMemo(() => riskCounts(allResources), [allResources]);
   const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
   const showFirstRunOnboarding = shouldShowFirstRunOnboarding(resourceCorpus.summary, resourceCorpus.firstRunOnboardingDismissed);
+  const dataSourceCopy =
+    resourceCorpus.dataSource.activeSource === "dynamic-corpus"
+      ? `本机已有 AIOS 本地资源库，当前动态资源 ${resourceCorpus.dataSource.dynamicResourceCount} 项。Legacy 示例数据不参与默认统计。`
+      : "尚未扫描任何目录。Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators 和 Inspector 默认显示 0 项；Legacy 示例数据只在旧入口查看。";
 
   const handleCapabilityClick = (queryText: string) => {
     if (onQueryChange) {
@@ -164,7 +168,7 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           <Box className="dashboard-status-copy">
             <Typography component="strong">桌面产品状态</Typography>
             <Typography color="text.secondary" variant="body2">
-              当前优先展示用户扫描后写入 Rust-owned SQLite 的动态资源库；未扫描时回退到 repo-local snapshot。扫描仍需在扫描管理中手动启动，不执行脚本、MCP 或全盘遍历。
+              {dataSourceCopy} 扫描仍需在扫描管理中手动启动，不执行脚本、MCP 或全盘遍历。
             </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
@@ -178,8 +182,8 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
       {showFirstRunOnboarding && (
         <AiosSection className="first-run-onboarding-section">
           <AiosSectionHeader
-            title="首次使用"
-            summary="AIOS 尚未扫描这台机器；启动、切换模块和搜索都不会自动扫描。"
+            title="尚未扫描任何目录"
+            summary="AIOS 尚未扫描这台机器；启动、切换模块和搜索都不会自动扫描，默认资源计数保持 0。"
             action={<Chip className="status-chip status-ok" label="metadata-only local" variant="outlined" />}
           />
           <Box className="first-run-onboarding-grid">

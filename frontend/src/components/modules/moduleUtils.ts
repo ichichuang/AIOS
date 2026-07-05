@@ -3,7 +3,7 @@ import type { ResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
-import type { ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary } from "../../lib/resourceCorpus";
+import type { ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary, ResourceDataSourceState } from "../../lib/resourceCorpus";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
@@ -15,6 +15,7 @@ export interface ResourceSelectionContext {
 
 export interface ResourceCorpusModuleState {
   activeScope: ResourceCorpusScope;
+  dataSource: ResourceDataSourceState;
   error: string | null;
   firstRunOnboardingDismissed: boolean;
   loading: boolean;
@@ -97,4 +98,63 @@ export function getMcpGroups(resources: AiosResource[]): ResourceGroupData[] {
 
 export function moduleAriaLabel(view: ResourceView): string {
   return `${VIEW_LABELS[view]}模块`;
+}
+
+export function moduleEmptyStateCopy(view: ResourceView): { title: string; body: string; hints: string[] } {
+  switch (view) {
+    case "skills":
+      return {
+        title: "尚未发现 Skills",
+        body: "尚未发现 Skills；请到扫描管理添加项目目录或运行智能发现。",
+        hints: ["当前技能库只读取 SQLite 动态资源库。", "Legacy 示例数据不会计入技能库数量。", "扫描不会自动开始。"]
+      };
+    case "mcp":
+      return {
+        title: "尚未发现 MCP metadata",
+        body: "尚未发现 MCP metadata。",
+        hints: ["AIOS 不会启动或连接 MCP 服务。", "仅用户扫描后的动态元数据会显示在这里。", "Legacy 示例数据只在旧入口查看。"]
+      };
+    case "scripts":
+      return {
+        title: "尚未发现脚本元数据",
+        body: "尚未发现脚本元数据；AIOS 不会执行脚本。",
+        hints: ["脚本只作为元数据资源展示。", "扫描结果来自本地 SQLite 资源库。", "执行仍需要用户在应用外显式命令。"]
+      };
+    case "reports":
+      return {
+        title: "尚未发现报告元数据",
+        body: "尚未发现报告元数据；请先在扫描管理中添加目录并手动扫描。",
+        hints: ["报告列表只展示扫描持久化的元数据。", "不会读取或展示文件正文。", "Legacy 示例数据不参与当前模块计数。"]
+      };
+    case "project-packs":
+      return {
+        title: "尚未发现项目包元数据",
+        body: "尚未发现项目包元数据；请扫描包含项目资源包的目录。",
+        hints: ["项目 / source scope 只来自动态资源库。", "不会复制资源到全局入口。", "Legacy 示例数据仅用于兼容查看。"]
+      };
+    case "policies":
+      return {
+        title: "尚未发现策略元数据",
+        body: "尚未发现策略元数据；请扫描包含治理或策略资源的项目目录。",
+        hints: ["策略模块不会修改策略文件。", "当前列表只使用用户扫描后的 SQLite 元数据。", "Legacy 示例数据不参与策略计数。"]
+      };
+    case "validators":
+      return {
+        title: "尚未发现验证器元数据",
+        body: "尚未发现验证器元数据；请扫描包含验证器或检查脚本的目录。",
+        hints: ["验证器状态卡是只读基线说明。", "验证器资源列表只来自动态资源库。", "AIOS 不会运行验证器。"]
+      };
+    case "legacy":
+      return {
+        title: "Legacy 示例数据不可用",
+        body: "未加载到内置示例/兼容快照。",
+        hints: ["Legacy 只用于兼容查看。", "它不代表当前电脑扫描结果。", "不会写入 SQLite 动态资源库。"]
+      };
+    default:
+      return {
+        title: "尚未扫描任何目录",
+        body: "当前动态资源库为空；请到扫描管理添加项目目录或运行智能发现。",
+        hints: ["默认模块只读取 SQLite 动态资源库。", "Legacy 示例数据不会计入默认数量。", "扫描必须由用户手动启动。"]
+      };
+  }
 }
