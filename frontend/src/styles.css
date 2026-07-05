@@ -833,7 +833,9 @@
 .scan-profile-section,
 .scan-first-use-section,
 .scan-control-section,
+.scan-progress-section,
 .scan-result-section,
+.scan-skipped-summary-section,
 .scan-warning-section {
   min-width: 0;
 }
@@ -878,7 +880,8 @@
 
 .scan-profile-detail-grid,
 .scan-first-use-grid,
-.scan-category-summary-grid {
+.scan-category-summary-grid,
+.scan-skipped-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: var(--aios-card-gap, 10px);
@@ -887,7 +890,8 @@
 
 .scan-profile-detail,
 .scan-first-use-item,
-.scan-category-summary-item {
+.scan-category-summary-item,
+.scan-skipped-summary-item {
   display: grid;
   align-content: start;
   gap: 6px;
@@ -900,7 +904,8 @@
 
 .scan-profile-detail strong,
 .scan-first-use-item strong,
-.scan-category-summary-item strong {
+.scan-category-summary-item strong,
+.scan-skipped-summary-item strong {
   color: var(--aios-text);
   font-size: 12px;
   font-weight: 900;
@@ -909,7 +914,8 @@
 
 .scan-profile-detail p,
 .scan-first-use-item p,
-.scan-category-summary-item p {
+.scan-category-summary-item p,
+.scan-skipped-summary-item p {
   overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 1.35;
@@ -1004,6 +1010,75 @@
   font-size: 11px;
 }
 
+.scan-progress-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  padding: 12px;
+}
+
+.scan-progress-heading {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.scan-progress-heading strong {
+  overflow-wrap: anywhere;
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.scan-progress-heading p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.scan-progress-bar.MuiLinearProgress-root {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--aios-surface-muted);
+}
+
+.scan-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.scan-progress-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 12px;
+  background: var(--aios-surface-muted);
+  padding: 8px 10px;
+}
+
+.scan-progress-metric span {
+  color: var(--aios-muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.scan-progress-metric strong {
+  overflow-wrap: anywhere;
+  color: var(--aios-text);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .scan-boundary-callout {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1040,7 +1115,8 @@
   min-height: 96px;
 }
 
-.scan-category-summary-grid {
+.scan-category-summary-grid,
+.scan-skipped-summary-grid {
   margin-top: 10px;
 }
 

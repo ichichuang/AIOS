@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AiosResource, CapabilityType, ResourceStatus, RiskLevel, ToolType } from "../types/inventory";
 
 export type ScanResourceKind =
@@ -36,6 +37,7 @@ export interface ScanProfileDefinition {
 }
 
 export const DEFAULT_SCAN_PROFILE_ID: ScanProfileId = "custom-folder";
+export const SCAN_JOB_PROGRESS_EVENT = "aios://scan-job-progress";
 
 export interface ScannerPolicy {
   policyId: string;
@@ -66,10 +68,61 @@ export interface ScanCounts {
   visitedEntries: number;
   returnedResources: number;
   skippedByExclude: number;
+  skippedByGuard?: number;
+  skippedByMetadataError?: number;
+  skippedByLimit?: number;
+  skippedByCancellation?: number;
   skippedBySize: number;
   skippedSymlinks: number;
   deniedErrors: number;
   truncated: boolean;
+}
+
+export type ScanJobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "failed";
+export type ScanLifecycleState = "idle" | "directory-selected" | "running" | "cancelling" | "completed" | "cancelled" | "failed";
+
+export interface ScanCommandErrorPayload {
+  code: string;
+  message: string;
+}
+
+export interface ScanProgress {
+  visitedEntries: number;
+  matchedResources: number;
+  skippedEntries: number;
+  elapsedMs: number;
+  currentPhase: string;
+  profileId: ScanProfileId | string;
+  maxEntries: number;
+  maxDepth: number;
+  truncated: boolean;
+  cancellationRequested: boolean;
+}
+
+export interface ScanJobSnapshot {
+  jobId: string;
+  status: ScanJobStatus;
+  profileId: ScanProfileId | string;
+  rootDisplayName: string;
+  rootSummary: string;
+  startedAtMs: number;
+  updatedAtMs: number;
+  completedAtMs: number | null;
+  progress: ScanProgress;
+  result: CustomScanResult | null;
+  error: ScanCommandErrorPayload | null;
+}
+
+export interface ScanStarted {
+  jobId: string;
+  snapshot: ScanJobSnapshot;
+}
+
+export interface ScanJobEventPayload {
+  jobId: string;
+  status: ScanJobStatus;
+  progress: ScanProgress;
+  error: ScanCommandErrorPayload | null;
 }
 
 export interface ScanWarning {
@@ -264,6 +317,26 @@ export async function scanCustomDirectory(selectionId: string, profileId: ScanPr
   return invoke<CustomScanResult>("scan_custom_directory", { selectionId, profileId });
 }
 
+export async function startCustomScanJob(selectionId: string, profileId: ScanProfileId = DEFAULT_SCAN_PROFILE_ID): Promise<ScanStarted> {
+  assertTauriRuntime();
+  return invoke<ScanStarted>("start_custom_scan_job", { selectionId, profileId });
+}
+
+export async function cancelScanJob(jobId: string): Promise<ScanJobSnapshot> {
+  assertTauriRuntime();
+  return invoke<ScanJobSnapshot>("cancel_scan_job", { jobId });
+}
+
+export async function getScanJobSnapshot(jobId: string): Promise<ScanJobSnapshot> {
+  assertTauriRuntime();
+  return invoke<ScanJobSnapshot>("get_scan_job_snapshot", { jobId });
+}
+
+export async function listenToScanJobProgress(onEvent: (event: ScanJobEventPayload) => void): Promise<UnlistenFn> {
+  assertTauriRuntime();
+  return listen<ScanJobEventPayload>(SCAN_JOB_PROGRESS_EVENT, (event) => onEvent(event.payload));
+}
+
 export function getScanProfileById(profileId?: string | null, profiles: ScanProfileDefinition[] = fallbackScanProfiles): ScanProfileDefinition {
   const requested = profiles.find((profile) => profile.id === profileId);
   if (requested) return requested;
@@ -341,6 +414,72 @@ export function mapScanResourcesToAiosResources(result: CustomScanResult, profil
       updatedAt
     };
   });
+}
+
+export function createFallbackScanJobSnapshot(jobId: string, profileId: ScanProfileId = DEFAULT_SCAN_PROFILE_ID): ScanJobSnapshot {
+  const now = Date.now();
+  const profile = getScanProfileById(profileId);
+  return {
+    jobId,
+    status: "queued",
+    profileId,
+    rootDisplayName: "已选择目录",
+    rootSummary: "未记录",
+    startedAtMs: now,
+    updatedAtMs: now,
+    completedAtMs: null,
+    progress: {
+      visitedEntries: 0,
+      matchedResources: 0,
+      skippedEntries: 0,
+      elapsedMs: 0,
+      currentPhase: "queued",
+      profileId,
+      maxEntries: profile.maxEntries,
+      maxDepth: profile.maxDepth,
+      truncated: false,
+      cancellationRequested: false
+    },
+    result: null,
+    error: null
+  };
+}
+
+export function applyScanJobProgressEvent(snapshot: ScanJobSnapshot | null, event: ScanJobEventPayload): ScanJobSnapshot {
+  const base = snapshot ?? createFallbackScanJobSnapshot(event.jobId, getScanProfileById(event.progress.profileId).id);
+  return {
+    ...base,
+    jobId: event.jobId,
+    status: event.status,
+    profileId: event.progress.profileId,
+    updatedAtMs: Date.now(),
+    progress: event.progress,
+    error: event.error,
+    result: isTerminalScanJobStatus(event.status) && event.status !== "completed" ? null : base.result
+  };
+}
+
+export function isTerminalScanJobStatus(status: ScanJobStatus): boolean {
+  return status === "completed" || status === "cancelled" || status === "failed";
+}
+
+export function scanLifecycleFromSnapshot(snapshot: ScanJobSnapshot | null, hasSelectedDirectory: boolean, hasError: boolean): ScanLifecycleState {
+  if (hasError) return "failed";
+  if (!snapshot) return hasSelectedDirectory ? "directory-selected" : "idle";
+  if (snapshot.status === "queued") return "running";
+  return snapshot.status;
+}
+
+export function countSkippedEntries(counts: ScanCounts): number {
+  return (
+    counts.skippedByExclude +
+    (counts.skippedByGuard ?? 0) +
+    (counts.skippedByMetadataError ?? counts.deniedErrors) +
+    (counts.skippedByLimit ?? (counts.truncated ? 1 : 0)) +
+    (counts.skippedByCancellation ?? 0) +
+    counts.skippedBySize +
+    counts.skippedSymlinks
+  );
 }
 
 function assertTauriRuntime(): void {

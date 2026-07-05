@@ -1,24 +1,34 @@
-import { Box, Button, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, Chip, LinearProgress, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
 import SecurityRounded from "@mui/icons-material/SecurityRounded";
+import StopCircleRounded from "@mui/icons-material/StopCircleRounded";
 import WarningAmberRounded from "@mui/icons-material/WarningAmberRounded";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import {
+  applyScanJobProgressEvent,
+  cancelScanJob,
+  countSkippedEntries,
   fallbackScanPolicy,
   fallbackScanProfiles,
   DEFAULT_SCAN_PROFILE_ID,
+  getScanJobSnapshot,
   getScanPolicy,
   getScanProfileById,
   getScanProfileForResult,
   getScanProfiles,
+  isTerminalScanJobStatus,
   isTauriRuntimeAvailable,
+  listenToScanJobProgress,
   mapScanResourcesToAiosResources,
   pickScanDirectory,
-  scanCustomDirectory,
+  scanLifecycleFromSnapshot,
+  startCustomScanJob,
   type CustomScanResult,
+  type ScanJobSnapshot,
+  type ScanLifecycleState,
   type ScanProfileDefinition,
   type ScanProfileId,
   type ScanResourceKind,
@@ -37,9 +47,10 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
   const [activeProfileId, setActiveProfileId] = useState<ScanProfileId>(DEFAULT_SCAN_PROFILE_ID);
   const [selectedDirectory, setSelectedDirectory] = useState<SelectedScanDirectory | null>(null);
+  const [scanJobSnapshot, setScanJobSnapshot] = useState<ScanJobSnapshot | null>(null);
   const [scanResult, setScanResult] = useState<CustomScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyState, setBusyState] = useState<"idle" | "picking" | "scanning">("idle");
+  const [busyState, setBusyState] = useState<"idle" | "picking">("idle");
   const tauriAvailable = isTauriRuntimeAvailable();
 
   useEffect(() => {
@@ -53,6 +64,54 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       .catch((policyError: unknown) => setError(formatCommandError(policyError)));
   }, []);
 
+  const refreshScanJobSnapshot = useCallback(async (jobId: string) => {
+    try {
+      const snapshot = await getScanJobSnapshot(jobId);
+      setScanJobSnapshot(snapshot);
+      if (snapshot.status === "completed" && snapshot.result) {
+        setScanResult(snapshot.result);
+        setError(null);
+      } else if (snapshot.status === "failed") {
+        setScanResult(null);
+        setError(snapshot.error?.message ?? "扫描任务失败。");
+      } else if (snapshot.status === "cancelled") {
+        setScanResult(null);
+      }
+    } catch (snapshotError) {
+      setError(formatCommandError(snapshotError));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!tauriAvailable) return undefined;
+    let active = true;
+    let cleanup: (() => void) | null = null;
+
+    listenToScanJobProgress((event) => {
+      if (!active) return;
+      setScanJobSnapshot((current) => {
+        if (current && current.jobId !== event.jobId) return current;
+        return applyScanJobProgressEvent(current, event);
+      });
+      if (isTerminalScanJobStatus(event.status)) {
+        void refreshScanJobSnapshot(event.jobId);
+      }
+    })
+      .then((unlisten) => {
+        if (active) {
+          cleanup = unlisten;
+        } else {
+          unlisten();
+        }
+      })
+      .catch((listenError: unknown) => setError(formatCommandError(listenError)));
+
+    return () => {
+      active = false;
+      cleanup?.();
+    };
+  }, [refreshScanJobSnapshot, tauriAvailable]);
+
   const activeProfile = useMemo(() => getScanProfileById(activeProfileId, profiles), [activeProfileId, profiles]);
   const scanResultProfile = useMemo(() => (scanResult ? getScanProfileForResult(scanResult, profiles) : null), [profiles, scanResult]);
   const profileForVisibleResults = scanResultProfile ?? activeProfile;
@@ -60,9 +119,12 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const visibleResources = useMemo(() => filterResourceList(resources, query), [query, resources]);
   const groups = useMemo(() => buildScanGroups(visibleResources, profileForVisibleResults), [profileForVisibleResults, visibleResources]);
   const categorySummary = useMemo(() => (scanResult ? buildProfileCategorySummary(scanResult, profileForVisibleResults) : []), [profileForVisibleResults, scanResult]);
-  const skippedCount = scanResult
-    ? scanResult.counts.skippedByExclude + scanResult.counts.skippedBySize + scanResult.counts.skippedSymlinks + scanResult.counts.deniedErrors
-    : 0;
+  const skippedCount = scanResult ? countSkippedEntries(scanResult.counts) : (scanJobSnapshot?.progress.skippedEntries ?? 0);
+  const lifecycle = scanLifecycleFromSnapshot(scanJobSnapshot, Boolean(selectedDirectory), Boolean(error));
+  const scanRunning = lifecycle === "running";
+  const scanCancelling = lifecycle === "cancelling";
+  const scanLocked = scanRunning || scanCancelling;
+  const progressPercent = scanJobSnapshot ? progressPercentFor(scanJobSnapshot) : 0;
 
   const handleProfileChange = useCallback((_event: unknown, nextProfileId: ScanProfileId | null) => {
     if (!nextProfileId) return;
@@ -76,6 +138,7 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       const selected = await pickScanDirectory();
       setSelectedDirectory(selected);
       setScanResult(null);
+      setScanJobSnapshot(null);
     } catch (pickError) {
       setError(formatCommandError(pickError));
     } finally {
@@ -85,17 +148,32 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
 
   const handleRunScan = useCallback(async () => {
     if (!selectedDirectory) return;
-    setBusyState("scanning");
     setError(null);
+    setScanResult(null);
+    setScanJobSnapshot(null);
     try {
-      const result = await scanCustomDirectory(selectedDirectory.selectionId, activeProfile.id);
-      setScanResult(result);
+      const started = await startCustomScanJob(selectedDirectory.selectionId, activeProfile.id);
+      setScanJobSnapshot(started.snapshot);
+      if (started.snapshot.status === "completed" && started.snapshot.result) {
+        setScanResult(started.snapshot.result);
+      } else if (started.snapshot.status === "failed") {
+        setError(started.snapshot.error?.message ?? "扫描任务失败。");
+      }
     } catch (scanError) {
       setError(formatCommandError(scanError));
-    } finally {
-      setBusyState("idle");
     }
   }, [activeProfile.id, selectedDirectory]);
+
+  const handleCancelScan = useCallback(async () => {
+    if (!scanJobSnapshot || !["queued", "running"].includes(scanJobSnapshot.status)) return;
+    setError(null);
+    try {
+      const snapshot = await cancelScanJob(scanJobSnapshot.jobId);
+      setScanJobSnapshot(snapshot);
+    } catch (cancelError) {
+      setError(formatCommandError(cancelError));
+    }
+  }, [scanJobSnapshot]);
 
   return (
     <AiosModuleFrame
@@ -118,9 +196,9 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
           action={<Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />}
         />
         <Box className="scan-profile-selector" aria-label="扫描模板选择">
-          <ToggleButtonGroup exclusive value={activeProfile.id} onChange={handleProfileChange}>
+          <ToggleButtonGroup disabled={scanLocked} exclusive value={activeProfile.id} onChange={handleProfileChange}>
             {profiles.map((profile) => (
-              <ToggleButton key={profile.id} value={profile.id}>
+              <ToggleButton disabled={scanLocked} key={profile.id} value={profile.id}>
                 <Box component="span">{profile.displayName}</Box>
               </ToggleButton>
             ))}
@@ -186,12 +264,17 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
               />
             )}
             <Box className="scan-action-row">
-              <Button disabled={!tauriAvailable || busyState !== "idle"} startIcon={<FolderOpenRounded />} variant="outlined" onClick={handlePickDirectory}>
+              <Button disabled={!tauriAvailable || busyState !== "idle" || scanLocked} startIcon={<FolderOpenRounded />} variant="outlined" onClick={handlePickDirectory}>
                 选择目录
               </Button>
-              <Button disabled={!tauriAvailable || !selectedDirectory || busyState !== "idle"} startIcon={<PlayArrowRounded />} variant="contained" onClick={handleRunScan}>
+              <Button disabled={!tauriAvailable || !selectedDirectory || busyState !== "idle" || scanLocked} startIcon={<PlayArrowRounded />} variant="contained" onClick={handleRunScan}>
                 运行扫描
               </Button>
+              {scanRunning && (
+                <Button color="warning" disabled={!scanJobSnapshot} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelScan}>
+                  取消扫描
+                </Button>
+              )}
             </Box>
           </Box>
 
@@ -237,9 +320,36 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
       {busyState !== "idle" && (
         <Box className="scan-boundary-callout info">
           <Typography color="text.secondary" variant="body2">
-            {busyState === "picking" ? "正在等待目录选择器返回结果。" : "正在执行有界元数据扫描。"}
+            正在等待目录选择器返回结果。
           </Typography>
         </Box>
+      )}
+
+      {(scanJobSnapshot || lifecycle !== "idle") && (
+        <AiosSection className="scan-progress-section">
+          <AiosSectionHeader
+            title="扫描任务"
+            summary={lifecycleSummary(lifecycle, scanJobSnapshot)}
+            action={<Chip className={`status-chip ${lifecycleChipClass(lifecycle)}`} label={lifecycleLabel(lifecycle)} variant="outlined" />}
+          />
+          <Box className="scan-progress-card">
+            <Box className="scan-progress-heading">
+              <Typography component="strong">{scanJobSnapshot?.rootSummary ?? selectedDirectory?.rootSummary ?? "尚未选择目录"}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {scanJobSnapshot ? `模板 ${scanJobSnapshot.progress.profileId} · 阶段 ${phaseLabel(scanJobSnapshot.progress.currentPhase)}` : "等待用户选择目录并启动扫描。"}
+              </Typography>
+            </Box>
+            <LinearProgress className="scan-progress-bar" value={progressPercent} variant="determinate" />
+            <Box className="scan-progress-grid">
+              <ProgressMetric label="已访问" value={scanJobSnapshot?.progress.visitedEntries ?? 0} />
+              <ProgressMetric label="已匹配" value={scanJobSnapshot?.progress.matchedResources ?? 0} />
+              <ProgressMetric label="已跳过" value={scanJobSnapshot?.progress.skippedEntries ?? 0} />
+              <ProgressMetric label="耗时" value={`${scanJobSnapshot ? Math.max(0, Math.round(scanJobSnapshot.progress.elapsedMs / 1000)) : 0}s`} />
+              <ProgressMetric label="深度上限" value={scanJobSnapshot?.progress.maxDepth ?? activeProfile.maxDepth} />
+              <ProgressMetric label="条目上限" value={scanJobSnapshot?.progress.maxEntries ?? activeProfile.maxEntries} />
+            </Box>
+          </Box>
+        </AiosSection>
       )}
 
       {scanResult && (
@@ -256,6 +366,25 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
             {categorySummary.map((item) => (
               <Box className="scan-category-summary-item" key={item.title}>
                 <Typography component="strong">{item.title}</Typography>
+                <Typography className="scan-category-count" component="span">
+                  {item.value}
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {item.summary}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </AiosSection>
+      )}
+
+      {(scanResult || scanJobSnapshot) && (
+        <AiosSection className="scan-skipped-summary-section">
+          <AiosSectionHeader title="跳过摘要" summary="仅展示聚合计数；不会暴露绝对路径或敏感值。" count={skippedSummaryItems(scanResult, scanJobSnapshot).reduce((total, item) => total + item.value, 0)} />
+          <Box className="scan-skipped-summary-grid">
+            {skippedSummaryItems(scanResult, scanJobSnapshot).map((item) => (
+              <Box className="scan-skipped-summary-item" key={item.label}>
+                <Typography component="strong">{item.label}</Typography>
                 <Typography className="scan-category-count" component="span">
                   {item.value}
                 </Typography>
@@ -299,14 +428,131 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         )
       ) : (
         <Box className="scan-empty-state">
-          <Typography component="strong">等待指定目录扫描</Typography>
+          <Typography component="strong">{emptyStateTitle(lifecycle)}</Typography>
           <Typography color="text.secondary" variant="body2">
-            先选择扫描模板，再选择一个通过策略守卫的目录并手动运行扫描。全盘扫描已禁用，非 MVP，未来需要单独批准。
+            {emptyStateSummary(lifecycle)}
           </Typography>
         </Box>
       )}
     </AiosModuleFrame>
   );
+}
+
+function ProgressMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Box className="scan-progress-metric">
+      <Typography component="span">{label}</Typography>
+      <Typography component="strong">{value}</Typography>
+    </Box>
+  );
+}
+
+function progressPercentFor(snapshot: ScanJobSnapshot): number {
+  if (snapshot.progress.maxEntries <= 0) return 0;
+  return Math.max(0, Math.min(100, (snapshot.progress.visitedEntries / snapshot.progress.maxEntries) * 100));
+}
+
+function lifecycleLabel(lifecycle: ScanLifecycleState): string {
+  const labels: Record<ScanLifecycleState, string> = {
+    idle: "空闲",
+    "directory-selected": "已选目录",
+    running: "运行中",
+    cancelling: "取消中",
+    completed: "已完成",
+    cancelled: "已取消",
+    failed: "失败"
+  };
+  return labels[lifecycle];
+}
+
+function lifecycleChipClass(lifecycle: ScanLifecycleState): string {
+  if (lifecycle === "running" || lifecycle === "completed" || lifecycle === "directory-selected") return "status-ok";
+  if (lifecycle === "cancelled" || lifecycle === "cancelling") return "status-warn";
+  if (lifecycle === "failed") return "status-warn";
+  return "status-disabled";
+}
+
+function lifecycleSummary(lifecycle: ScanLifecycleState, snapshot: ScanJobSnapshot | null): string {
+  if (snapshot?.error?.message) return snapshot.error.message;
+  if (lifecycle === "running") return "正在执行有界 metadata-only 扫描；可取消，不读取内容。";
+  if (lifecycle === "cancelling") return "已请求取消，Rust 扫描器会在下一个遍历检查点停止。";
+  if (lifecycle === "completed") return "扫描已完成，结果仅保存在当前界面内存中。";
+  if (lifecycle === "cancelled") return "扫描已取消，可重新运行或选择其它目录。";
+  if (lifecycle === "failed") return "扫描失败，可选择其它目录或重新运行。";
+  if (lifecycle === "directory-selected") return "目录已选择，等待手动运行扫描。";
+  return "等待指定目录扫描。";
+}
+
+function emptyStateTitle(lifecycle: ScanLifecycleState): string {
+  if (lifecycle === "cancelled") return "扫描已取消";
+  if (lifecycle === "failed") return "扫描失败";
+  if (lifecycle === "running" || lifecycle === "cancelling") return "扫描任务运行中";
+  if (lifecycle === "completed") return "没有匹配的可见结果";
+  return "等待指定目录扫描";
+}
+
+function emptyStateSummary(lifecycle: ScanLifecycleState): string {
+  if (lifecycle === "cancelled") return "任务已安全停止。可以重新运行当前目录，也可以选择其它目录。";
+  if (lifecycle === "failed") return "错误已显示在上方。修正目录选择后可重新运行；不会保留失败历史。";
+  if (lifecycle === "running" || lifecycle === "cancelling") return "正在处理任务状态，结果会在完成后显示。";
+  if (lifecycle === "completed") return "扫描完成，但当前搜索或分类下没有可见结果。";
+  return "先选择扫描模板，再选择一个通过策略守卫的目录并手动运行扫描。全盘扫描已禁用，非 MVP，未来需要单独批准。";
+}
+
+function phaseLabel(phase: string): string {
+  const labels: Record<string, string> = {
+    queued: "排队",
+    walking: "遍历元数据",
+    finalizing: "汇总结果",
+    completed: "完成",
+    cancelling: "取消中",
+    cancelled: "已取消",
+    failed: "失败"
+  };
+  return labels[phase] ?? phase;
+}
+
+interface SkippedSummaryItem {
+  label: string;
+  value: number;
+  summary: string;
+}
+
+function skippedSummaryItems(result: CustomScanResult | null, snapshot: ScanJobSnapshot | null): SkippedSummaryItem[] {
+  const counts = result?.counts;
+  const cancellationCount = counts?.skippedByCancellation ?? (snapshot?.status === "cancelled" ? 1 : 0);
+  return [
+    {
+      label: "排除规则",
+      value: counts?.skippedByExclude ?? 0,
+      summary: "命中依赖、缓存、构建产物、虚拟环境或工具缓存等强 exclude。"
+    },
+    {
+      label: "路径守卫",
+      value: counts?.skippedByGuard ?? 0,
+      summary: "根目录、home、系统或磁盘根会在扫描前被拒绝。"
+    },
+    {
+      label: "元数据错误",
+      value: counts?.skippedByMetadataError ?? counts?.deniedErrors ?? 0,
+      summary: "无法读取条目元数据或遍历权限失败的聚合计数。"
+    },
+    {
+      label: "上限截断",
+      value: counts?.skippedByLimit ?? (counts?.truncated ? 1 : 0),
+      summary: "达到模板 max entries 后停止遍历。"
+    },
+    {
+      label: "取消停止",
+      value: cancellationCount,
+      summary: "用户取消后在遍历检查点停止的计数。"
+    },
+    {
+      label: "大小 / 符号链接",
+      value: (counts?.skippedBySize ?? 0) + (counts?.skippedSymlinks ?? 0),
+      summary: "超过元数据阈值或符号链接条目；符号链接不跟随。"
+    }
+  ];
 }
 
 function policyRows(policy: ScannerPolicy, profile: ScanProfileDefinition): AiosTechnicalDetailRow[] {

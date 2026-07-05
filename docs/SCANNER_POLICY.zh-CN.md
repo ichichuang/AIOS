@@ -37,6 +37,7 @@ Phase 2A / 2B 状态：
 
 - 已实现最小 MVP：用户通过 Tauri 系统目录选择器选择一个目录。
 - 已实现静态扫描模板：用户先选择模板，再选择目录，再手动运行扫描。
+- Phase 2C 增加 bounded scan job state、低频进度事件、取消命令、任务快照和恢复状态。
 - Rust 侧只执行 metadata-only traversal，不读取文件内容。
 - 扫描结果只保存在当前前端内存中，不写入 SQLite，不保留扫描历史。
 - 每次扫描只使用一个用户选择目录，不支持多根目录批量扫描。
@@ -54,8 +55,60 @@ Phase 2A / 2B 状态：
 
 - 每个 custom root 都必须记录授权来源和 policy decision。
 - 默认继承强 exclude、metadata-first 和 redaction 规则。
-- Phase 2B 模板不持久化授权路径，不保存本地索引，不提供扫描历史。
+- Phase 2C job registry 只保留少量内存任务快照，用于当前运行时恢复；不持久化授权路径，不保存本地索引，不提供扫描历史。
 - SQLite、scan history、持久 profile 管理和 diff view 仍是未来阶段。
+
+## Phase 2C 扫描任务运行时
+
+Phase 2C 的扫描任务模型只服务当前桌面进程内的交互反馈，不是持久 job history。
+
+新增命令：
+
+- `start_custom_scan_job`：基于已选择的 `selectionId` 和可选 `profileId` 启动一个 bounded scan job。
+- `cancel_scan_job`：设置该 job 的 Rust-side cancellation flag。
+- `get_scan_job_snapshot`：读取当前内存 job snapshot。
+
+兼容命令：
+
+- `scan_custom_directory` 保留，用于 Phase 2A/2B 同步式调用兼容。
+
+任务状态：
+
+- `queued`
+- `running`
+- `cancelling`
+- `completed`
+- `cancelled`
+- `failed`
+
+进度事件：
+
+- 事件名：`aios://scan-job-progress`。
+- 只发送低频聚合 payload，不逐文件发送。
+- payload 只包含安全计数与状态：`jobId`、`status`、`visitedEntries`、`matchedResources`、`skippedEntries`、`elapsedMs`、`currentPhase`、`profileId`、`maxDepth`、`maxEntries`、`truncated`、`cancellationRequested` 和安全错误摘要。
+- 进度事件不包含绝对路径、文件内容、raw secret、auth/session、provider key、token、cookie 或 env value。
+
+取消语义：
+
+- `cancel_scan_job` 只设置取消标志，不杀进程、不中断系统 API。
+- Rust 遍历循环会在检查点观察取消标志并停止。
+- 取消后 UI 可重新运行当前目录，也可重新选择目录。
+- 已取消任务不写入 SQLite，不保存历史。
+
+内存边界：
+
+- 同一时间只允许一个 active scan job。
+- registry 只保留少量 terminal snapshots，旧 terminal job 会被修剪。
+- terminal snapshot 只用于当前界面恢复，不跨进程持久化。
+
+跳过摘要：
+
+- `skipped_by_exclude`：强 exclude 和 ignore 命中。
+- `skipped_by_guard`：根目录守卫拒绝。Phase 2C 中大多数 guard 在扫描前失败并以错误显示，因此结果计数通常为 0。
+- `skipped_by_metadata_error`：无法读取元数据或遍历条目错误。
+- `skipped_by_limit`：达到 profile max entries 后停止。
+- `skipped_by_cancellation`：用户取消后在遍历检查点停止。
+- `skipped_by_size` / `skipped_symlinks`：大小阈值和符号链接跳过。
 
 ## 全盘扫描策略
 
@@ -145,6 +198,7 @@ Phase 2A custom profile 边界：
 - 尊重 `.ignore`、`.gitignore` 和标准 ignore 规则。
 - 不跟随 symlink。
 - 不读取文件内容，不执行脚本，不启动 MCP，不连接远程服务。
+- Phase 2C 进度事件和 job snapshot 同样不读取或暴露文件内容。
 - 拒绝 `/`、用户 home root、`/Users`、`/Volumes`、`/System`、`/Library`、`/Applications`、`/private`、`/tmp`、Windows drive root 等整机或系统边界目录。
 
 默认跳过：

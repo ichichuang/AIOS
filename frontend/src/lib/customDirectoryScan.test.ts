@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import {
   DEFAULT_SCAN_PROFILE_ID,
+  applyScanJobProgressEvent,
+  createFallbackScanJobSnapshot,
   fallbackScanProfiles,
   getScanProfileById,
+  isTerminalScanJobStatus,
   mapScanResourcesToAiosResources,
+  scanLifecycleFromSnapshot,
+  type ScanJobEventPayload,
   type CustomScanResult
 } from "./customDirectoryScan";
 
@@ -114,5 +119,45 @@ assert.equal(resources[3].capabilityType, "mcp-client");
 assert.equal(resources[3].safetyProfile.executionRisk, "low");
 assert.equal(resources[4].capabilityType, "policy");
 assert.ok(resources.every((resource) => resource.metadata?.sourceKind === "custom-directory-scan"));
+
+const fallbackSnapshot = createFallbackScanJobSnapshot("job-1", "project-root");
+assert.equal(fallbackSnapshot.status, "queued");
+assert.equal(fallbackSnapshot.progress.profileId, "project-root");
+assert.equal(scanLifecycleFromSnapshot(null, false, false), "idle");
+assert.equal(scanLifecycleFromSnapshot(null, true, false), "directory-selected");
+assert.equal(scanLifecycleFromSnapshot({ ...fallbackSnapshot, status: "running" }, true, false), "running");
+assert.equal(scanLifecycleFromSnapshot({ ...fallbackSnapshot, status: "cancelling" }, true, false), "cancelling");
+assert.equal(scanLifecycleFromSnapshot({ ...fallbackSnapshot, status: "completed" }, true, false), "completed");
+assert.equal(scanLifecycleFromSnapshot({ ...fallbackSnapshot, status: "cancelled" }, true, false), "cancelled");
+assert.equal(scanLifecycleFromSnapshot({ ...fallbackSnapshot, status: "failed" }, true, false), "failed");
+assert.equal(scanLifecycleFromSnapshot(null, true, true), "failed");
+assert.equal(isTerminalScanJobStatus("completed"), true);
+assert.equal(isTerminalScanJobStatus("cancelled"), true);
+assert.equal(isTerminalScanJobStatus("failed"), true);
+assert.equal(isTerminalScanJobStatus("running"), false);
+
+const progressEvent: ScanJobEventPayload = {
+  jobId: "job-1",
+  status: "running",
+  progress: {
+    visitedEntries: 12,
+    matchedResources: 5,
+    skippedEntries: 7,
+    elapsedMs: 320,
+    currentPhase: "walking",
+    profileId: "project-root",
+    maxEntries: 2_000,
+    maxDepth: 6,
+    truncated: false,
+    cancellationRequested: false
+  },
+  error: null
+};
+const mergedSnapshot = applyScanJobProgressEvent(fallbackSnapshot, progressEvent);
+assert.equal(mergedSnapshot.status, "running");
+assert.equal(mergedSnapshot.progress.visitedEntries, 12);
+assert.equal(mergedSnapshot.progress.matchedResources, 5);
+assert.equal(mergedSnapshot.progress.skippedEntries, 7);
+assert.equal(mergedSnapshot.result, null);
 
 console.log("customDirectoryScan mapper tests passed");

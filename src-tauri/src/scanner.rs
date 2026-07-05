@@ -1,14 +1,15 @@
 use ignore::WalkBuilder;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
 };
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 
 const POLICY_ID: &str = "custom-directory-metadata-scan-mvp";
@@ -16,11 +17,15 @@ const DEFAULT_SCAN_PROFILE_ID: &str = "custom-folder";
 const MAX_DEPTH: usize = 6;
 const MAX_ENTRIES: usize = 2_000;
 const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_RETAINED_SCAN_JOBS: usize = 8;
+const SCAN_JOB_PROGRESS_EVENT: &str = "aios://scan-job-progress";
 const REDACTED_SEGMENT: &str = "[sensitive]";
+static NEXT_SCAN_JOB_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Default)]
 pub struct ScanState {
     selected_root: Mutex<Option<SelectedRoot>>,
+    jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,10 +113,107 @@ pub struct ScanCounts {
     visited_entries: usize,
     returned_resources: usize,
     skipped_by_exclude: usize,
+    skipped_by_guard: usize,
+    skipped_by_metadata_error: usize,
+    skipped_by_limit: usize,
+    skipped_by_cancellation: usize,
     skipped_by_size: usize,
     skipped_symlinks: usize,
     denied_errors: usize,
     truncated: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanJobStatus {
+    Queued,
+    Running,
+    Cancelling,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanProgress {
+    visited_entries: usize,
+    matched_resources: usize,
+    skipped_entries: usize,
+    elapsed_ms: u64,
+    current_phase: &'static str,
+    profile_id: &'static str,
+    max_entries: usize,
+    max_depth: usize,
+    truncated: bool,
+    cancellation_requested: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanJobSnapshot {
+    job_id: String,
+    status: ScanJobStatus,
+    profile_id: &'static str,
+    root_display_name: String,
+    root_summary: String,
+    started_at_ms: u64,
+    updated_at_ms: u64,
+    completed_at_ms: Option<u64>,
+    progress: ScanProgress,
+    result: Option<CustomScanResult>,
+    error: Option<ScanCommandError>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanStarted {
+    job_id: String,
+    snapshot: ScanJobSnapshot,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct ScanCompleted {
+    job_id: String,
+    snapshot: ScanJobSnapshot,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct ScanCancelled {
+    job_id: String,
+    snapshot: ScanJobSnapshot,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct ScanFailed {
+    job_id: String,
+    snapshot: ScanJobSnapshot,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanJobEventPayload {
+    job_id: String,
+    status: ScanJobStatus,
+    progress: ScanProgress,
+    error: Option<ScanCommandError>,
+}
+
+#[derive(Clone, Default)]
+struct ScanCancellation {
+    requested: Arc<AtomicBool>,
+}
+
+#[derive(Clone)]
+struct ScanJobRecord {
+    cancellation: ScanCancellation,
+    snapshot: ScanJobSnapshot,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -149,6 +251,9 @@ pub struct ValidatedRoot {
 enum ScanError {
     InvalidPath(String),
     InvalidProfile(String),
+    JobConflict(String),
+    JobMissing(String),
+    Cancelled,
     RejectedRoot(String),
     Permission(String),
     SelectionMissing,
@@ -218,6 +323,113 @@ pub fn scan_custom_directory(
 }
 
 #[tauri::command]
+pub fn start_custom_scan_job(
+    app: tauri::AppHandle,
+    selection_id: String,
+    profile_id: Option<String>,
+    state: State<'_, ScanState>,
+) -> Result<ScanStarted, ScanCommandError> {
+    let profile = resolve_scan_profile(profile_id.as_deref()).map_err(ScanCommandError::from)?;
+    let selected_root = {
+        let guard = state.selected_root.lock().map_err(|_| {
+            ScanCommandError::from(ScanError::Permission("扫描状态锁定失败。".to_string()))
+        })?;
+        guard
+            .as_ref()
+            .filter(|root| root.selection_id == selection_id)
+            .cloned()
+            .ok_or(ScanError::SelectionMissing)?
+    };
+    let job_id = make_scan_job_id();
+    let started_at_ms = current_time_ms();
+    let cancellation = ScanCancellation::default();
+    let progress = ScanProgress::from_counts(
+        profile.id,
+        &ScanCounts::default(),
+        0,
+        started_at_ms,
+        "queued",
+        false,
+        profile.max_depth,
+        profile.max_entries,
+    );
+    let snapshot = ScanJobSnapshot {
+        job_id: job_id.clone(),
+        status: ScanJobStatus::Queued,
+        profile_id: profile.id,
+        root_display_name: selected_root.display_name.clone(),
+        root_summary: selected_root.root_summary.clone(),
+        started_at_ms,
+        updated_at_ms: started_at_ms,
+        completed_at_ms: None,
+        progress,
+        result: None,
+        error: None,
+    };
+    let record = ScanJobRecord {
+        cancellation: cancellation.clone(),
+        snapshot: snapshot.clone(),
+    };
+
+    insert_scan_job(&state.jobs, job_id.clone(), record).map_err(ScanCommandError::from)?;
+
+    let jobs = Arc::clone(&state.jobs);
+    let worker_job_id = job_id.clone();
+    thread::spawn(move || {
+        run_scan_job_worker(
+            app,
+            jobs,
+            worker_job_id,
+            selected_root,
+            profile,
+            cancellation,
+        );
+    });
+
+    Ok(ScanStarted { job_id, snapshot })
+}
+
+#[tauri::command]
+pub fn cancel_scan_job(
+    job_id: String,
+    state: State<'_, ScanState>,
+) -> Result<ScanJobSnapshot, ScanCommandError> {
+    let mut jobs = state.jobs.lock().map_err(|_| {
+        ScanCommandError::from(ScanError::Permission("扫描状态锁定失败。".to_string()))
+    })?;
+    let record = jobs
+        .get_mut(&job_id)
+        .ok_or_else(|| ScanError::JobMissing("未找到扫描任务。".to_string()))?;
+    record.cancellation.request();
+    if matches!(
+        record.snapshot.status,
+        ScanJobStatus::Queued | ScanJobStatus::Running
+    ) {
+        record.snapshot.status = ScanJobStatus::Cancelling;
+        record.snapshot.progress.cancellation_requested = true;
+        record.snapshot.progress.current_phase = "cancelling";
+        record.snapshot.updated_at_ms = current_time_ms();
+    }
+
+    Ok(record.snapshot.clone())
+}
+
+#[tauri::command]
+pub fn get_scan_job_snapshot(
+    job_id: String,
+    state: State<'_, ScanState>,
+) -> Result<ScanJobSnapshot, ScanCommandError> {
+    let jobs = state.jobs.lock().map_err(|_| {
+        ScanCommandError::from(ScanError::Permission("扫描状态锁定失败。".to_string()))
+    })?;
+    jobs.get(&job_id)
+        .map(|record| record.snapshot.clone())
+        .ok_or_else(|| {
+            ScanCommandError::from(ScanError::JobMissing("未找到扫描任务。".to_string()))
+        })
+}
+
+#[tauri::command]
 pub fn get_scan_policy() -> ScannerPolicy {
     scanner_policy()
 }
@@ -250,6 +462,310 @@ fn resolve_scan_profile(profile_id: Option<&str>) -> Result<ScanProfileDefinitio
         .into_iter()
         .find(|profile| profile.id == requested_id)
         .ok_or_else(|| ScanError::InvalidProfile(format!("未知扫描模板：{requested_id}")))
+}
+
+impl ScanCancellation {
+    fn request(&self) {
+        self.requested.store(true, Ordering::Relaxed);
+    }
+
+    fn is_requested(&self) -> bool {
+        self.requested.load(Ordering::Relaxed)
+    }
+}
+
+impl ScanJobStatus {
+    fn is_active(&self) -> bool {
+        matches!(
+            self,
+            ScanJobStatus::Queued | ScanJobStatus::Running | ScanJobStatus::Cancelling
+        )
+    }
+}
+
+impl ScanProgress {
+    fn from_counts(
+        profile_id: &'static str,
+        counts: &ScanCounts,
+        matched_resources: usize,
+        started_at_ms: u64,
+        current_phase: &'static str,
+        cancellation_requested: bool,
+        max_depth: usize,
+        max_entries: usize,
+    ) -> Self {
+        let skipped_entries = counts.skipped_by_exclude
+            + counts.skipped_by_guard
+            + counts.skipped_by_metadata_error
+            + counts.skipped_by_limit
+            + counts.skipped_by_cancellation
+            + counts.skipped_by_size
+            + counts.skipped_symlinks;
+
+        Self {
+            visited_entries: counts.visited_entries,
+            matched_resources,
+            skipped_entries,
+            elapsed_ms: current_time_ms().saturating_sub(started_at_ms),
+            current_phase,
+            profile_id,
+            max_entries,
+            max_depth,
+            truncated: counts.truncated,
+            cancellation_requested,
+        }
+    }
+}
+
+fn build_scan_job_event_payload(
+    job_id: &str,
+    status: ScanJobStatus,
+    progress: ScanProgress,
+    error: Option<ScanCommandError>,
+) -> ScanJobEventPayload {
+    ScanJobEventPayload {
+        job_id: job_id.to_string(),
+        status,
+        progress,
+        error,
+    }
+}
+
+fn make_scan_job_id() -> String {
+    let counter = NEXT_SCAN_JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("scan-job-{}-{counter}", current_time_ms())
+}
+
+fn insert_scan_job(
+    jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    job_id: String,
+    record: ScanJobRecord,
+) -> Result<(), ScanError> {
+    let mut guard = jobs
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描状态锁定失败。".to_string()))?;
+    if guard
+        .values()
+        .any(|existing| existing.snapshot.status.is_active())
+    {
+        return Err(ScanError::JobConflict(
+            "已有扫描任务正在运行，请等待完成或取消后再试。".to_string(),
+        ));
+    }
+
+    prune_scan_jobs_locked(&mut guard);
+    guard.insert(job_id, record);
+    Ok(())
+}
+
+fn prune_scan_jobs_locked(jobs: &mut HashMap<String, ScanJobRecord>) {
+    while jobs.len() >= MAX_RETAINED_SCAN_JOBS {
+        let oldest_terminal = jobs
+            .iter()
+            .filter(|(_, record)| !record.snapshot.status.is_active())
+            .min_by_key(|(_, record)| record.snapshot.updated_at_ms)
+            .map(|(job_id, _)| job_id.clone());
+
+        let Some(job_id) = oldest_terminal else {
+            break;
+        };
+        jobs.remove(&job_id);
+    }
+}
+
+fn run_scan_job_worker(
+    app: tauri::AppHandle,
+    jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    job_id: String,
+    selected_root: SelectedRoot,
+    profile: ScanProfileDefinition,
+    cancellation: ScanCancellation,
+) {
+    let started_at_ms = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+        let cancellation_requested = cancellation.is_requested();
+        snapshot.status = if cancellation_requested {
+            ScanJobStatus::Cancelling
+        } else {
+            ScanJobStatus::Running
+        };
+        snapshot.updated_at_ms = current_time_ms();
+        snapshot.progress.current_phase = if cancellation_requested {
+            "cancelling"
+        } else {
+            "walking"
+        };
+        snapshot.progress.elapsed_ms = snapshot
+            .updated_at_ms
+            .saturating_sub(snapshot.started_at_ms);
+        snapshot.progress.cancellation_requested = cancellation_requested;
+        snapshot.started_at_ms
+    })
+    .map(|snapshot| snapshot.started_at_ms)
+    .unwrap_or_else(|_| current_time_ms());
+    emit_scan_job_progress(&app, &jobs, &job_id);
+
+    let mut progress = ScanJobProgressHandle {
+        app: app.clone(),
+        jobs: Arc::clone(&jobs),
+        job_id: job_id.clone(),
+        cancellation: cancellation.clone(),
+        started_at_ms,
+        profile_id: profile.id,
+        max_depth: profile.max_depth,
+        max_entries: profile.max_entries,
+        last_emitted_visited_entries: 0,
+    };
+
+    match scan_validated_root_with_progress(&selected_root, &profile, Some(&mut progress)) {
+        Ok(result) => {
+            let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                let completed_at_ms = current_time_ms();
+                snapshot.status = ScanJobStatus::Completed;
+                snapshot.updated_at_ms = completed_at_ms;
+                snapshot.completed_at_ms = Some(completed_at_ms);
+                snapshot.progress = ScanProgress::from_counts(
+                    profile.id,
+                    &result.counts,
+                    result.resources.len(),
+                    snapshot.started_at_ms,
+                    "completed",
+                    false,
+                    profile.max_depth,
+                    profile.max_entries,
+                );
+                snapshot.result = Some(result);
+                snapshot.error = None;
+            });
+            emit_scan_job_progress(&app, &jobs, &job_id);
+        }
+        Err(ScanError::Cancelled) => {
+            let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                let completed_at_ms = current_time_ms();
+                snapshot.status = ScanJobStatus::Cancelled;
+                snapshot.updated_at_ms = completed_at_ms;
+                snapshot.completed_at_ms = Some(completed_at_ms);
+                snapshot.progress.current_phase = "cancelled";
+                snapshot.progress.cancellation_requested = true;
+                snapshot.progress.elapsed_ms =
+                    completed_at_ms.saturating_sub(snapshot.started_at_ms);
+                snapshot.result = None;
+                snapshot.error = None;
+            });
+            emit_scan_job_progress(&app, &jobs, &job_id);
+        }
+        Err(error) => {
+            let command_error = ScanCommandError::from(error);
+            let _ = update_scan_job_snapshot(&jobs, &job_id, |snapshot| {
+                let completed_at_ms = current_time_ms();
+                snapshot.status = ScanJobStatus::Failed;
+                snapshot.updated_at_ms = completed_at_ms;
+                snapshot.completed_at_ms = Some(completed_at_ms);
+                snapshot.progress.current_phase = "failed";
+                snapshot.progress.elapsed_ms =
+                    completed_at_ms.saturating_sub(snapshot.started_at_ms);
+                snapshot.result = None;
+                snapshot.error = Some(command_error);
+            });
+            emit_scan_job_progress(&app, &jobs, &job_id);
+        }
+    }
+}
+
+fn update_scan_job_snapshot<F, R>(
+    jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    job_id: &str,
+    update: F,
+) -> Result<ScanJobSnapshot, ScanError>
+where
+    F: FnOnce(&mut ScanJobSnapshot) -> R,
+{
+    let mut guard = jobs
+        .lock()
+        .map_err(|_| ScanError::Permission("扫描状态锁定失败。".to_string()))?;
+    let record = guard
+        .get_mut(job_id)
+        .ok_or_else(|| ScanError::JobMissing("未找到扫描任务。".to_string()))?;
+    update(&mut record.snapshot);
+    Ok(record.snapshot.clone())
+}
+
+fn emit_scan_job_progress(
+    app: &tauri::AppHandle,
+    jobs: &Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    job_id: &str,
+) {
+    let snapshot = {
+        let Ok(guard) = jobs.lock() else {
+            return;
+        };
+        guard.get(job_id).map(|record| record.snapshot.clone())
+    };
+    let Some(snapshot) = snapshot else {
+        return;
+    };
+    let payload = build_scan_job_event_payload(
+        &snapshot.job_id,
+        snapshot.status,
+        snapshot.progress,
+        snapshot.error,
+    );
+    let _ = app.emit(SCAN_JOB_PROGRESS_EVENT, payload);
+}
+
+struct ScanJobProgressHandle {
+    app: tauri::AppHandle,
+    jobs: Arc<Mutex<HashMap<String, ScanJobRecord>>>,
+    job_id: String,
+    cancellation: ScanCancellation,
+    started_at_ms: u64,
+    profile_id: &'static str,
+    max_depth: usize,
+    max_entries: usize,
+    last_emitted_visited_entries: usize,
+}
+
+impl ScanJobProgressHandle {
+    fn is_cancelled(&self) -> bool {
+        self.cancellation.is_requested()
+    }
+
+    fn publish(
+        &mut self,
+        counts: &ScanCounts,
+        matched_resources: usize,
+        current_phase: &'static str,
+        force: bool,
+    ) {
+        let should_emit = force
+            || counts.visited_entries == 0
+            || counts
+                .visited_entries
+                .saturating_sub(self.last_emitted_visited_entries)
+                >= 32;
+        if !should_emit {
+            return;
+        }
+
+        self.last_emitted_visited_entries = counts.visited_entries;
+        let progress = ScanProgress::from_counts(
+            self.profile_id,
+            counts,
+            matched_resources,
+            self.started_at_ms,
+            current_phase,
+            self.is_cancelled(),
+            self.max_depth,
+            self.max_entries,
+        );
+        let _ = update_scan_job_snapshot(&self.jobs, &self.job_id, |snapshot| {
+            if !matches!(snapshot.status, ScanJobStatus::Cancelling) {
+                snapshot.status = ScanJobStatus::Running;
+            }
+            snapshot.updated_at_ms = current_time_ms();
+            snapshot.progress = progress;
+        });
+        emit_scan_job_progress(&self.app, &self.jobs, &self.job_id);
+    }
 }
 
 fn validate_scan_root_internal(path: &Path) -> Result<ValidatedRoot, ScanError> {
@@ -293,6 +809,14 @@ fn validate_scan_root_internal(path: &Path) -> Result<ValidatedRoot, ScanError> 
 fn scan_validated_root(
     selected_root: &SelectedRoot,
     profile: &ScanProfileDefinition,
+) -> Result<CustomScanResult, ScanError> {
+    scan_validated_root_with_progress(selected_root, profile, None)
+}
+
+fn scan_validated_root_with_progress(
+    selected_root: &SelectedRoot,
+    profile: &ScanProfileDefinition,
+    mut progress_handle: Option<&mut ScanJobProgressHandle>,
 ) -> Result<CustomScanResult, ScanError> {
     let policy = scanner_policy();
     let excluded_names_for_filter = policy
@@ -338,9 +862,22 @@ fn scan_validated_root(
         true
     });
 
+    if let Some(handle) = progress_handle.as_deref_mut() {
+        handle.publish(&counts, resources.len(), "walking", true);
+    }
+
     for entry in builder.build() {
+        if let Some(handle) = progress_handle.as_deref_mut() {
+            if handle.is_cancelled() {
+                counts.skipped_by_cancellation += 1;
+                handle.publish(&counts, resources.len(), "cancelled", true);
+                return Err(ScanError::Cancelled);
+            }
+        }
+
         if counts.visited_entries >= profile.max_entries {
             counts.truncated = true;
+            counts.skipped_by_limit += 1;
             warnings.push(ScanWarning {
                 code: "max_entries_reached",
                 message: format!(
@@ -354,11 +891,12 @@ fn scan_validated_root(
 
         let entry = match entry {
             Ok(entry) => entry,
-            Err(error) => {
+            Err(_error) => {
                 counts.denied_errors += 1;
+                counts.skipped_by_metadata_error += 1;
                 warnings.push(ScanWarning {
                     code: "walk_error",
-                    message: format!("目录遍历跳过一个条目：{error}"),
+                    message: "目录遍历跳过一个条目，原因未展开以避免暴露本地路径。".to_string(),
                     relative_path: None,
                 });
                 continue;
@@ -377,16 +915,20 @@ fn scan_validated_root(
 
         if path_has_excluded_name(relative, &excluded_names_for_loop) {
             counts.skipped_by_exclude += 1;
+            if let Some(handle) = progress_handle.as_deref_mut() {
+                handle.publish(&counts, resources.len(), "walking", false);
+            }
             continue;
         }
 
         let metadata = match fs::symlink_metadata(path) {
             Ok(metadata) => metadata,
-            Err(error) => {
+            Err(_error) => {
                 counts.denied_errors += 1;
+                counts.skipped_by_metadata_error += 1;
                 warnings.push(ScanWarning {
                     code: "metadata_denied",
-                    message: format!("无法读取条目元数据：{error}"),
+                    message: "无法读取条目元数据，已按策略跳过。".to_string(),
                     relative_path: Some(redact_relative_path(relative)),
                 });
                 continue;
@@ -400,6 +942,9 @@ fn scan_validated_root(
                 message: "符号链接未跟随。".to_string(),
                 relative_path: Some(redact_relative_path(relative)),
             });
+            if let Some(handle) = progress_handle.as_deref_mut() {
+                handle.publish(&counts, resources.len(), "walking", false);
+            }
             continue;
         }
 
@@ -418,6 +963,9 @@ fn scan_validated_root(
                 message: format!("文件超过 {} 字节元数据阈值。", policy.max_file_size_bytes),
                 relative_path: Some(redact_relative_path(relative)),
             });
+            if let Some(handle) = progress_handle.as_deref_mut() {
+                handle.publish(&counts, resources.len(), "walking", false);
+            }
             continue;
         }
 
@@ -438,10 +986,18 @@ fn scan_validated_root(
             classification_reason,
             sensitive,
         });
+
+        if let Some(handle) = progress_handle.as_deref_mut() {
+            handle.publish(&counts, resources.len(), "walking", false);
+        }
     }
 
     counts.skipped_by_exclude += skipped_by_filter.load(Ordering::Relaxed);
     counts.returned_resources = resources.len();
+
+    if let Some(handle) = progress_handle.as_deref_mut() {
+        handle.publish(&counts, resources.len(), "finalizing", true);
+    }
 
     Ok(CustomScanResult {
         policy_id: POLICY_ID,
@@ -1031,6 +1587,12 @@ impl From<ScanError> for ScanCommandError {
         match error {
             ScanError::InvalidPath(message) => Self { code, message },
             ScanError::InvalidProfile(message) => Self { code, message },
+            ScanError::JobConflict(message) => Self { code, message },
+            ScanError::JobMissing(message) => Self { code, message },
+            ScanError::Cancelled => Self {
+                code,
+                message: "扫描已取消。".to_string(),
+            },
             ScanError::RejectedRoot(message) => Self { code, message },
             ScanError::Permission(message) => Self { code, message },
             ScanError::SelectionMissing => Self {
@@ -1046,6 +1608,9 @@ impl ScanError {
         match self {
             ScanError::InvalidPath(_) => "invalid_path",
             ScanError::InvalidProfile(_) => "invalid_profile",
+            ScanError::JobConflict(_) => "job_conflict",
+            ScanError::JobMissing(_) => "job_missing",
+            ScanError::Cancelled => "cancelled",
             ScanError::RejectedRoot(_) => "rejected_root",
             ScanError::Permission(_) => "permission_error",
             ScanError::SelectionMissing => "selection_missing",
@@ -1056,8 +1621,10 @@ impl ScanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_resource_kind, get_scan_profiles, redact_relative_path, resolve_scan_profile,
-        scan_validated_root, validate_scan_root, SelectedRoot, DEFAULT_SCAN_PROFILE_ID,
+        build_scan_job_event_payload, classify_resource_kind, get_scan_profiles,
+        redact_relative_path, resolve_scan_profile, scan_validated_root, validate_scan_root,
+        ScanCancellation, ScanCounts, ScanJobStatus, ScanProgress, SelectedRoot,
+        DEFAULT_SCAN_PROFILE_ID,
     };
     use std::collections::HashSet;
     use std::fs;
@@ -1151,6 +1718,51 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_flag_is_shared_between_job_handles() {
+        let cancellation = ScanCancellation::default();
+        let cloned = cancellation.clone();
+
+        assert!(!cancellation.is_requested());
+        cloned.request();
+        assert!(cancellation.is_requested());
+    }
+
+    #[test]
+    fn progress_event_payload_uses_safe_aggregate_counters() {
+        let progress = ScanProgress::from_counts(
+            "project-root",
+            &ScanCounts {
+                visited_entries: 12,
+                returned_resources: 5,
+                skipped_by_exclude: 3,
+                skipped_by_guard: 0,
+                skipped_by_metadata_error: 1,
+                skipped_by_limit: 0,
+                skipped_by_cancellation: 0,
+                skipped_by_size: 1,
+                skipped_symlinks: 2,
+                denied_errors: 1,
+                truncated: false,
+            },
+            5,
+            100,
+            "walking",
+            false,
+            6,
+            2_000,
+        );
+        let payload =
+            build_scan_job_event_payload("scan-job-test", ScanJobStatus::Running, progress, None);
+
+        assert_eq!(payload.job_id, "scan-job-test");
+        assert_eq!(payload.progress.visited_entries, 12);
+        assert_eq!(payload.progress.matched_resources, 5);
+        assert_eq!(payload.progress.skipped_entries, 7);
+        assert_eq!(payload.progress.current_phase, "walking");
+        assert_eq!(payload.progress.profile_id, "project-root");
+    }
+
+    #[test]
     fn classifies_resources_without_reading_file_contents() {
         assert_eq!(
             classify_resource_kind(Path::new("skills/writer/SKILL.md")),
@@ -1225,6 +1837,69 @@ mod tests {
             result.counts.skipped_by_exclude > 0,
             "fixture should exercise scanner-local excludes"
         );
+    }
+
+    #[test]
+    fn scan_limit_updates_limit_counters() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "limit-fixture".to_string(),
+            canonical_root,
+            display_name: "custom-scan-basic".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+        };
+        let mut profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
+            .expect("default profile should resolve");
+        profile.max_entries = 1;
+
+        let result = scan_validated_root(&selected, &profile).expect("limited scan should succeed");
+
+        assert!(result.counts.truncated);
+        assert_eq!(result.counts.skipped_by_limit, 1);
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|warning| warning.code == "max_entries_reached"),
+            "limit warning should be returned"
+        );
+    }
+
+    #[test]
+    fn scan_results_do_not_include_fixture_file_contents() {
+        let canonical_root = fixture_root();
+        let selected = SelectedRoot {
+            selection_id: "no-content-fixture".to_string(),
+            canonical_root,
+            display_name: "custom-scan-basic".to_string(),
+            root_summary: "~/custom-scan-basic".to_string(),
+        };
+        let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
+            .expect("default profile should resolve");
+
+        let result = scan_validated_root(&selected, &profile).expect("fixture scan should succeed");
+        let visible_metadata = result
+            .resources
+            .iter()
+            .map(|resource| {
+                format!(
+                    "{} {} {}",
+                    resource.relative_path, resource.classification_reason, resource.resource_kind
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for forbidden in [
+            "Fixture skill metadata file",
+            "Fixture prompt placeholder",
+            "Fixture unknown local resource",
+        ] {
+            assert!(
+                !visible_metadata.contains(forbidden),
+                "scan metadata must not expose fixture content marker {forbidden}"
+            );
+        }
     }
 
     #[cfg(unix)]

@@ -7,6 +7,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scanner::pick_scan_directory,
             scanner::scan_custom_directory,
+            scanner::start_custom_scan_job,
+            scanner::cancel_scan_job,
+            scanner::get_scan_job_snapshot,
             scanner::get_scan_policy,
             scanner::get_scan_profiles
         ])
