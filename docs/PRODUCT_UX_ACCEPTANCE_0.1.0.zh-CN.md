@@ -52,6 +52,7 @@
 
 ## Native / Web smoke 限制
 
+- Phase 4C.6 原生 app-data 验收记录见 `docs/NATIVE_APP_DATA_ACCEPTANCE_0.1.0.zh-CN.md`。该验收已验证隔离 app data 启动、空首次使用、Legacy 隔离、重启持久化和 Rust native fixture scan/store/reset 路径；完整 native picker fixture scan 仍受当前 macOS Accessibility / foreground 自动化限制。
 - Web/Vite smoke 使用 mocked/empty Tauri fallback 和前端测试状态验证，不连接真实用户 app data。
 - Native smoke 只允许使用临时 app data 或既有 bounded fixture 状态；不得删除真实用户 app data。
 - 本轮验收不执行 `/`、home root、`/Users`、`/Volumes`、系统盘或真实 full-disk 扫描。
