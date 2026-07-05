@@ -248,7 +248,7 @@
 
 .aios-console-main {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--aios-shell-gap);
   min-width: 0;
   min-height: 0;
@@ -356,6 +356,87 @@
 .command-safe-icon {
   flex: none;
   color: var(--aios-success);
+}
+
+.resource-scope-bar {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  background: var(--aios-surface-raised);
+  box-shadow: var(--aios-shadow);
+  padding: 6px 8px;
+}
+
+.resource-scope-meta {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.resource-scope-meta strong {
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-scope-meta p {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-scope-tabs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 1px;
+}
+
+.resource-scope-tab.MuiButtonBase-root {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  min-height: 34px;
+  border: 1px solid var(--aios-outline);
+  border-radius: 999px;
+  background: var(--aios-surface);
+  color: var(--aios-text);
+  padding: 5px 7px 5px 10px;
+}
+
+.resource-scope-tab.active {
+  border-color: color-mix(in srgb, var(--aios-primary) 42%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-primary-soft) 76%, var(--aios-surface));
+  color: var(--aios-primary);
+}
+
+.resource-scope-tab span {
+  overflow: hidden;
+  max-width: 150px;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-scope-tab .MuiChip-root {
+  height: 22px;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .module-workspace,

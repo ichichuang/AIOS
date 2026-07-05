@@ -3,6 +3,7 @@ import type { ResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
+import type { ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary } from "../../lib/resourceCorpus";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
@@ -12,9 +13,19 @@ export interface ResourceSelectionContext {
   skillIdentity?: SkillIdentityRow;
 }
 
+export interface ResourceCorpusModuleState {
+  activeScope: ResourceCorpusScope;
+  error: string | null;
+  loading: boolean;
+  mode: ResourceCorpusSourceMode;
+  refresh: () => void;
+  summary: ResourceCorpusSummary;
+}
+
 export interface AiosModuleProps {
   allResources: AiosResource[];
   baseline: BaselineSummary;
+  resourceCorpus: ResourceCorpusModuleState;
   displayById: ReadonlyMap<string, ResourceDisplay>;
   query: string;
   resources: AiosResource[];

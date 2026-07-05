@@ -6,8 +6,9 @@ import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { makeGroups, moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function LegacyModule({ resources, selectedId, onSelect }: AiosModuleProps) {
+export function LegacyModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(
     () =>
       makeGroups(
@@ -28,7 +29,10 @@ export function LegacyModule({ resources, selectedId, onSelect }: AiosModuleProp
       count={resources.length}
       ariaLabel={moduleAriaLabel("legacy")}
       actions={
-        <Chip label="兼容说明，不恢复" variant="outlined" />
+        <>
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label="兼容说明，不恢复" variant="outlined" />
+        </>
       }
     >
       {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="legacy" onSelect={onSelect} />)}

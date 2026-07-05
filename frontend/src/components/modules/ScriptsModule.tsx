@@ -6,8 +6,9 @@ import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { makeGroups, moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ScriptsModule({ resources, selectedId, onSelect }: AiosModuleProps) {
+export function ScriptsModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(
     () =>
       makeGroups(
@@ -31,7 +32,10 @@ export function ScriptsModule({ resources, selectedId, onSelect }: AiosModulePro
       count={resources.length}
       ariaLabel={moduleAriaLabel("scripts")}
       actions={
-        <Chip label="清单记录，不执行" variant="outlined" />
+        <>
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label="清单记录，不执行" variant="outlined" />
+        </>
       }
     >
       {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="script" onSelect={onSelect} />)}

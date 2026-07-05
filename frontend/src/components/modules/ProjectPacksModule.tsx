@@ -6,8 +6,9 @@ import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ProjectPacksModule({ resources, selectedId, onSelect }: AiosModuleProps) {
+export function ProjectPacksModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => {
     const grouped = new Map<string, ResourceGroupData>();
     for (const resource of resources) {
@@ -26,7 +27,10 @@ export function ProjectPacksModule({ resources, selectedId, onSelect }: AiosModu
       count={resources.length}
       ariaLabel={moduleAriaLabel("project-packs")}
       actions={
-        <Chip label="不复制到全局入口" variant="outlined" />
+        <>
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label="不复制到全局入口" variant="outlined" />
+        </>
       }
     >
       {groups.length === 0 ? <ModuleEmptyState /> : groups.map((group) => <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant="project-pack" onSelect={onSelect} />)}

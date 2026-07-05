@@ -63,7 +63,7 @@ import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 
-export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProps) {
+export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }: AiosModuleProps) {
   const [policy, setPolicy] = useState<ScannerPolicy>(fallbackScanPolicy);
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
   const [activeProfileId, setActiveProfileId] = useState<ScanProfileId>(DEFAULT_SCAN_PROFILE_ID);
@@ -82,6 +82,7 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tauriAvailable = isTauriRuntimeAvailable();
+  const refreshCorpus = resourceCorpus.refresh;
 
   useEffect(() => {
     Promise.all([getScanPolicy(), getScanProfiles()])
@@ -116,12 +117,13 @@ export function CustomScanModule({ query, selectedId, onSelect }: AiosModuleProp
         return nextSources.filter((source) => source.enabled).map((source) => source.id);
       });
       setLibraryError(null);
+      refreshCorpus();
     } catch (storeError) {
       setLibraryError(formatCommandError(storeError));
     } finally {
       setLibraryBusyState("idle");
     }
-  }, []);
+  }, [refreshCorpus]);
 
   useEffect(() => {
     void refreshResourceLibrary();

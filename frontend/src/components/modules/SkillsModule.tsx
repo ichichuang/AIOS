@@ -13,6 +13,7 @@ import { AiosModuleFrame, AiosPillRail } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
 type SkillGroupingMode = "capability" | "source";
 type SkillSourceViewMode = "merged" | "source";
@@ -45,7 +46,7 @@ const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
   { key: "runtime-views", title: "运行时视图", summary: "运行时生成的入口视图和技能映射。", predicate: (row) => row.mode === "source" && row.primaryResource.capabilityType === "runtime-view" }
 ];
 
-export const SkillsModule = memo(function SkillsModule({ displayById, query, resources, selectedId, skillCapabilityById, onClearSelection, onSelect }: AiosModuleProps) {
+export const SkillsModule = memo(function SkillsModule({ displayById, query, resourceCorpus, resources, selectedId, skillCapabilityById, onClearSelection, onSelect }: AiosModuleProps) {
   const [groupingMode, setGroupingMode] = useState<SkillGroupingMode>("capability");
   const [sourceViewMode, setSourceViewMode] = useState<SkillSourceViewMode>("merged");
   const [qualityFilterMode, setQualityFilterMode] = useState<SkillQualityFilterMode>("all");
@@ -194,6 +195,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       ariaLabel={moduleAriaLabel("skills")}
       actions={
         <>
+        <ResourceCorpusIndicator state={resourceCorpus} />
         {qualityFilterMode === "needs-work" && (
           <Chip
             color="warning"

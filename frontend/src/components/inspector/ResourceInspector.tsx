@@ -241,6 +241,16 @@ function getBoundaryChips(resource: AiosResource): Array<{ label: string; classN
 }
 
 function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTechnicalDetailRow[], provenance: SkillIdentityProvenance | null): { title: string; body: string; chipLabel: string; chipClassName?: string; tone: "info" | "warn" } | null {
+  if (isDynamicCorpusResource(resource)) {
+    return {
+      title: "动态资源库元数据",
+      body: "详情来自 Rust-owned SQLite 中的扫描元数据，不重新读取文件、不执行脚本或 MCP。",
+      chipLabel: "动态资源库",
+      chipClassName: "status-chip status-ok",
+      tone: "info"
+    };
+  }
+
   if (resource.toolType === "legacy" || resource.capabilityType === "usage-prompt") {
     return {
       title: "兼容资源",
@@ -275,6 +285,9 @@ function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTech
 
 function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentityProvenance | null): string {
   if (provenance?.sourceLabels) return provenance.sourceLabels;
+  if (isDynamicCorpusResource(resource)) {
+    return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
+  }
 
   const server = getMcpServer(resource);
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
@@ -455,6 +468,31 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 
 function getMetadataRows(resource: AiosResource): MetadataRow[] {
   const rows: MetadataRow[] = [];
+  if (isDynamicCorpusResource(resource)) {
+    const projectLabel = getMetadataString(resource, "projectLabel");
+    const scanSourceName = getMetadataString(resource, "scanSourceName");
+    const rootDisplayPath = getMetadataString(resource, "rootDisplayPath") ?? getMetadataString(resource, "root");
+    const relativePath = getMetadataString(resource, "relativePath");
+    const displayPath = getMetadataString(resource, "displayPath");
+    const scanJobId = getMetadataString(resource, "scanJobId");
+    const scanJobStatus = getMetadataString(resource, "scanJobStatus");
+    const classificationReason = getMetadataString(resource, "classificationReason");
+    rows.push(
+      { label: "语料来源", value: "动态资源库" },
+      { label: "项目 / scope", value: projectLabel ?? "未归类" },
+      { label: "扫描来源", value: scanSourceName ?? "未记录" },
+      { label: "授权根目录", value: rootDisplayPath ?? "未记录", code: Boolean(rootDisplayPath) },
+      { label: "相对路径", value: relativePath ?? displayPath ?? "未记录", code: Boolean(relativePath || displayPath) }
+    );
+    if (scanJobId) rows.push({ label: "最近扫描任务", value: scanJobId, code: true });
+    if (scanJobStatus) rows.push({ label: "任务状态", value: scanJobStatus });
+    if (classificationReason) rows.push({ label: "分类原因", value: classificationReason });
+    const detailLocations = resource.metadata?.corpusDetailLocations;
+    if (Array.isArray(detailLocations)) rows.push({ label: "记录位置", value: detailLocations.length });
+    const findings = resource.metadata?.corpusFindings;
+    if (Array.isArray(findings)) rows.push({ label: "安全发现", value: findings.length });
+  }
+
   const server = getMcpServer(resource);
   if (server) {
     rows.push(
@@ -522,6 +560,10 @@ function hasDiscoveryMetadata(resource: AiosResource): boolean {
       resource.metadata?.activeEntrypoint !== undefined ||
       resource.metadata?.distillationRelated !== undefined
   );
+}
+
+function isDynamicCorpusResource(resource: AiosResource): boolean {
+  return getMetadataString(resource, "corpusSource") === "dynamic-resource-corpus";
 }
 
 function formatDate(value: string): string {

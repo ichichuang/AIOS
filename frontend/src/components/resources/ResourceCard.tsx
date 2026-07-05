@@ -94,6 +94,7 @@ function getUsageChips(resource: AiosResource, server: McpServerRecord | null, v
 }
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
+  if (isDynamicCorpusResource(resource)) return ["动态资源库", getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "未归类"];
   if (variant === "mcp" && server) return [server.transport, ...getMcpRiskLabels(server)];
   if (variant === "skill") return [getSkillRuntimeLabel(resource)];
   if (variant === "script") return [getScriptKind(resource), "只读清单"];
@@ -123,6 +124,9 @@ function dedupeChips(chips: AiosUsageChip[]): AiosUsageChip[] {
 }
 
 function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string {
+  if (isDynamicCorpusResource(resource)) {
+    return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
+  }
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
   if (variant === "report") return "本地报告";
   if (variant === "project-pack") return getProjectPackArea(resource);
@@ -137,6 +141,7 @@ function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord
 }
 
 function getBoundaryLabel(resource: AiosResource, variant: ResourceCardVariant): string {
+  if (isDynamicCorpusResource(resource)) return "SQLite 元数据";
   if (resource.safetyProfile.writesGlobalState) return "写入需复核";
   if (variant === "mcp") return "只读元数据";
   if (variant === "legacy" || resource.toolType === "legacy") return "兼容只读";
@@ -150,6 +155,7 @@ function getUsageTitle(server: McpServerRecord | null, variant: ResourceCardVari
 }
 
 function getUsagePurpose(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant, display: ReturnType<typeof getResourceDisplay>): string {
+  if (isDynamicCorpusResource(resource)) return `${display.zhDescription} 来源：${getMetadataString(resource, "scanSourceName") ?? "动态资源库"}；详情只使用已持久化元数据。`;
   if (variant === "mcp" && server) return `MCP ${server.transport} 服务；${getMcpRiskLabels(server)[0]}，仅查看用途与风险摘要，不启动或连接。`;
   if (variant === "script") return `本地只读工具；${display.zhDescription} 执行需要用户显式命令。`;
   if (variant === "report") return `${formatDate(resource.updatedAt)} · ${display.zhDescription}`;
@@ -195,6 +201,10 @@ function getMcpServer(resource: AiosResource): McpServerRecord | null {
   const candidate = server as Partial<McpServerRecord>;
   if (typeof candidate.name !== "string" || typeof candidate.command !== "string") return null;
   return candidate as McpServerRecord;
+}
+
+function isDynamicCorpusResource(resource: AiosResource): boolean {
+  return getMetadataString(resource, "corpusSource") === "dynamic-resource-corpus";
 }
 
 function getMetadataString(resource: AiosResource, key: string): string | null {

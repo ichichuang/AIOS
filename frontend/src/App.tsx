@@ -16,6 +16,22 @@ import { zhCN } from "./i18n/zh-CN";
 import { buildResourceDisplayMap, buildResourcesByView, countResourcesByView, filterResourceList, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
 import { markAiosPerf } from "./lib/perf";
+import {
+  fallbackResourceCorpusSummary,
+  getActiveResourceCorpusSummary,
+  getCorpusSourceMode,
+  getDynamicCorpusResourceId,
+  getResourceDetail,
+  globalCorpusScope,
+  isDynamicCorpusResource,
+  listResourceCorpusScopes,
+  listResourcesByScope,
+  mapCorpusResourcesToAiosResources,
+  mergeResourceWithCorpusDetail,
+  scopeToResourceQuery,
+  type ResourceCorpusScope,
+  type ResourceCorpusSummary
+} from "./lib/resourceCorpus";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
 import { useModuleSwapMotion } from "./lib/useAiosMotion";
 import type { AiosInventory, AiosResource } from "./types/inventory";
@@ -27,6 +43,13 @@ export default function App() {
   const [renderedView, setRenderedView] = useState<ResourceView>("dashboard");
   const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<{ resource: AiosResource; context?: ResourceSelectionContext } | null>(null);
+  const [corpusSummary, setCorpusSummary] = useState<ResourceCorpusSummary>(fallbackResourceCorpusSummary);
+  const [corpusScopes, setCorpusScopes] = useState<ResourceCorpusScope[]>([globalCorpusScope]);
+  const [activeCorpusScope, setActiveCorpusScope] = useState<ResourceCorpusScope>(globalCorpusScope);
+  const [corpusResources, setCorpusResources] = useState<AiosResource[]>([]);
+  const [corpusLoading, setCorpusLoading] = useState(false);
+  const [corpusError, setCorpusError] = useState<string | null>(null);
+  const [corpusRefreshToken, setCorpusRefreshToken] = useState(0);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -40,12 +63,73 @@ export default function App() {
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
   }, []);
 
-  const displayById = useMemo(() => (inventory ? buildResourceDisplayMap(inventory.resources) : new Map()), [inventory]);
+  useEffect(() => {
+    let active = true;
+    setCorpusLoading(true);
+    Promise.all([getActiveResourceCorpusSummary(), listResourceCorpusScopes()])
+      .then(([summary, scopes]) => {
+        if (!active) return;
+        const safeScopes = scopes.length > 0 ? scopes : [globalCorpusScope];
+        setCorpusSummary(summary);
+        setCorpusScopes(safeScopes);
+        setCorpusError(null);
+        setActiveCorpusScope((current) => safeScopes.find((scope) => scope.id === current.id) ?? safeScopes[0] ?? globalCorpusScope);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setCorpusSummary(fallbackResourceCorpusSummary);
+        setCorpusScopes([globalCorpusScope]);
+        setActiveCorpusScope(globalCorpusScope);
+        setCorpusError(formatAsyncError(loadError));
+      })
+      .finally(() => {
+        if (active) setCorpusLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [corpusRefreshToken]);
+
+  const corpusMode = getCorpusSourceMode(corpusSummary);
+
+  useEffect(() => {
+    let active = true;
+    if (corpusMode !== "dynamic") {
+      setCorpusResources([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    setCorpusLoading(true);
+    listResourcesByScope(scopeToResourceQuery(activeCorpusScope))
+      .then((resources) => {
+        if (!active) return;
+        setCorpusResources(mapCorpusResourcesToAiosResources(resources));
+        setCorpusError(null);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setCorpusResources([]);
+        setCorpusError(formatAsyncError(loadError));
+      })
+      .finally(() => {
+        if (active) setCorpusLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeCorpusScope, corpusMode, corpusRefreshToken]);
+
+  const activeResources = useMemo(() => (corpusMode === "dynamic" ? corpusResources : inventory?.resources ?? []), [corpusMode, corpusResources, inventory]);
+  const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
+  const displayById = useMemo(() => buildResourceDisplayMap(activeResources), [activeResources]);
   const skillCapabilityById = useMemo(
-    () => (inventory ? buildSkillCapabilityClassificationMap(inventory.resources, displayById) : new Map<string, SkillCapabilityClassification>()),
-    [displayById, inventory]
+    () => buildSkillCapabilityClassificationMap(activeResources, displayById),
+    [activeResources, displayById]
   );
-  const resourcesByView = useMemo(() => (inventory ? buildResourcesByView(inventory.resources) : null), [inventory]);
+  const resourcesByView = useMemo(() => buildResourcesByView(activeResources), [activeResources]);
   const viewCounts = useMemo(() => (resourcesByView ? countResourcesByView(resourcesByView) : null), [resourcesByView]);
   const moduleResources = useMemo(() => (resourcesByView ? resourcesByView[renderedView] : []), [renderedView, resourcesByView]);
   const filteredResources = useMemo(
@@ -56,6 +140,7 @@ export default function App() {
   const selectedSkillIdentity = selection?.context?.skillIdentity ?? null;
   const selectedId = selectedResource?.id ?? null;
   const selectedSkillCapability = useMemo(() => (selectedId ? skillCapabilityById.get(selectedId) ?? null : null), [selectedId, skillCapabilityById]);
+  const refreshResourceCorpus = useCallback(() => setCorpusRefreshToken((current) => current + 1), []);
 
   const handleViewChange = useCallback((view: ResourceView) => {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
@@ -66,8 +151,24 @@ export default function App() {
     });
   }, [activeView, startRouteTransition]);
 
+  const handleScopeChange = useCallback((scope: ResourceCorpusScope) => {
+    setActiveCorpusScope(scope);
+    setSelection(null);
+  }, []);
+
   const selectResource = useCallback((resource: AiosResource, context?: ResourceSelectionContext) => {
     setSelection({ resource, context });
+    if (!isDynamicCorpusResource(resource) || resource.metadata?.corpusDetailLoaded === true) return;
+    const resourceId = getDynamicCorpusResourceId(resource);
+    if (!resourceId) return;
+    getResourceDetail(resourceId)
+      .then((detail) => {
+        setSelection((current) => {
+          if (!current || current.resource.id !== resource.id) return current;
+          return { ...current, resource: mergeResourceWithCorpusDetail(current.resource, detail) };
+        });
+      })
+      .catch((detailError: unknown) => setCorpusError(formatAsyncError(detailError)));
   }, []);
 
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
@@ -83,6 +184,13 @@ export default function App() {
     });
   }, [deferredQuery, filteredResources.length, renderedView]);
 
+  useEffect(() => {
+    if (!selection) return;
+    if (!activeResources.some((resource) => resource.id === selection.resource.id)) {
+      setSelection(null);
+    }
+  }, [activeResources, selection]);
+
   if (error) {
     return (
       <Box className="center-state">
@@ -94,7 +202,7 @@ export default function App() {
     );
   }
 
-  if (!inventory) {
+  if (!inventory || !displayInventory) {
     return (
       <Box className="center-state">
         <Typography component="h1" variant="h1">
@@ -106,8 +214,16 @@ export default function App() {
   }
 
   const moduleProps: AiosModuleProps = {
-    allResources: inventory.resources,
+    allResources: activeResources,
     baseline: inventory.baseline,
+    resourceCorpus: {
+      activeScope: activeCorpusScope,
+      error: corpusError,
+      loading: corpusLoading,
+      mode: corpusMode,
+      refresh: refreshResourceCorpus,
+      summary: corpusSummary
+    },
     displayById,
     query: deferredQuery,
     resources: filteredResources,
@@ -123,7 +239,13 @@ export default function App() {
   return (
     <AiosConsoleShell
       activeView={activeView}
-      inventory={inventory}
+      activeScopeId={activeCorpusScope.id}
+      corpusError={corpusError}
+      corpusLoading={corpusLoading}
+      corpusMode={corpusMode}
+      corpusScopes={corpusScopes}
+      corpusSummary={corpusSummary}
+      inventory={displayInventory}
       query={query}
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
@@ -132,6 +254,7 @@ export default function App() {
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}
       onQueryChange={handleQueryChange}
+      onScopeChange={handleScopeChange}
       onViewChange={handleViewChange}
     >
       <Box ref={moduleRef} className="module-transition-scope">
@@ -139,6 +262,10 @@ export default function App() {
       </Box>
     </AiosConsoleShell>
   );
+}
+
+function formatAsyncError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function renderModule(activeView: ResourceView, moduleProps: AiosModuleProps) {

@@ -6,8 +6,9 @@ import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageRow } from ".
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function PoliciesModule({ baseline, resources, selectedId, onSelect }: AiosModuleProps) {
+export function PoliciesModule({ baseline, resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => [{ title: "策略守卫", summary: "策略资源仅展示哈希、路径和边界说明，不读取或修改策略内容。", resources }], [resources]);
 
   const guardrails = useMemo(
@@ -29,7 +30,10 @@ export function PoliciesModule({ baseline, resources, selectedId, onSelect }: Ai
       count={resources.length}
       ariaLabel={moduleAriaLabel("policies")}
       actions={
-        <Chip label={`哈希 ${shortHash(baseline.policyHash)}`} variant="outlined" />
+        <>
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label={`哈希 ${shortHash(baseline.policyHash)}`} variant="outlined" />
+        </>
       }
     >
         <AiosSection className="policy-section">

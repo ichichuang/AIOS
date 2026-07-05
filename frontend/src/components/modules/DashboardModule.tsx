@@ -9,6 +9,7 @@ import { ResourceCard } from "../resources/ResourceCard";
 import { AiosCapabilityLauncherCard, AiosInspectorSection, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard, type AiosUsageChip } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { riskCounts, sortByUpdatedAt } from "./moduleUtils";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
 import WebRounded from "@mui/icons-material/WebRounded";
 import PhoneAndroidRounded from "@mui/icons-material/PhoneAndroidRounded";
@@ -103,11 +104,11 @@ const desktopBoundaryCards: Array<{
   },
   {
     title: "SQLite 本地索引",
-    purpose: "Phase 3A 已添加 Rust-owned SQLite 元数据资源库；静态模块仍保留 JSON snapshot 兼容路径。",
+    purpose: "Phase 3C 将扫描结果作为动态资源库优先展示；静态 snapshot 保留为未扫描时的兼容路径。",
     icon: <StorageRounded fontSize="small" />,
     chips: [
-      { label: "Phase 3A", className: "status-chip status-ok", variant: "filled" },
-      { label: "仅元数据" }
+      { label: "Phase 3C", className: "status-chip status-ok", variant: "filled" },
+      { label: "动态优先" }
     ]
   },
   {
@@ -121,7 +122,7 @@ const desktopBoundaryCards: Array<{
   }
 ];
 
-export function DashboardModule({ allResources, baseline, selectedId, viewCounts, onSelect, onViewChange, onQueryChange }: AiosModuleProps) {
+export function DashboardModule({ allResources, baseline, resourceCorpus, selectedId, viewCounts, onSelect, onViewChange, onQueryChange }: AiosModuleProps) {
   const risks = useMemo(() => riskCounts(allResources), [allResources]);
   const recentReports = useMemo(() => sortByUpdatedAt(allResources.filter((resource) => resource.capabilityType === "report")).slice(0, 3), [allResources]);
 
@@ -141,8 +142,9 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
       count={allResources.length}
       actions={
         <>
-        <Chip className="status-chip status-ok" label="本地只读" />
-        <Chip label={formatSnapshotDate(baseline.generatedAt)} variant="outlined" />
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip className="status-chip status-ok" label="本地只读" />
+          <Chip label={formatSnapshotDate(baseline.generatedAt)} variant="outlined" />
         </>
       }
     >
@@ -157,9 +159,9 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
         <Box className="dashboard-desktop-status" aria-label="AIOS Desktop MVP 边界">
           <Box className="dashboard-status-copy">
             <Typography component="strong">桌面产品状态</Typography>
-          <Typography color="text.secondary" variant="body2">
-              当前展示 repo-local snapshot，并支持用户显式添加多个扫描来源后手动执行只读元数据扫描；完成后的安全元数据写入本地 SQLite 资源库，不执行脚本、MCP 或全盘遍历。
-          </Typography>
+            <Typography color="text.secondary" variant="body2">
+              当前优先展示用户扫描后写入 Rust-owned SQLite 的动态资源库；未扫描时回退到 repo-local snapshot。扫描仍需在扫描管理中手动启动，不执行脚本、MCP 或全盘遍历。
+            </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
             {desktopStatusChips.map((chip) => (
@@ -170,7 +172,7 @@ export function DashboardModule({ allResources, baseline, selectedId, viewCounts
       </Box>
 
       <AiosSection className="desktop-boundary-section">
-        <AiosSectionHeader title="桌面能力边界" summary="Phase 3B 增加多目录扫描管理，静态清单继续保留。" />
+        <AiosSectionHeader title="桌面能力边界" summary="Phase 3C 接入动态资源库，扫描管理仍是唯一扫描入口。" />
         <Box className="quick-entry-grid desktop-boundary-grid">
           {desktopBoundaryCards.map((entry) => (
             <AiosUsageCard className="dashboard-boundary-card" chips={entry.chips} icon={entry.icon} key={entry.title} purpose={entry.purpose} title={entry.title} />

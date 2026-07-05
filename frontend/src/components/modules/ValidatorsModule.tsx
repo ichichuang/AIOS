@@ -7,8 +7,9 @@ import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageRow } from ".
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ValidatorsModule({ baseline, resources, selectedId, onSelect }: AiosModuleProps) {
+export function ValidatorsModule({ baseline, resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => [{ title: "观察型验证器", summary: "验证器能力仅展示状态和用途；运行需要用户显式命令。", resources }], [resources]);
 
   return (
@@ -18,7 +19,10 @@ export function ValidatorsModule({ baseline, resources, selectedId, onSelect }: 
       count={resources.length}
       ariaLabel={moduleAriaLabel("validators")}
       actions={
-        <Chip label="检查项与基线验证" variant="outlined" />
+        <>
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label="检查项与基线验证" variant="outlined" />
+        </>
       }
     >
         <AiosSection className="validator-section">

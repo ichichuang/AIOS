@@ -6,8 +6,9 @@ import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { getMcpGroups, moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
+import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) {
+export function McpModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => getMcpGroups(resources), [resources]);
 
   return (
@@ -18,8 +19,9 @@ export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) 
       ariaLabel={moduleAriaLabel("mcp")}
       actions={
         <>
-        <Chip label="不连接服务" variant="outlined" />
-        <Chip label="仅显示环境变量名数量" variant="outlined" />
+          <ResourceCorpusIndicator state={resourceCorpus} />
+          <Chip label="不连接服务" variant="outlined" />
+          <Chip label="仅显示环境变量名数量" variant="outlined" />
         </>
       }
     >

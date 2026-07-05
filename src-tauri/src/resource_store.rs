@@ -1,4 +1,5 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,7 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 
 const DATABASE_FILE_NAME: &str = "aios-resource-library.sqlite3";
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
+const DEFAULT_RESOURCE_QUERY_LIMIT: usize = 100;
+const MAX_RESOURCE_QUERY_LIMIT: usize = 500;
 
 #[derive(Clone, Debug)]
 pub struct ResourceStoreState {
@@ -273,6 +276,135 @@ pub struct PersistedResource {
     pub scan_job_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusScope {
+    pub id: String,
+    pub scope_kind: String,
+    pub label: String,
+    pub description: String,
+    pub resource_count: u64,
+    pub project_label: Option<String>,
+    pub scan_source_id: Option<String>,
+    pub root_display_path: Option<String>,
+    pub profile_id: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceScopeCount {
+    pub scope_id: String,
+    pub scope_kind: String,
+    pub label: String,
+    pub count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusSummary {
+    pub source_count: u64,
+    pub enabled_source_count: u64,
+    pub project_scope_count: u64,
+    pub resource_count: u64,
+    pub location_count: u64,
+    pub latest_successful_scan: Option<PersistedScanJob>,
+    pub counts_by_kind: Vec<ResourceKindCount>,
+    pub counts_by_scope: Vec<ResourceScopeCount>,
+    pub skipped_entry_total: u64,
+    pub error_total: u64,
+    pub metadata_only: bool,
+    pub content_storage_enabled: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusResource {
+    pub id: String,
+    pub stable_key: String,
+    pub name: String,
+    pub resource_kind: String,
+    pub description: String,
+    pub primary_type: String,
+    pub risk_level: String,
+    pub boundary_labels: Vec<String>,
+    pub updated_at_ms: u64,
+    pub location_id: Option<String>,
+    pub scan_source_id: Option<String>,
+    pub scan_source_name: Option<String>,
+    pub source_kind: Option<String>,
+    pub scan_source_enabled: Option<bool>,
+    pub project_label: Option<String>,
+    pub root_display_path: Option<String>,
+    pub profile_id: Option<String>,
+    pub scan_job_id: Option<String>,
+    pub scan_job_status: Option<String>,
+    pub scan_job_started_at_ms: Option<u64>,
+    pub scan_job_finished_at_ms: Option<u64>,
+    pub relative_path: Option<String>,
+    pub display_path: Option<String>,
+    pub extension: Option<String>,
+    pub entry_type: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub modified_at_ms: Option<u64>,
+    pub classification_reason: Option<String>,
+    pub sensitive_path_redacted: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusLocation {
+    pub id: String,
+    pub scan_source_id: String,
+    pub scan_source_name: String,
+    pub project_label: Option<String>,
+    pub root_display_path: String,
+    pub profile_id: String,
+    pub scan_job_id: String,
+    pub scan_job_status: String,
+    pub relative_path: String,
+    pub display_path: String,
+    pub extension: Option<String>,
+    pub entry_type: String,
+    pub size_bytes: Option<u64>,
+    pub modified_at_ms: Option<u64>,
+    pub classification_reason: String,
+    pub sensitive_path_redacted: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusFinding {
+    pub id: String,
+    pub scan_job_id: String,
+    pub finding_kind: String,
+    pub severity: String,
+    pub message: String,
+    pub safe_detail_json: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusDetail {
+    pub resource: ResourceCorpusResource,
+    pub locations: Vec<ResourceCorpusLocation>,
+    pub findings: Vec<ResourceCorpusFinding>,
+    pub metadata_only: bool,
+    pub content_storage_enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCorpusQuery {
+    pub scope_kind: Option<String>,
+    pub scope_id: Option<String>,
+    pub project_label: Option<String>,
+    pub scan_source_id: Option<String>,
+    pub resource_kind: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateScanSourceInput {
@@ -346,6 +478,63 @@ pub fn list_persisted_resources(
 }
 
 #[tauri::command]
+pub fn list_resource_corpus_scopes(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreCommandError> {
+    list_resource_corpus_scopes_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_project_scopes(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreCommandError> {
+    list_project_scopes_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_active_resource_corpus_summary(
+    state: State<'_, ResourceStoreState>,
+) -> Result<ResourceCorpusSummary, ResourceStoreCommandError> {
+    get_active_resource_corpus_summary_for_path(&state.db_path)
+        .map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_resources_by_scope(
+    state: State<'_, ResourceStoreState>,
+    query: ResourceCorpusQuery,
+) -> Result<Vec<ResourceCorpusResource>, ResourceStoreCommandError> {
+    list_resources_by_scope_for_path(&state.db_path, query).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_resources_by_kind(
+    state: State<'_, ResourceStoreState>,
+    resource_kind: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<ResourceCorpusResource>, ResourceStoreCommandError> {
+    list_resources_by_kind_for_path(&state.db_path, &resource_kind, limit, offset)
+        .map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_resource_detail(
+    state: State<'_, ResourceStoreState>,
+    resource_id: String,
+) -> Result<ResourceCorpusDetail, ResourceStoreCommandError> {
+    get_resource_detail_for_path(&state.db_path, &resource_id)
+        .map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_resource_counts_by_scope(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ResourceScopeCount>, ResourceStoreCommandError> {
+    get_resource_counts_by_scope_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
 pub fn clear_resource_library(
     state: State<'_, ResourceStoreState>,
 ) -> Result<ResourceLibrarySummary, ResourceStoreCommandError> {
@@ -372,6 +561,7 @@ pub fn initialize_database(db_path: &Path) -> Result<(), ResourceStoreError> {
     let conn = open_raw_connection(db_path)?;
     migrate_v1(&conn)?;
     migrate_v2(&conn)?;
+    migrate_v3(&conn)?;
     Ok(())
 }
 
@@ -852,6 +1042,138 @@ pub fn list_persisted_resources_for_path(
     collect_rows(rows)
 }
 
+pub fn list_resource_corpus_scopes_for_path(
+    db_path: &Path,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let mut scopes = Vec::new();
+    let total_resources = count_rows(&conn, "resources")?;
+    scopes.push(ResourceCorpusScope {
+        id: "global".to_string(),
+        scope_kind: "global".to_string(),
+        label: "全局".to_string(),
+        description: "全部动态资源库元数据。".to_string(),
+        resource_count: total_resources,
+        project_label: None,
+        scan_source_id: None,
+        root_display_path: None,
+        profile_id: None,
+        enabled: None,
+    });
+
+    scopes.extend(list_project_scopes_for_connection(&conn)?);
+
+    let unclassified_count = unclassified_resource_count(&conn)?;
+    if unclassified_count > 0 {
+        scopes.push(ResourceCorpusScope {
+            id: "unclassified".to_string(),
+            scope_kind: "unclassified".to_string(),
+            label: "未归类".to_string(),
+            description: "未设置 project/scope 标签的动态资源。".to_string(),
+            resource_count: unclassified_count,
+            project_label: None,
+            scan_source_id: None,
+            root_display_path: None,
+            profile_id: None,
+            enabled: None,
+        });
+    }
+
+    scopes.extend(list_source_scopes_for_connection(&conn)?);
+    Ok(scopes)
+}
+
+pub fn list_project_scopes_for_path(
+    db_path: &Path,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    list_project_scopes_for_connection(&conn)
+}
+
+pub fn get_active_resource_corpus_summary_for_path(
+    db_path: &Path,
+) -> Result<ResourceCorpusSummary, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let counts_by_scope = get_resource_counts_by_scope_for_connection(&conn)?;
+
+    Ok(ResourceCorpusSummary {
+        source_count: count_rows(&conn, "scan_sources")?,
+        enabled_source_count: scalar_count(
+            &conn,
+            "SELECT COUNT(*) FROM scan_sources WHERE enabled = 1",
+        )?,
+        project_scope_count: scalar_count(
+            &conn,
+            "SELECT COUNT(DISTINCT project_label)
+            FROM scan_sources
+            WHERE project_label IS NOT NULL AND TRIM(project_label) <> ''",
+        )?,
+        resource_count: count_rows(&conn, "resources")?,
+        location_count: count_rows(&conn, "resource_locations")?,
+        latest_successful_scan: latest_successful_scan_job(&conn)?,
+        counts_by_kind: resource_kind_counts(&conn)?,
+        counts_by_scope,
+        skipped_entry_total: scalar_count(&conn, "SELECT COALESCE(SUM(count), 0) FROM scan_skips")?,
+        error_total: scalar_count(&conn, "SELECT COUNT(*) FROM scan_errors")?,
+        metadata_only: true,
+        content_storage_enabled: false,
+    })
+}
+
+pub fn list_resources_by_scope_for_path(
+    db_path: &Path,
+    query: ResourceCorpusQuery,
+) -> Result<Vec<ResourceCorpusResource>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let filter = ScopeFilter::from_query(&conn, &query)?;
+    query_corpus_resources(&conn, &filter, query.limit, query.offset)
+}
+
+pub fn list_resources_by_kind_for_path(
+    db_path: &Path,
+    resource_kind: &str,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<ResourceCorpusResource>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let filter = ScopeFilter {
+        kind: ScopeFilterKind::Global,
+        resource_kind: normalized_optional_text(Some(resource_kind)),
+    };
+    query_corpus_resources(&conn, &filter, limit, offset)
+}
+
+pub fn get_resource_detail_for_path(
+    db_path: &Path,
+    resource_id: &str,
+) -> Result<ResourceCorpusDetail, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let resource_id = normalized_required_text("资源 ID", resource_id)?;
+    let filter = ScopeFilter {
+        kind: ScopeFilterKind::Global,
+        resource_kind: None,
+    };
+    let resource = query_corpus_resource_by_id(&conn, &filter, &resource_id)?
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到资源详情。".to_string()))?;
+    let locations = list_resource_locations_for_connection(&conn, &resource_id)?;
+    let findings = list_resource_findings_for_connection(&conn, &resource_id)?;
+
+    Ok(ResourceCorpusDetail {
+        resource,
+        locations,
+        findings,
+        metadata_only: true,
+        content_storage_enabled: false,
+    })
+}
+
+pub fn get_resource_counts_by_scope_for_path(
+    db_path: &Path,
+) -> Result<Vec<ResourceScopeCount>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    get_resource_counts_by_scope_for_connection(&conn)
+}
+
 pub fn get_scan_source_for_path(
     db_path: &Path,
     source_id: &str,
@@ -921,6 +1243,7 @@ fn open_initialized_connection(db_path: &Path) -> Result<Connection, ResourceSto
     let conn = open_raw_connection(db_path)?;
     migrate_v1(&conn)?;
     migrate_v2(&conn)?;
+    migrate_v3(&conn)?;
     Ok(conn)
 }
 
@@ -1075,6 +1398,22 @@ fn migrate_v2(conn: &Connection) -> Result<(), ResourceStoreError> {
     }
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_scan_sources_root_kind ON scan_sources(root_path, source_kind)",
+        [],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+        params![SCHEMA_VERSION, u64_to_i64(current_time_ms())],
+    )?;
+    Ok(())
+}
+
+fn migrate_v3(conn: &Connection) -> Result<(), ResourceStoreError> {
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scan_sources_project_label ON scan_sources(project_label)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_resource_locations_source ON resource_locations(scan_source_id)",
         [],
     )?;
     conn.execute(
@@ -1362,6 +1701,428 @@ fn scalar_count(conn: &Connection, sql: &str) -> Result<u64, ResourceStoreError>
         .map_err(ResourceStoreError::from)
 }
 
+#[derive(Clone, Debug)]
+struct ScopeFilter {
+    kind: ScopeFilterKind,
+    resource_kind: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+enum ScopeFilterKind {
+    Global,
+    Project(String),
+    Source(String),
+    Unclassified,
+}
+
+impl ScopeFilter {
+    fn from_query(
+        conn: &Connection,
+        query: &ResourceCorpusQuery,
+    ) -> Result<Self, ResourceStoreError> {
+        let scope_kind = normalized_optional_text(query.scope_kind.as_deref())
+            .unwrap_or_else(|| "global".to_string())
+            .to_ascii_lowercase();
+        let kind = match scope_kind.as_str() {
+            "global" => ScopeFilterKind::Global,
+            "project" => {
+                let project_label = normalized_optional_text(query.project_label.as_deref())
+                    .or_else(|| {
+                        query.scope_id.as_deref().and_then(|scope_id| {
+                            project_label_for_scope_id(conn, scope_id).ok().flatten()
+                        })
+                    })
+                    .ok_or_else(|| {
+                        ResourceStoreError::InvalidInput(
+                            "项目 scope 缺少 projectLabel。".to_string(),
+                        )
+                    })?;
+                ScopeFilterKind::Project(project_label)
+            }
+            "source" => {
+                let source_id = normalized_optional_text(query.scan_source_id.as_deref())
+                    .or_else(|| normalized_optional_text(query.scope_id.as_deref()))
+                    .ok_or_else(|| {
+                        ResourceStoreError::InvalidInput(
+                            "来源 scope 缺少 scanSourceId。".to_string(),
+                        )
+                    })?;
+                ScopeFilterKind::Source(source_id)
+            }
+            "unclassified" => ScopeFilterKind::Unclassified,
+            _ => {
+                return Err(ResourceStoreError::InvalidInput(
+                    "未知资源 scope 类型。".to_string(),
+                ))
+            }
+        };
+
+        Ok(Self {
+            kind,
+            resource_kind: normalized_optional_text(query.resource_kind.as_deref()),
+        })
+    }
+}
+
+fn query_corpus_resources(
+    conn: &Connection,
+    filter: &ScopeFilter,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<ResourceCorpusResource>, ResourceStoreError> {
+    let mut values = Vec::new();
+    let mut clauses = Vec::new();
+    apply_scope_filter(filter, &mut clauses, &mut values);
+
+    let mut sql = corpus_resource_base_sql();
+    if !clauses.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&clauses.join(" AND "));
+    }
+    sql.push_str(
+        " ORDER BY
+            COALESCE(NULLIF(TRIM(s.project_label), ''), '未归类') ASC,
+            r.resource_kind ASC,
+            r.name ASC,
+            COALESCE(l.relative_path, '') ASC
+        LIMIT ? OFFSET ?",
+    );
+    values.push(Value::Integer(normalize_resource_query_limit(limit)));
+    values.push(Value::Integer(normalize_offset(offset)));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(values), row_to_corpus_resource)?;
+    collect_rows(rows)
+}
+
+fn query_corpus_resource_by_id(
+    conn: &Connection,
+    filter: &ScopeFilter,
+    resource_id: &str,
+) -> Result<Option<ResourceCorpusResource>, ResourceStoreError> {
+    let mut values = Vec::new();
+    let mut clauses = vec!["r.id = ?".to_string()];
+    values.push(Value::Text(resource_id.to_string()));
+    apply_scope_filter(filter, &mut clauses, &mut values);
+
+    let mut sql = corpus_resource_base_sql();
+    sql.push_str(" WHERE ");
+    sql.push_str(&clauses.join(" AND "));
+    sql.push_str(" LIMIT 1");
+
+    conn.query_row(&sql, params_from_iter(values), row_to_corpus_resource)
+        .optional()
+        .map_err(ResourceStoreError::from)
+}
+
+fn corpus_resource_base_sql() -> String {
+    "
+    SELECT
+        r.id, r.stable_key, r.name, r.resource_kind, r.description, r.primary_type,
+        r.risk_level, r.boundary_labels_json, r.updated_at,
+        l.id, l.scan_source_id, s.display_name, s.source_kind, s.enabled,
+        s.project_label, s.root_display_path, s.profile_id,
+        l.scan_job_id, j.status, j.started_at, j.finished_at,
+        l.relative_path, l.display_path, l.extension, l.entry_type,
+        l.size_bytes, l.modified_at, l.classification_reason,
+        COALESCE(l.sensitive_path_redacted, 0)
+    FROM resources r
+    LEFT JOIN resource_locations l ON l.id = (
+        SELECT latest.id
+        FROM resource_locations latest
+        LEFT JOIN scan_jobs latest_job ON latest_job.id = latest.scan_job_id
+        WHERE latest.resource_id = r.id
+        ORDER BY latest_job.finished_at DESC, latest_job.started_at DESC, latest.rowid DESC
+        LIMIT 1
+    )
+    LEFT JOIN scan_sources s ON s.id = l.scan_source_id
+    LEFT JOIN scan_jobs j ON j.id = l.scan_job_id"
+        .to_string()
+}
+
+fn apply_scope_filter(filter: &ScopeFilter, clauses: &mut Vec<String>, values: &mut Vec<Value>) {
+    match &filter.kind {
+        ScopeFilterKind::Global => {}
+        ScopeFilterKind::Project(project_label) => {
+            clauses.push("COALESCE(TRIM(s.project_label), '') = ?".to_string());
+            values.push(Value::Text(project_label.to_string()));
+        }
+        ScopeFilterKind::Source(source_id) => {
+            clauses.push("s.id = ?".to_string());
+            values.push(Value::Text(source_id.to_string()));
+        }
+        ScopeFilterKind::Unclassified => {
+            clauses.push("(s.project_label IS NULL OR TRIM(s.project_label) = '')".to_string());
+        }
+    }
+
+    if let Some(resource_kind) = &filter.resource_kind {
+        clauses.push("r.resource_kind = ?".to_string());
+        values.push(Value::Text(resource_kind.to_string()));
+    }
+}
+
+fn row_to_corpus_resource(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceCorpusResource> {
+    let boundary_labels_json: String = row.get(7)?;
+    let boundary_labels =
+        serde_json::from_str::<Vec<String>>(&boundary_labels_json).unwrap_or_default();
+    Ok(ResourceCorpusResource {
+        id: row.get(0)?,
+        stable_key: row.get(1)?,
+        name: row.get(2)?,
+        resource_kind: row.get(3)?,
+        description: row.get(4)?,
+        primary_type: row.get(5)?,
+        risk_level: row.get(6)?,
+        boundary_labels,
+        updated_at_ms: i64_to_u64(row.get(8)?),
+        location_id: row.get(9)?,
+        scan_source_id: row.get(10)?,
+        scan_source_name: row.get(11)?,
+        source_kind: row.get(12)?,
+        scan_source_enabled: row.get::<_, Option<i64>>(13)?.map(int_to_bool),
+        project_label: row.get(14)?,
+        root_display_path: row.get(15)?,
+        profile_id: row.get(16)?,
+        scan_job_id: row.get(17)?,
+        scan_job_status: row.get(18)?,
+        scan_job_started_at_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64),
+        scan_job_finished_at_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64),
+        relative_path: row.get(21)?,
+        display_path: row.get(22)?,
+        extension: row.get(23)?,
+        entry_type: row.get(24)?,
+        size_bytes: row.get::<_, Option<i64>>(25)?.map(i64_to_u64),
+        modified_at_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64),
+        classification_reason: row.get(27)?,
+        sensitive_path_redacted: int_to_bool(row.get(28)?),
+    })
+}
+
+fn list_project_scopes_for_connection(
+    conn: &Connection,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            s.project_label,
+            COUNT(DISTINCT l.resource_id),
+            MIN(s.root_display_path),
+            MIN(s.profile_id)
+        FROM scan_sources s
+        LEFT JOIN resource_locations l ON l.scan_source_id = s.id
+        WHERE s.project_label IS NOT NULL AND TRIM(s.project_label) <> ''
+        GROUP BY s.project_label
+        ORDER BY s.project_label ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        let label: String = row.get(0)?;
+        Ok(ResourceCorpusScope {
+            id: project_label_scope_id(&label),
+            scope_kind: "project".to_string(),
+            label: label.clone(),
+            description: format!("项目 scope：{label}"),
+            resource_count: i64_to_u64(row.get(1)?),
+            project_label: Some(label),
+            scan_source_id: None,
+            root_display_path: row.get(2)?,
+            profile_id: row.get(3)?,
+            enabled: None,
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn list_source_scopes_for_connection(
+    conn: &Connection,
+) -> Result<Vec<ResourceCorpusScope>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            s.id, s.display_name, s.root_display_path, s.profile_id, s.project_label,
+            s.enabled, COUNT(DISTINCT l.resource_id)
+        FROM scan_sources s
+        LEFT JOIN resource_locations l ON l.scan_source_id = s.id
+        GROUP BY s.id
+        ORDER BY COALESCE(NULLIF(TRIM(s.project_label), ''), '未归类') ASC,
+            s.display_name ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        let source_id: String = row.get(0)?;
+        let display_name: String = row.get(1)?;
+        let root_display_path: String = row.get(2)?;
+        Ok(ResourceCorpusScope {
+            id: source_scope_id(&source_id),
+            scope_kind: "source".to_string(),
+            label: display_name,
+            description: root_display_path.clone(),
+            resource_count: i64_to_u64(row.get(6)?),
+            project_label: row.get(4)?,
+            scan_source_id: Some(source_id),
+            root_display_path: Some(root_display_path),
+            profile_id: row.get(3)?,
+            enabled: Some(int_to_bool(row.get(5)?)),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn get_resource_counts_by_scope_for_connection(
+    conn: &Connection,
+) -> Result<Vec<ResourceScopeCount>, ResourceStoreError> {
+    let mut counts = Vec::new();
+    counts.push(ResourceScopeCount {
+        scope_id: "global".to_string(),
+        scope_kind: "global".to_string(),
+        label: "全局".to_string(),
+        count: count_rows(conn, "resources")?,
+    });
+
+    for scope in list_project_scopes_for_connection(conn)? {
+        counts.push(ResourceScopeCount {
+            scope_id: scope.id,
+            scope_kind: scope.scope_kind,
+            label: scope.label,
+            count: scope.resource_count,
+        });
+    }
+
+    let unclassified = unclassified_resource_count(conn)?;
+    if unclassified > 0 {
+        counts.push(ResourceScopeCount {
+            scope_id: "unclassified".to_string(),
+            scope_kind: "unclassified".to_string(),
+            label: "未归类".to_string(),
+            count: unclassified,
+        });
+    }
+
+    for scope in list_source_scopes_for_connection(conn)? {
+        counts.push(ResourceScopeCount {
+            scope_id: scope.id,
+            scope_kind: scope.scope_kind,
+            label: scope.label,
+            count: scope.resource_count,
+        });
+    }
+
+    Ok(counts)
+}
+
+fn list_resource_locations_for_connection(
+    conn: &Connection,
+    resource_id: &str,
+) -> Result<Vec<ResourceCorpusLocation>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            l.id, l.scan_source_id, s.display_name, s.project_label, s.root_display_path,
+            s.profile_id, l.scan_job_id, j.status, l.relative_path, l.display_path,
+            l.extension, l.entry_type, l.size_bytes, l.modified_at, l.classification_reason,
+            l.sensitive_path_redacted
+        FROM resource_locations l
+        JOIN scan_sources s ON s.id = l.scan_source_id
+        JOIN scan_jobs j ON j.id = l.scan_job_id
+        WHERE l.resource_id = ?1
+        ORDER BY COALESCE(NULLIF(TRIM(s.project_label), ''), '未归类') ASC,
+            s.display_name ASC, l.relative_path ASC, j.started_at DESC",
+    )?;
+    let rows = stmt.query_map(params![resource_id], |row| {
+        Ok(ResourceCorpusLocation {
+            id: row.get(0)?,
+            scan_source_id: row.get(1)?,
+            scan_source_name: row.get(2)?,
+            project_label: row.get(3)?,
+            root_display_path: row.get(4)?,
+            profile_id: row.get(5)?,
+            scan_job_id: row.get(6)?,
+            scan_job_status: row.get(7)?,
+            relative_path: row.get(8)?,
+            display_path: row.get(9)?,
+            extension: row.get(10)?,
+            entry_type: row.get(11)?,
+            size_bytes: row.get::<_, Option<i64>>(12)?.map(i64_to_u64),
+            modified_at_ms: row.get::<_, Option<i64>>(13)?.map(i64_to_u64),
+            classification_reason: row.get(14)?,
+            sensitive_path_redacted: int_to_bool(row.get(15)?),
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn list_resource_findings_for_connection(
+    conn: &Connection,
+    resource_id: &str,
+) -> Result<Vec<ResourceCorpusFinding>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, scan_job_id, finding_kind, severity, message, safe_detail_json
+        FROM resource_findings
+        WHERE resource_id = ?1
+        ORDER BY severity DESC, finding_kind ASC",
+    )?;
+    let rows = stmt.query_map(params![resource_id], |row| {
+        Ok(ResourceCorpusFinding {
+            id: row.get(0)?,
+            scan_job_id: row.get(1)?,
+            finding_kind: row.get(2)?,
+            severity: row.get(3)?,
+            message: row.get(4)?,
+            safe_detail_json: row.get(5)?,
+        })
+    })?;
+    collect_rows(rows)
+}
+
+fn project_label_for_scope_id(
+    conn: &Connection,
+    scope_id: &str,
+) -> Result<Option<String>, ResourceStoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT project_label
+        FROM scan_sources
+        WHERE project_label IS NOT NULL AND TRIM(project_label) <> ''",
+    )?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    for row in rows {
+        let label = row?;
+        if project_label_scope_id(&label) == scope_id {
+            return Ok(Some(label));
+        }
+    }
+    Ok(None)
+}
+
+fn unclassified_resource_count(conn: &Connection) -> Result<u64, ResourceStoreError> {
+    conn.query_row(
+        "SELECT COUNT(DISTINCT l.resource_id)
+        FROM resource_locations l
+        JOIN scan_sources s ON s.id = l.scan_source_id
+        WHERE s.project_label IS NULL OR TRIM(s.project_label) = ''",
+        [],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(i64_to_u64)
+    .map_err(ResourceStoreError::from)
+}
+
+fn project_label_scope_id(project_label: &str) -> String {
+    stable_id("project-scope", &[project_label])
+}
+
+fn source_scope_id(source_id: &str) -> String {
+    format!("source:{source_id}")
+}
+
+fn normalize_resource_query_limit(limit: Option<usize>) -> i64 {
+    i64::try_from(
+        limit
+            .unwrap_or(DEFAULT_RESOURCE_QUERY_LIMIT)
+            .clamp(1, MAX_RESOURCE_QUERY_LIMIT),
+    )
+    .unwrap_or(MAX_RESOURCE_QUERY_LIMIT as i64)
+}
+
+fn normalize_offset(offset: Option<usize>) -> i64 {
+    i64::try_from(offset.unwrap_or(0)).unwrap_or(i64::MAX)
+}
+
 fn validate_source_input(
     display_name: &str,
     root_path: &str,
@@ -1623,13 +2384,16 @@ fn debug_text_values_for_table(
 mod tests {
     use super::{
         clear_resource_library_for_path, debug_all_text_values_for_path,
-        get_library_summary_for_path, initialize_database,
+        get_active_resource_corpus_summary_for_path, get_library_summary_for_path,
+        get_resource_counts_by_scope_for_path, get_resource_detail_for_path, initialize_database,
         list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
-        list_scan_jobs_for_path, list_scan_sources_for_path, persist_scan_job_for_path,
-        remove_scan_source_for_path, store_status_for_path, update_scan_source_for_path,
-        upsert_scan_source_for_path, PersistScanErrorInput, PersistScanJobInput,
-        PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
-        UpdateScanSourceInput, UpsertScanSourceInput,
+        list_project_scopes_for_path, list_resource_corpus_scopes_for_path,
+        list_resources_by_kind_for_path, list_resources_by_scope_for_path, list_scan_jobs_for_path,
+        list_scan_sources_for_path, persist_scan_job_for_path, remove_scan_source_for_path,
+        store_status_for_path, update_scan_source_for_path, upsert_scan_source_for_path,
+        PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput, PersistScanSkipInput,
+        PersistScanSourceInput, ResourceCorpusQuery, ResourceStoreError, UpdateScanSourceInput,
+        UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1647,7 +2411,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 2);
+        assert_eq!(status.schema_version, 3);
         assert_eq!(status.resource_count, 0);
         assert!(status.metadata_only);
         assert!(!status.content_storage_enabled);
@@ -1768,7 +2532,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should still load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 2);
+        assert_eq!(status.schema_version, 3);
 
         cleanup_db(db_path);
     }
@@ -1876,6 +2640,201 @@ mod tests {
         assert_eq!(summary.job_count, 0);
         assert_eq!(summary.resource_count, 0);
         assert_eq!(summary.location_count, 0);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn corpus_read_queries_return_empty_state_for_empty_store() {
+        let db_path = temp_db_path("corpus-empty");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let summary = get_active_resource_corpus_summary_for_path(&db_path)
+            .expect("corpus summary should load");
+        assert_eq!(summary.resource_count, 0);
+        assert_eq!(summary.project_scope_count, 0);
+        assert!(summary.counts_by_kind.is_empty());
+        assert!(summary.metadata_only);
+        assert!(!summary.content_storage_enabled);
+
+        let scopes =
+            list_resource_corpus_scopes_for_path(&db_path).expect("corpus scopes should load");
+        assert_eq!(scopes.len(), 1);
+        assert_eq!(scopes[0].scope_kind, "global");
+        assert_eq!(scopes[0].resource_count, 0);
+
+        let resources = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: Some("global".to_string()),
+                scope_id: None,
+                project_label: None,
+                scan_source_id: None,
+                resource_kind: None,
+                limit: Some(10),
+                offset: Some(0),
+            },
+        )
+        .expect("empty resource list should load");
+        assert!(resources.is_empty());
+
+        let detail_error = get_resource_detail_for_path(&db_path, "missing-resource")
+            .expect_err("missing detail should fail");
+        assert!(matches!(detail_error, ResourceStoreError::InvalidInput(_)));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn corpus_queries_derive_project_source_scope_counts_and_details() {
+        let db_path = temp_db_path("corpus-project");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(&db_path, sample_completed_job("job-1", 1))
+            .expect("job should persist");
+
+        let summary = get_active_resource_corpus_summary_for_path(&db_path)
+            .expect("corpus summary should load");
+        assert_eq!(summary.resource_count, 2);
+        assert_eq!(summary.project_scope_count, 1);
+        assert_eq!(summary.source_count, 1);
+        assert_eq!(summary.skipped_entry_total, 1);
+        assert_eq!(summary.error_total, 0);
+
+        let project_scopes =
+            list_project_scopes_for_path(&db_path).expect("project scopes should load");
+        assert_eq!(project_scopes.len(), 1);
+        assert_eq!(project_scopes[0].label, "Fixture Project");
+        assert_eq!(project_scopes[0].resource_count, 2);
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        let source_id = sources[0].id.clone();
+        let all_scopes =
+            list_resource_corpus_scopes_for_path(&db_path).expect("all scopes should load");
+        assert!(all_scopes.iter().any(|scope| scope.scope_kind == "global"));
+        assert!(all_scopes
+            .iter()
+            .any(|scope| scope.scope_kind == "project" && scope.label == "Fixture Project"));
+        assert!(all_scopes.iter().any(|scope| scope.scope_kind == "source"
+            && scope.scan_source_id.as_deref() == Some(source_id.as_str())));
+
+        let global_resources = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: Some("global".to_string()),
+                scope_id: None,
+                project_label: None,
+                scan_source_id: None,
+                resource_kind: None,
+                limit: Some(50),
+                offset: Some(0),
+            },
+        )
+        .expect("global resources should load");
+        assert_eq!(global_resources.len(), 2);
+        assert_eq!(global_resources[0].resource_kind, "skill");
+        assert_eq!(
+            global_resources[0].project_label.as_deref(),
+            Some("Fixture Project")
+        );
+        assert_eq!(
+            global_resources[0].scan_source_id.as_deref(),
+            Some(source_id.as_str())
+        );
+        assert!(!global_resources[0].boundary_labels.is_empty());
+
+        let project_resources = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: Some("project".to_string()),
+                scope_id: Some(project_scopes[0].id.clone()),
+                project_label: None,
+                scan_source_id: None,
+                resource_kind: None,
+                limit: Some(50),
+                offset: Some(0),
+            },
+        )
+        .expect("project resources should load");
+        assert_eq!(project_resources.len(), 2);
+
+        let source_resources = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: Some("source".to_string()),
+                scope_id: None,
+                project_label: None,
+                scan_source_id: Some(source_id),
+                resource_kind: None,
+                limit: Some(50),
+                offset: Some(0),
+            },
+        )
+        .expect("source resources should load");
+        assert_eq!(source_resources.len(), 2);
+
+        let skill_resources = list_resources_by_kind_for_path(&db_path, "skill", Some(10), None)
+            .expect("kind resources should load");
+        assert_eq!(skill_resources.len(), 1);
+        assert_eq!(skill_resources[0].name, "SKILL.md");
+
+        let sensitive = global_resources
+            .iter()
+            .find(|resource| resource.sensitive_path_redacted)
+            .expect("sensitive resource should exist");
+        let detail = get_resource_detail_for_path(&db_path, &sensitive.id)
+            .expect("resource detail should load");
+        assert_eq!(detail.resource.id, sensitive.id);
+        assert_eq!(detail.locations.len(), 1);
+        assert_eq!(
+            detail.locations[0].project_label.as_deref(),
+            Some("Fixture Project")
+        );
+        assert!(detail
+            .findings
+            .iter()
+            .any(|finding| finding.finding_kind == "sensitive-path-redacted"));
+        assert!(detail.metadata_only);
+        assert!(!detail.content_storage_enabled);
+
+        let counts =
+            get_resource_counts_by_scope_for_path(&db_path).expect("scope counts should load");
+        assert!(counts.iter().any(|count| count.scope_kind == "project"
+            && count.label == "Fixture Project"
+            && count.count == 2));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn corpus_unclassified_scope_filters_sources_without_project_label() {
+        let db_path = temp_db_path("corpus-unclassified");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut job = sample_completed_job("job-unclassified", 1);
+        job.source.project_label = None;
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let scopes = list_resource_corpus_scopes_for_path(&db_path).expect("scopes should load");
+        assert!(scopes
+            .iter()
+            .any(|scope| scope.scope_kind == "unclassified" && scope.resource_count == 2));
+
+        let resources = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: Some("unclassified".to_string()),
+                scope_id: None,
+                project_label: None,
+                scan_source_id: None,
+                resource_kind: None,
+                limit: Some(10),
+                offset: None,
+            },
+        )
+        .expect("unclassified resources should load");
+        assert_eq!(resources.len(), 2);
+        assert!(resources
+            .iter()
+            .all(|resource| resource.project_label.is_none()));
 
         cleanup_db(db_path);
     }
