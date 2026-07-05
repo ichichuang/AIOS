@@ -10,9 +10,9 @@ export function ResourceCorpusIndicator({ state }: ResourceCorpusIndicatorProps)
   const activeSource = state.dataSource.activeSource;
   const detailLabel =
     activeSource === "dynamic-corpus"
-      ? `本机已有 AIOS 本地资源库 · ${state.dataSource.dynamicResourceCount}`
+      ? `本机资源 · ${state.dataSource.dynamicResourceCount} 项`
       : activeSource === "legacy-snapshot"
-        ? "示例 / 不代表本机扫描"
+        ? "旧入口示例"
         : "尚未扫描任何目录";
   const viewingLabel = getScopeViewingLabel(state.activeScope, state.mode);
   return (

@@ -191,9 +191,9 @@ export const ResourceInspector = memo(function ResourceInspector({ activeView, r
 function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number): { title: string; summary: string; hints: string[]; badge: string } {
   if (activeView === "dashboard") {
     return {
-      title: "选择能力入口或资源查看详情",
-      summary: "总览用于快速进入常用能力库、查看系统边界和近期报告。",
-      hints: ["点击能力卡会切换到技能库并填入搜索词。", "点击近期报告可在这里查看报告详情。", "检查器只展示本地只读元数据，不执行脚本、MCP 或扫描。"],
+      title: "选择资源查看详情",
+      summary: "这里展示用途、来源、路径和安全边界。",
+      hints: ["点击能力卡进入对应模块。", "选择资源后查看只读详情。", "详情面板不会执行脚本、MCP 或扫描。"],
       badge: "总览"
     };
   }
@@ -201,8 +201,8 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
   if (activeView === "custom-scan") {
     return {
       title: "选择扫描结果查看详情",
-      summary: "扫描管理结果只包含路径、大小、扩展名、修改时间、分类原因和安全标签。",
-      hints: ["先添加用户授权目录，再手动运行所选来源。", "敏感路径段会显示为 [sensitive]。", "此模块不提供全盘扫描、内容读取或执行入口。"],
+      summary: "扫描结果只展示路径、大小、时间、分类原因和安全标签。",
+      hints: ["先添加授权目录，再手动运行所选来源。", "敏感路径段会被隐藏。", "这里不会读取文件内容或执行脚本。"],
       badge: "扫描管理"
     };
   }
@@ -210,17 +210,17 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
   const moduleName = VIEW_LABELS[activeView];
   if (activeView === "legacy") {
     return {
-      title: "正在查看 Legacy 示例数据",
+      title: "正在查看旧入口示例",
       summary: "这是内置示例/兼容快照，不代表当前电脑扫描结果。",
-      hints: [`Legacy 示例上下文中有 ${visibleCount} 项可见资源。`, "选择资源可查看示例 provenance。", "这些数据不会写入 SQLite 动态资源库，也不参与默认模块计数。"],
-      badge: "Legacy 示例"
+      hints: [`旧入口示例中有 ${visibleCount} 项可见资源。`, "选择资源可查看示例来源。", "这些数据不会写入本机资源库，也不参与默认计数。"],
+      badge: "旧入口示例"
     };
   }
   if (visibleCount === 0) {
     return {
       title: `${moduleName} 为空`,
-      summary: "尚未扫描任何目录；当前模块只读取 SQLite 动态资源库。",
-      hints: ["请到扫描管理添加项目目录或运行智能发现。", "Legacy 示例数据只在旧入口查看。", "此面板不会触发扫描、脚本执行或 MCP 启动。"],
+      summary: "尚未扫描任何目录；当前模块只读取本机资源库。",
+      hints: ["请到扫描管理添加项目目录或运行智能发现。", "旧入口示例只在旧入口查看。", "此面板不会触发扫描、脚本执行或 MCP 启动。"],
       badge: "空资源库"
     };
   }
@@ -230,9 +230,9 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
       : "此模块默认不提供提示词复制，仅展示只读详情。";
 
   return {
-    title: `${moduleName} 使用指南`,
+    title: `选择${moduleName}资源`,
     summary: zhCN.moduleSummaries[activeView],
-    hints: [`当前筛选下有 ${visibleCount} 项可见资源。`, "点击列表中的资源查看用途、来源、路径和安全边界。", promptCopyHint, "详情面板不会触发全盘扫描或后台执行。"],
+    hints: [`当前有 ${visibleCount} 项可见资源。`, "点击资源查看用途、来源、路径和边界。", promptCopyHint, "详情面板不会触发扫描或后台执行。"],
     badge: moduleName
   };
 }
@@ -249,10 +249,10 @@ function getPrimaryMetaRows(resource: AiosResource, display: ReturnType<typeof g
 function getBoundaryChips(resource: AiosResource): Array<{ label: string; className?: string; variant?: "filled" | "outlined" }> {
   if (isLegacySnapshotResource(resource)) {
     return [
-      { label: "Legacy 示例", className: "status-chip status-warn", variant: "filled" },
+      { label: "旧入口示例", className: "status-chip status-warn", variant: "filled" },
       { label: "非本机扫描" },
       { label: "仅元数据" },
-      { label: "UI 不执行" },
+      { label: "界面不执行" },
       { label: "不写入 SQLite", className: "status-chip status-disabled" }
     ];
   }
@@ -260,7 +260,7 @@ function getBoundaryChips(resource: AiosResource): Array<{ label: string; classN
     { label: resource.safetyProfile.readOnly ? "本地只读" : "只读需复核", className: resource.safetyProfile.readOnly ? "status-chip status-ok" : "status-chip status-warn", variant: "filled" },
     { label: "仅元数据" },
     { label: "敏感值隐藏" },
-    { label: "UI 不执行" },
+    { label: "界面不执行" },
     { label: "不启动扫描", className: "status-chip status-disabled" }
   ];
 }
@@ -269,7 +269,7 @@ function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTech
   if (isDynamicCorpusResource(resource)) {
     return {
       title: "动态资源库元数据",
-      body: "详情来自 Rust-owned SQLite 中的扫描元数据，不重新读取文件、不执行脚本或 MCP。",
+      body: "详情来自本地 SQLite 扫描元数据，不重新读取文件、不执行脚本或 MCP。",
       chipLabel: "动态资源库",
       chipClassName: "status-chip status-ok",
       tone: "info"
@@ -278,9 +278,9 @@ function getInspectorDetailNotice(resource: AiosResource, metadataRows: AiosTech
 
   if (isLegacySnapshotResource(resource)) {
     return {
-      title: "Legacy 示例数据",
+      title: "旧入口示例",
       body: "这是内置示例/兼容快照，不代表当前电脑扫描结果，不写入动态资源库。",
-      chipLabel: "Legacy 示例",
+      chipLabel: "旧入口示例",
       chipClassName: "status-chip status-warn",
       tone: "warn"
     };
@@ -323,7 +323,7 @@ function getPrimarySourceLabel(resource: AiosResource, provenance: SkillIdentity
   if (isDynamicCorpusResource(resource)) {
     return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
   }
-  if (isLegacySnapshotResource(resource)) return "Legacy 示例数据 / 非当前电脑扫描";
+  if (isLegacySnapshotResource(resource)) return "旧入口示例 / 非当前电脑扫描";
 
   const server = getMcpServer(resource);
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
@@ -365,12 +365,12 @@ function getSourceRows(
     rows.push(
       { label: "来源", value: provenance.sourceLabels || "未记录" },
       { label: "活跃入口", value: provenance.activeEntrypoints || "无", code: Boolean(provenance.activeEntrypoints) },
-      { label: "Registry 记录", value: provenance.registryRecords || "无", code: Boolean(provenance.registryRecords) },
+      { label: "注册表记录", value: provenance.registryRecords || "无", code: Boolean(provenance.registryRecords) },
       { label: "文件系统发现", value: provenance.filesystemRecords || "无", code: Boolean(provenance.filesystemRecords) }
     );
     if (provenance.indexRecords) rows.push({ label: "索引记录", value: provenance.indexRecords, code: true });
-    if (provenance.manifestPaths) rows.push({ label: "Manifest 路径", value: provenance.manifestPaths, code: true });
-    if (provenance.canonicalPaths) rows.push({ label: "Canonical 路径", value: provenance.canonicalPaths, code: true });
+    if (provenance.manifestPaths) rows.push({ label: "清单路径", value: provenance.manifestPaths, code: true });
+    if (provenance.canonicalPaths) rows.push({ label: "规范路径", value: provenance.canonicalPaths, code: true });
     if (provenance.discoveryRoots) rows.push({ label: "发现根目录", value: provenance.discoveryRoots, code: true });
   }
 
@@ -513,12 +513,12 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
     const classificationReason = getMetadataString(resource, "classificationReason");
     rows.push(
       { label: "数据来源类型", value: provenance.dataSourceType },
-      { label: "项目 / scope", value: provenance.projectLabel },
+      { label: "项目标签", value: provenance.projectLabel },
       { label: "扫描来源", value: provenance.scanSourceName },
       { label: "扫描来源目录", value: provenance.scanSourceDirectory, code: provenance.scanSourceDirectory !== "未记录" },
       { label: "授权根目录", value: rootDisplayPath ?? "未记录", code: Boolean(rootDisplayPath) },
       { label: "相对路径", value: provenance.relativePath, code: provenance.relativePath !== "未记录" },
-      { label: "Profile", value: provenance.profileLabel },
+      { label: "扫描模板", value: provenance.profileLabel },
       { label: "最近扫描", value: provenance.lastScanLabel, code: provenance.lastScanLabel.includes("·") },
       { label: "元数据边界", value: provenance.metadataBoundary }
     );
@@ -574,11 +574,11 @@ function getMetadataRows(resource: AiosResource): MetadataRow[] {
     rows.push(
       { label: "是否索引内", value: getDiscoveryBooleanLabel(resource, "indexed") },
       { label: "是否活跃入口", value: getDiscoveryBooleanLabel(resource, "activeEntrypoint") },
-      { label: "是否 Registry 记录", value: getDiscoveryBooleanLabel(resource, "registryListed") },
+      { label: "是否注册表记录", value: getDiscoveryBooleanLabel(resource, "registryListed") },
       { label: "是否蒸馏相关", value: getDiscoveryBooleanLabel(resource, "distillationRelated") }
     );
     const manifestPath = getDiscoveryMetadataString(resource, "manifestPath");
-    if (manifestPath) rows.push({ label: "Manifest 路径", value: manifestPath, code: true });
+    if (manifestPath) rows.push({ label: "清单路径", value: manifestPath, code: true });
     const discoveryRoot = getDiscoveryMetadataString(resource, "discoveryRoot");
     if (discoveryRoot) rows.push({ label: "发现根目录", value: discoveryRoot, code: true });
   }

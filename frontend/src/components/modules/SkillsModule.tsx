@@ -36,10 +36,10 @@ interface SkillGroup {
 const ROW_HEIGHT = 124;
 const sourceSkillGroupDefinitions: SourceSkillGroupDefinition[] = [
   { key: "active-entrypoints", title: "活跃入口", summary: "Codex、Agents、Claude 当前可见入口元数据。", predicate: (row) => hasAnySourceBadge(row, ["codex", "agents", "claude"]) },
-  { key: "distilled-skills", title: "蒸馏技能", summary: "女娲、persona 或 perspective 相关技能元数据。", predicate: hasDistillationSignal },
-  { key: "archived-skills", title: "归档技能", summary: "路径或注册表标记为 archive、disabled、deprecated 的技能。", predicate: (row) => row.sources.some((source) => source.metadata?.archived === true) },
+  { key: "distilled-skills", title: "蒸馏技能", summary: "女娲、人物或视角相关技能元数据。", predicate: hasDistillationSignal },
+  { key: "archived-skills", title: "归档技能", summary: "路径或注册表标记为归档、停用、废弃的技能。", predicate: (row) => row.sources.some((source) => source.metadata?.archived === true) },
   { key: "filesystem-skills", title: "文件系统发现", summary: "通过有界 SKILL.md 遍历发现，未执行技能正文。", predicate: (row) => hasSourceBadge(row, "filesystem") },
-  { key: "registry-skills", title: "Registry 技能", summary: "custom-skill-registry.json 中的单项技能记录。", predicate: (row) => hasSourceBadge(row, "custom-registry") },
+  { key: "registry-skills", title: "注册表技能", summary: "custom-skill-registry.json 中的单项技能记录。", predicate: (row) => hasSourceBadge(row, "custom-registry") },
   { key: "indexed-skills", title: "索引技能", summary: "SKILLS_INDEX.json 中的规范共享技能。", predicate: (row) => hasSourceBadge(row, "skills-index") },
   { key: "project-local-packs", title: "项目本地包", summary: "项目本地技能包和仓库内资源入口。", predicate: (row) => hasSourceBadge(row, "project-pack") },
   { key: "registry-routing", title: "注册表与路由", summary: "自定义技能注册表、路由器和索引入口。", predicate: (row) => row.primaryResource.capabilityType === "registry" || row.primaryResource.name.includes("router") },

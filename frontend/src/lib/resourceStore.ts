@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_SCAN_PROFILE_ID, isTauriRuntimeAvailable, type ScanModeId, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
+import { DEFAULT_SCAN_PROFILE_ID, getScanProfileById, isTauriRuntimeAvailable, type ScanModeId, type ScanProfileId, type ScanResourceKind } from "./customDirectoryScan";
 
 export const FIRST_RUN_ONBOARDING_DISMISSED_SETTING_KEY = "firstRunOnboardingDismissed";
 export const LOCAL_DATA_RESET_WARNING_COPY = "清空只删除 AIOS 应用记录，不会删除用户文件。";
 export const WHAT_AIOS_STORES_COPY = "保存资源名称、类型、相对路径、大小、修改时间、来源、扫描模板和安全发现摘要。";
-export const WHAT_AIOS_NEVER_STORES_COPY = "不保存文件内容、raw secrets、token values、auth/session values、provider keys、cookies 或 env values。";
+export const WHAT_AIOS_NEVER_STORES_COPY = "不保存文件内容、原始密钥、令牌值、认证/会话值、供应商密钥、Cookie 或环境变量值。";
 
 export interface AppSettingRecord {
   key: string;
@@ -373,7 +373,7 @@ export function buildPersistedLibraryState(summary: ResourceLibrarySummary, sour
   const sourceRows = sources.map((source) => ({
     id: source.id,
     primary: source.displayName || source.rootDisplayPath,
-    secondary: `${source.rootDisplayPath} · ${source.projectLabel || "未标注项目"} · ${source.profileId}`,
+    secondary: `${source.rootDisplayPath} · ${source.projectLabel || "未标注项目"} · ${getScanProfileById(source.profileId).displayName}`,
     status: source.enabled ? (source.lastScanStatus ?? "enabled") : "disabled",
     statusLabel: source.enabled ? scanStatusLabels[source.lastScanStatus ?? "enabled"] ?? (source.lastScanStatus ?? "已启用") : "已停用",
     projectLabel: source.projectLabel ?? "",

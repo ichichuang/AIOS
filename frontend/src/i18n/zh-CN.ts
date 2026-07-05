@@ -62,7 +62,7 @@ export const zhCN = {
   },
   moduleSummaries: {
     dashboard: "汇总本地 AIOS 资源、基线守卫、只读边界与风险分布。",
-    "custom-scan": "管理多个用户授权扫描来源，手动执行有界 metadata-only 顺序扫描；高级发现需显式确认。",
+    "custom-scan": "管理用户授权的扫描来源，手动执行有界顺序扫描；结果仅保存元数据，高级发现需显式确认。",
     skills: "探索本地可用 AI 技能，查看其功能并快速复制提示词进行使用。",
     mcp: "按本地、远程、npx 拉取和凭据需求检查 MCP 元数据。",
     scripts: "仅展示脚本与验证器元数据；执行需要显式命令。",

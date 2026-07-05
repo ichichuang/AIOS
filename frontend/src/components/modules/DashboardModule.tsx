@@ -3,6 +3,7 @@ import logoLarge from "../../assets/image/logo.png";
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { formatAutomationState, formatCount, formatSnapshotDate, shortHash, zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { getScanProfileById } from "../../lib/customDirectoryScan";
 import { buildLocalResourceLibraryViewState, getScopeSemanticDescription, shouldShowFirstRunOnboarding, type ProjectResourceMapEntry, type ScanSourceResourceMapEntry } from "../../lib/resourceCorpus";
 import { normalizeResourceKindCounts, scanBatchStatusLabel } from "../../lib/resourceStore";
 import type { AiosResource, RiskLevel } from "../../types/inventory";
@@ -77,8 +78,8 @@ const capabilityEntries = [
 const desktopStatusChips: AiosUsageChip[] = [
   { label: "本地运行", className: "status-chip status-ok" },
   { label: "默认只读", className: "status-chip status-ok" },
-  { label: "多来源扫描管理", variant: "outlined" },
-  { label: "SQLite 元数据库", variant: "outlined" },
+  { label: "多来源管理", variant: "outlined" },
+  { label: "本地资源库", variant: "outlined" },
   { label: "无自动扫描", className: "status-chip status-disabled" }
 ];
 
@@ -94,7 +95,7 @@ const desktopBoundaryCards: Array<{
     icon: <DesktopMacRounded fontSize="small" />,
     chips: [
       { label: "可用", className: "status-chip status-ok", variant: "filled" },
-      { label: "Phase 1" }
+      { label: "桌面壳" }
     ]
   },
   {
@@ -102,7 +103,7 @@ const desktopBoundaryCards: Array<{
     purpose: "已提供用户授权多个来源后的顺序元数据扫描；不读取文件内容。",
     icon: <SearchOffRounded fontSize="small" />,
     chips: [
-      { label: "Phase 3B", className: "status-chip status-ok", variant: "filled" },
+      { label: "已接入", className: "status-chip status-ok", variant: "filled" },
       { label: "顺序批次" }
     ]
   },
@@ -111,7 +112,7 @@ const desktopBoundaryCards: Array<{
     purpose: "扫描结果写入动态资源库；未扫描时主模块保持空资源库，不使用示例快照充数。",
     icon: <StorageRounded fontSize="small" />,
     chips: [
-      { label: "Phase 3C", className: "status-chip status-ok", variant: "filled" },
+      { label: "已接入", className: "status-chip status-ok", variant: "filled" },
       { label: "动态优先" }
     ]
   },
@@ -134,8 +135,8 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
   const activeScopeDescription = getScopeSemanticDescription(resourceCorpus.activeScope, resourceCorpus.mode);
   const dataSourceCopy =
     resourceCorpus.dataSource.activeSource === "dynamic-corpus"
-      ? `本机已有 AIOS 本地资源库，当前动态资源 ${resourceCorpus.dataSource.dynamicResourceCount} 项。Legacy 示例数据不参与默认统计。`
-      : "尚未扫描任何目录。Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators 和 Inspector 默认显示 0 项；Legacy 示例数据只在旧入口查看。";
+      ? `本机资源库已有 ${resourceCorpus.dataSource.dynamicResourceCount} 项资源。旧入口示例不参与默认统计。`
+      : "尚未扫描任何目录。总览、技能库、MCP、脚本、报告、项目包、策略、验证器和详情面板保持 0 项；旧入口示例只在旧入口查看。";
 
   const handleCapabilityClick = (queryText: string) => {
     if (onQueryChange) {
@@ -153,7 +154,7 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
       className="dashboard-module"
       contentClassName="dashboard-scroll"
       view="dashboard"
-      summary="本地 AIOS 共享技能库与运行边界只读视图。"
+      summary="本机资源库、扫描状态和只读边界。"
       count={allResources.length}
       actions={
         <>
@@ -168,14 +169,14 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
         <Box className="dashboard-brand-copy">
           <Typography variant="h3">AIOS Desktop</Typography>
           <Typography variant="body2" color="text.secondary">
-            桌面壳 MVP · 本地可信智能体操作系统 · 默认只读控制面板
+            本地可信智能体工作台 · 默认只读
           </Typography>
         </Box>
-        <Box className="dashboard-desktop-status" aria-label="AIOS Desktop MVP 边界">
+        <Box className="dashboard-desktop-status" aria-label="AIOS Desktop 边界">
           <Box className="dashboard-status-copy">
-            <Typography component="strong">桌面产品状态</Typography>
+            <Typography component="strong">当前状态</Typography>
             <Typography color="text.secondary" variant="body2">
-              {dataSourceCopy} 扫描仍需在扫描管理中手动启动，不执行脚本、MCP 或全盘遍历。
+              {dataSourceCopy} 扫描只能在扫描管理中手动启动，不执行脚本、MCP 或自动遍历。
             </Typography>
           </Box>
           <Box className="dashboard-status-chip-row">
@@ -193,18 +194,18 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           action={<Chip className={resourceCorpus.summary.resourceCount > 0 ? "status-chip status-ok" : "status-chip status-disabled"} label={localLibraryView.statusLabel} variant="outlined" />}
         />
         <Box className="local-library-grid">
-          <AiosUsageCard title="动态资源" purpose="只统计 Rust-owned SQLite 本地资源库，不包含 Legacy 示例快照。" technicalName={`${localLibraryView.dynamicResourceCount}`} chips={[{ label: "SQLite 动态" }]} />
+          <AiosUsageCard title="动态资源" purpose="只统计本机 SQLite 资源库，不包含旧入口示例。" technicalName={`${localLibraryView.dynamicResourceCount}`} chips={[{ label: "本机库" }]} />
           <AiosUsageCard title="扫描来源" purpose="用户已选择并保存的目录来源；添加来源不会自动扫描。" technicalName={`${localLibraryView.scanSourceCount}`} chips={[{ label: `${resourceCorpus.summary.enabledSourceCount} 已启用` }]} />
-          <AiosUsageCard title="项目 scope" purpose="由扫描来源的 project/scope 标签形成，用于回答项目拥有哪些资源。" technicalName={`${localLibraryView.projectScopeCount}`} chips={[{ label: "Project" }]} />
-          <AiosUsageCard title="最近扫描" purpose="最近持久化扫描任务的状态与时间；扫描只在扫描管理中启动。" technicalName={localLibraryView.latestScanLabel} chips={[{ label: "metadata-only" }]} />
+          <AiosUsageCard title="项目范围" purpose="按扫描来源的项目标签汇总资源。" technicalName={`${localLibraryView.projectScopeCount}`} chips={[{ label: "项目" }]} />
+          <AiosUsageCard title="最近扫描" purpose="最近一次持久化扫描任务；扫描只在扫描管理中启动。" technicalName={localLibraryView.latestScanLabel} chips={[{ label: "仅元数据" }]} />
         </Box>
         {localLibraryView.scanManagementCtaVisible && (
           <Box className="scan-boundary-callout info local-library-cta">
             <StorageRounded fontSize="small" />
             <Box className="scan-control-copy">
-              <Typography component="strong">这台机器还没有动态资源</Typography>
+              <Typography component="strong">先建立本机资源库</Typography>
               <Typography color="text.secondary" variant="body2">
-                先到扫描管理添加项目目录，或使用智能发现创建候选来源；不会自动开始扫描。
+                添加要管理的项目目录，或使用智能发现创建候选来源；下一步仍需手动扫描。
               </Typography>
             </Box>
             <Box className="scan-action-row compact">
@@ -220,7 +221,7 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
       </AiosSection>
 
       <AiosSection className="resource-map-section">
-        <AiosSectionHeader title="项目资源地图" summary="每个项目 / scope 只汇总动态资源库中该标签下的资源与来源目录。" count={resourceCorpus.projectMap.length} />
+        <AiosSectionHeader title="项目范围" summary="按项目标签汇总资源和来源目录。" count={resourceCorpus.projectMap.length} />
         {resourceCorpus.projectMap.length > 0 ? (
           <Box className="resource-map-grid">
             {resourceCorpus.projectMap.map((project) => (
@@ -229,16 +230,16 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           </Box>
         ) : (
           <Box className="scan-empty-state">
-            <Typography component="strong">尚无项目 scope</Typography>
+            <Typography component="strong">暂无项目范围</Typography>
             <Typography color="text.secondary" variant="body2">
-              为扫描来源填写项目 / scope 标签后，这里会显示每个项目拥有哪些动态资源。跨项目共享/重复检测是后续能力。
+              为扫描来源填写项目标签后，这里会显示每个项目的资源概况。
             </Typography>
           </Box>
         )}
       </AiosSection>
 
       <AiosSection className="resource-map-section">
-        <AiosSectionHeader title="扫描来源目录地图" summary="每个已选择目录来源的 profile、项目标签、启用状态、资源和跳过/错误计数。" count={resourceCorpus.scanSourceMap.length} />
+        <AiosSectionHeader title="来源目录" summary="按已授权目录展示模板、项目标签、状态和计数。" count={resourceCorpus.scanSourceMap.length} />
         {resourceCorpus.scanSourceMap.length > 0 ? (
           <Box className="resource-map-grid source-map">
             {resourceCorpus.scanSourceMap.map((source) => (
@@ -260,7 +261,7 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
           <AiosSectionHeader
             title="尚未扫描任何目录"
             summary="AIOS 尚未扫描这台机器；启动、切换模块和搜索都不会自动扫描，默认资源计数保持 0。"
-            action={<Chip className="status-chip status-ok" label="metadata-only local" variant="outlined" />}
+            action={<Chip className="status-chip status-ok" label="仅本地元数据" variant="outlined" />}
           />
           <Box className="first-run-onboarding-grid">
             <Box className="scan-first-use-item ok">
@@ -303,7 +304,7 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
       )}
 
       <AiosSection className="desktop-boundary-section">
-        <AiosSectionHeader title="桌面能力边界" summary="Phase 3C 接入动态资源库，扫描管理仍是唯一扫描入口。" />
+        <AiosSectionHeader title="桌面能力边界" summary="本机资源库已接入，扫描管理仍是唯一扫描入口。" />
         <Box className="quick-entry-grid desktop-boundary-grid">
           {desktopBoundaryCards.map((entry) => (
             <AiosUsageCard className="dashboard-boundary-card" chips={entry.chips} icon={entry.icon} key={entry.title} purpose={entry.purpose} title={entry.title} />
@@ -322,7 +323,6 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
                   description={entry.description}
                   icon={<Icon fontSize="small" />}
                   key={entry.title}
-                  metaLabel={entry.query}
                   title={entry.title}
                   onClick={() => handleCapabilityClick(entry.query)}
                 />
@@ -342,7 +342,6 @@ export function DashboardModule({ allResources, baseline, resourceCorpus, select
                   description={zhCN.moduleSummaries[view]}
                   icon={<Icon fontSize="small" />}
                   key={view}
-                  metaLabel={view}
                   title={VIEW_LABELS[view]}
                   onClick={() => onViewChange(view)}
                 />
@@ -402,7 +401,7 @@ function ProjectMapCard({ activeScopeId, project, onScopeSwitch }: { activeScope
             {directorySummary}
           </Typography>
         </Box>
-        <Chip className={active ? "status-chip status-ok" : undefined} label={active ? "当前项目" : "Project"} size="small" variant={active ? "filled" : "outlined"} />
+        <Chip className={active ? "status-chip status-ok" : undefined} label={active ? "当前项目" : "项目"} size="small" variant={active ? "filled" : "outlined"} />
       </Box>
       <Box className="resource-map-metrics">
         <MapMetric label="资源" value={project.resourceCount} />
@@ -417,16 +416,16 @@ function ProjectMapCard({ activeScopeId, project, onScopeSwitch }: { activeScope
         最近扫描：{formatScanStatusTime(project.lastScanStatus, project.lastScanFinishedAtMs)}
       </Typography>
       <Typography color="text.secondary" variant="body2">
-        此项目 scope 包含 {project.resourceCount} 项动态资源；跨项目共享/重复检测是后续能力。
+        此项目包含 {project.resourceCount} 项本机资源。
       </Typography>
       <Box className="resource-map-directory-list">
         {project.directories.slice(0, 3).map((directory) => (
-          <Chip key={directory.scanSourceId} label={`${directory.displayName} · ${directory.profileId}`} size="small" variant="outlined" />
+          <Chip key={directory.scanSourceId} label={`${directory.displayName} · ${scanProfileDisplayName(directory.profileId)}`} size="small" variant="outlined" />
         ))}
         {project.directories.length > 3 && <Chip label={`+${project.directories.length - 3} 来源`} size="small" variant="outlined" />}
       </Box>
       <Button disabled={active} size="small" variant="outlined" onClick={() => onScopeSwitch(project.scopeId)}>
-        切换到项目 scope
+        切换到项目范围
       </Button>
     </Box>
   );
@@ -451,9 +450,9 @@ function SourceMapCard({ activeScopeId, source, onScopeSwitch }: { activeScopeId
         <MapMetric label="错误" value={source.errorCount} />
       </Box>
       <Box className="resource-map-directory-list">
-        <Chip label={source.profileId} size="small" variant="outlined" />
+        <Chip label={scanProfileDisplayName(source.profileId)} size="small" variant="outlined" />
         <Chip label={source.projectLabel || "未归类"} size="small" variant="outlined" />
-        <Chip label={source.sourceKind} size="small" variant="outlined" />
+        <Chip label={sourceKindDisplayName(source.sourceKind)} size="small" variant="outlined" />
       </Box>
       <Typography color="text.secondary" variant="body2">
         {formatKindCounts(source.countsByKind)}
@@ -462,7 +461,7 @@ function SourceMapCard({ activeScopeId, source, onScopeSwitch }: { activeScopeId
         最近扫描：{formatScanStatusTime(source.lastScanStatus, source.lastScanFinishedAtMs)}
       </Typography>
       <Button disabled={active} size="small" variant="outlined" onClick={() => onScopeSwitch(source.scopeId)}>
-        切换到来源 scope
+        切换到来源范围
       </Button>
     </Box>
   );
@@ -503,4 +502,15 @@ function resourceKindLabel(resourceKind: string): string {
     "unknown-local-resource": "未知资源"
   };
   return labels[resourceKind] ?? resourceKind;
+}
+
+function scanProfileDisplayName(profileId: string): string {
+  return getScanProfileById(profileId).displayName;
+}
+
+function sourceKindDisplayName(sourceKind: string): string {
+  if (sourceKind === "intelligent-discovery") return "智能发现";
+  if (sourceKind === "advanced-full-disk") return "高级发现";
+  if (sourceKind === "custom-directory") return "自选目录";
+  return sourceKind;
 }

@@ -108,15 +108,15 @@ export function moduleEmptyStateCopy(view: ResourceView): { title: string; body:
   switch (view) {
     case "skills":
       return {
-        title: "尚未发现 Skills",
-        body: "尚未发现 Skills；请到扫描管理添加项目目录或运行智能发现。",
-        hints: ["当前技能库只读取 SQLite 动态资源库。", "Legacy 示例数据不会计入技能库数量。", "扫描不会自动开始。"]
+        title: "尚未发现技能",
+        body: "尚未发现技能；请到扫描管理添加项目目录或运行智能发现。",
+        hints: ["技能库只读取本机资源库。", "旧入口示例不会计入技能数量。", "扫描不会自动开始。"]
       };
     case "mcp":
       return {
-        title: "尚未发现 MCP metadata",
-        body: "尚未发现 MCP metadata。",
-        hints: ["AIOS 不会启动或连接 MCP 服务。", "仅用户扫描后的动态元数据会显示在这里。", "Legacy 示例数据只在旧入口查看。"]
+        title: "尚未发现 MCP 元数据",
+        body: "尚未发现 MCP 元数据。",
+        hints: ["AIOS 不会启动或连接 MCP 服务。", "只显示用户扫描后的本机元数据。", "旧入口示例只在旧入口查看。"]
       };
     case "scripts":
       return {
@@ -128,19 +128,19 @@ export function moduleEmptyStateCopy(view: ResourceView): { title: string; body:
       return {
         title: "尚未发现报告元数据",
         body: "尚未发现报告元数据；请先在扫描管理中添加目录并手动扫描。",
-        hints: ["报告列表只展示扫描持久化的元数据。", "不会读取或展示文件正文。", "Legacy 示例数据不参与当前模块计数。"]
+        hints: ["报告列表只展示扫描持久化的元数据。", "不会读取或展示文件正文。", "旧入口示例不参与当前模块计数。"]
       };
     case "project-packs":
       return {
         title: "尚未发现项目包元数据",
         body: "尚未发现项目包元数据；请扫描包含项目资源包的目录。",
-        hints: ["项目 / source scope 只来自动态资源库。", "不会复制资源到全局入口。", "Legacy 示例数据仅用于兼容查看。"]
+        hints: ["项目和来源范围只来自本机资源库。", "不会复制资源到全局入口。", "旧入口示例仅用于兼容查看。"]
       };
     case "policies":
       return {
         title: "尚未发现策略元数据",
         body: "尚未发现策略元数据；请扫描包含治理或策略资源的项目目录。",
-        hints: ["策略模块不会修改策略文件。", "当前列表只使用用户扫描后的 SQLite 元数据。", "Legacy 示例数据不参与策略计数。"]
+        hints: ["策略模块不会修改策略文件。", "当前列表只使用用户扫描后的 SQLite 元数据。", "旧入口示例不参与策略计数。"]
       };
     case "validators":
       return {
@@ -150,15 +150,15 @@ export function moduleEmptyStateCopy(view: ResourceView): { title: string; body:
       };
     case "legacy":
       return {
-        title: "Legacy 示例数据不可用",
+        title: "旧入口示例不可用",
         body: "未加载到内置示例/兼容快照。",
-        hints: ["Legacy 只用于兼容查看。", "它不代表当前电脑扫描结果。", "不会写入 SQLite 动态资源库。"]
+        hints: ["旧入口只用于兼容查看。", "它不代表当前电脑扫描结果。", "不会写入 SQLite 动态资源库。"]
       };
     default:
       return {
         title: "尚未扫描任何目录",
         body: "当前动态资源库为空；请到扫描管理添加项目目录或运行智能发现。",
-        hints: ["默认模块只读取 SQLite 动态资源库。", "Legacy 示例数据不会计入默认数量。", "扫描必须由用户手动启动。"]
+        hints: ["默认模块只读取 SQLite 动态资源库。", "旧入口示例不会计入默认数量。", "扫描必须由用户手动启动。"]
       };
   }
 }

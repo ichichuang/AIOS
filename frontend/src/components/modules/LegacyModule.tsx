@@ -31,7 +31,7 @@ export function LegacyModule({ resourceCorpus, resources, selectedId, onSelect }
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />
-          <Chip className="status-chip status-warn" label="Legacy snapshot" variant="outlined" />
+          <Chip className="status-chip status-warn" label="旧入口示例" variant="outlined" />
           <Chip label="不代表当前电脑扫描结果" variant="outlined" />
         </>
       }

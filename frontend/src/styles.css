@@ -128,12 +128,10 @@
   top: 0;
   left: 0;
   z-index: 0;
-  border: 1px solid color-mix(in srgb, var(--aios-primary) 36%, var(--aios-selected-outline));
+  border: 1px solid color-mix(in srgb, var(--aios-primary) 28%, var(--aios-selected-outline));
   border-radius: 18px;
-  background: color-mix(in srgb, var(--aios-primary-soft) 74%, var(--aios-surface));
-  box-shadow:
-    inset 3px 0 0 var(--aios-primary),
-    0 6px 18px color-mix(in srgb, var(--aios-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--aios-primary-soft) 48%, var(--aios-surface));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--aios-primary) 8%, transparent);
   opacity: 0;
   pointer-events: none;
 }
@@ -419,8 +417,8 @@
 }
 
 .resource-scope-tab.active {
-  border-color: color-mix(in srgb, var(--aios-primary) 42%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-primary-soft) 76%, var(--aios-surface));
+  border-color: color-mix(in srgb, var(--aios-primary) 30%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-primary-soft) 42%, var(--aios-surface));
   color: var(--aios-primary);
 }
 
@@ -678,8 +676,8 @@
 .compact-skill-row-inner.selected,
 .compact-skill-row-inner.selected:hover {
   border-color: var(--aios-selected-outline) !important;
-  background: var(--aios-selected-surface);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
+  background: color-mix(in srgb, var(--aios-selected-surface) 68%, var(--aios-surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 18%, transparent);
 }
 
 .aios-usage-action,
@@ -940,6 +938,9 @@
 .local-library-cta {
   align-items: center;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  border-color: color-mix(in srgb, var(--aios-primary) 22%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-primary-soft) 28%, var(--aios-surface));
+  padding: 14px;
 }
 
 .scan-action-row.compact {
@@ -962,8 +963,8 @@
 }
 
 .resource-map-card.active {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-selected-surface);
+  border-color: color-mix(in srgb, var(--aios-primary) 28%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-primary-soft) 26%, var(--aios-surface));
 }
 
 .resource-map-card-heading {
@@ -1078,22 +1079,23 @@
 .scan-mode-card.MuiButton-root {
   justify-content: stretch;
   min-width: 0;
-  min-height: 236px;
+  min-height: 190px;
   border-color: var(--aios-outline);
   border-radius: 12px;
-  padding: 12px;
+  padding: 14px;
   text-align: left;
   text-transform: none;
 }
 
 .scan-mode-card.active.MuiButton-root {
-  border-color: var(--aios-selected-outline);
-  background: var(--aios-selected-surface);
+  border-color: color-mix(in srgb, var(--aios-primary) 34%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-primary-soft) 32%, var(--aios-surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 10%, transparent);
 }
 
 .scan-mode-card-copy {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   width: 100%;
 }
@@ -1111,7 +1113,7 @@
 
 .scan-mode-safety-list {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -1209,8 +1211,8 @@
 }
 
 .scan-first-use-item.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 32%, var(--aios-outline));
-  background: var(--aios-warning-soft);
+  border-color: color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-warning-soft) 46%, var(--aios-surface-muted));
 }
 
 .scan-control-grid {
@@ -1296,9 +1298,9 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--aios-warning) 32%, var(--aios-outline));
+  border: 1px solid color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
   border-radius: 12px;
-  background: var(--aios-warning-soft);
+  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
   padding: 8px;
 }
 
@@ -1405,8 +1407,8 @@
 }
 
 .scan-boundary-callout.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 32%, var(--aios-outline));
-  background: var(--aios-warning-soft);
+  border-color: color-mix(in srgb, var(--aios-warning) 22%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
 }
 
 .scan-boundary-callout svg {
@@ -2680,7 +2682,7 @@
 .status-unknown.MuiChip-root,
 .status-missing.MuiChip-root,
 .status-disabled.MuiChip-root {
-  background: var(--aios-warning-soft);
+  background: color-mix(in srgb, var(--aios-warning-soft) 58%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
@@ -2690,7 +2692,7 @@
 }
 
 .risk-medium.MuiChip-root {
-  background: var(--aios-warning-soft);
+  background: color-mix(in srgb, var(--aios-warning-soft) 58%, var(--aios-surface));
   color: var(--aios-warning);
 }
 
@@ -2959,8 +2961,8 @@
 }
 
 .inspector-boundary-callout.warn {
-  border-color: color-mix(in srgb, var(--aios-warning) 38%, var(--aios-outline));
-  background: color-mix(in srgb, var(--aios-warning-soft) 56%, var(--aios-surface));
+  border-color: color-mix(in srgb, var(--aios-warning) 24%, var(--aios-outline));
+  background: color-mix(in srgb, var(--aios-warning-soft) 42%, var(--aios-surface));
 }
 
 .inspector-boundary-callout-copy {
@@ -3043,7 +3045,7 @@
   border: 1px solid var(--aios-selected-outline);
   border-radius: 16px;
   background: var(--aios-surface);
-  box-shadow: inset 3px 0 0 var(--aios-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--aios-primary) 12%, transparent);
   padding: 14px;
   text-align: left;
 }
@@ -3139,9 +3141,8 @@
 }
 
 .aios-inspector-empty-guide {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--aios-primary-soft) 38%, transparent), transparent 52%),
-    var(--aios-surface);
+  border-color: color-mix(in srgb, var(--aios-primary) 16%, var(--aios-outline));
+  background: var(--aios-surface);
 }
 
 .aios-inspector-empty-heading {
@@ -3189,7 +3190,7 @@
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: var(--aios-primary);
+  background: color-mix(in srgb, var(--aios-primary) 72%, var(--aios-muted));
   content: "";
 }
 

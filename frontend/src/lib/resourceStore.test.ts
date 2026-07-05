@@ -122,7 +122,7 @@ assert.equal(state.canClear, true);
 assert.equal(state.latestJobLabel, "completed · ~/custom-scan-basic");
 assert.ok(state.latestSuccessfulScanLabel.includes("2024"));
 assert.equal(state.sourceRows[0].primary, "custom-scan-basic");
-assert.equal(state.sourceRows[0].secondary, "~/custom-scan-basic · AIOS · project-root");
+assert.equal(state.sourceRows[0].secondary, "~/custom-scan-basic · AIOS · 项目根目录");
 assert.equal(state.sourceRows[0].selected, true);
 assert.equal(state.sourceRows[0].statusLabel, "已完成");
 assert.equal(state.sourceRows[0].resourceCount, 4);
@@ -139,7 +139,7 @@ assert.equal(privacySummary.contentPolicyLabel, "不保存文件内容");
 assert.equal(privacySummary.executionPolicyLabel, "不执行脚本或 MCP");
 assert.match(LOCAL_DATA_RESET_WARNING_COPY, /不会删除用户文件/);
 assert.match(WHAT_AIOS_STORES_COPY, /相对路径/);
-assert.match(WHAT_AIOS_NEVER_STORES_COPY, /provider keys/);
+assert.match(WHAT_AIOS_NEVER_STORES_COPY, /供应商密钥/);
 
 const disabledSource: PersistedScanSource = { ...source, id: "scan-source:disabled", enabled: false };
 assert.deepEqual(buildSelectedBatchSourceIds([source, disabledSource], [source.id, disabledSource.id]), [source.id]);

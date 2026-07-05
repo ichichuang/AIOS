@@ -386,14 +386,14 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
       <AiosSection className="scan-profile-section">
         <AiosSectionHeader
           title="扫描模式"
-          summary="AIOS 首次启动不会扫描这台机器。必须选择模式、阅读边界说明，并手动点击开始。"
+          summary="选择一种来源方式后手动开始。AIOS 不会在启动或切换模式时扫描。"
           action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />}
         />
         {resourceCorpus.summary.resourceCount === 0 && (
           <Box className="scan-boundary-callout info">
             <SecurityRounded fontSize="small" />
             <Typography color="text.secondary" variant="body2">
-              AIOS 尚未扫描任何目录或尚未产生动态资源。AIOS 不会自动扫描；可以手动添加项目文件夹，或让非技术用户使用智能全机发现。高级全盘发现更慢、受权限影响，并且必须显式确认。所有扫描都是本地 metadata-only。
+              还没有本机资源。可以添加项目目录，或使用智能发现创建候选来源；高级发现更慢且必须确认。所有结果只保存本地元数据。
             </Typography>
           </Box>
         )}
@@ -429,10 +429,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                       扫描：{safetyCard.whatScans}
                     </Typography>
                     <Typography color="text.secondary" variant="body2">
-                      跳过：{safetyCard.whatSkips}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      确认：{safetyCard.confirmation}
+                      不扫描：{safetyCard.whatSkips}
                     </Typography>
                   </Box>
                   <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
@@ -509,7 +506,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
             </Box>
             <TextField
               disabled={scanLocked}
-              label="默认项目 / scope 标签"
+              label="默认项目标签"
               size="small"
               value={newProjectLabel}
               onChange={(event) => setNewProjectLabel(event.target.value)}
@@ -612,7 +609,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                   </TextField>
                   <TextField
                     disabled={sourceBusy}
-                    label="项目 / scope"
+                    label="项目标签"
                     size="small"
                     value={sourceProjectDrafts[source.id] ?? source.projectLabel ?? ""}
                     onBlur={() => void handleProjectBlur(source)}
@@ -625,7 +622,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
                   </Box>
                   <Box className="scan-source-actions">
                     <Button disabled={!resourceCorpus.scopes.some((scope) => scope.scanSourceId === source.id)} size="small" variant="outlined" onClick={() => handleSourceScopeSwitch(source.id)}>
-                      查看 scope
+                      查看来源范围
                     </Button>
                     <Button disabled={sourceBusyId === source.id || scanLocked} size="small" variant="outlined" onClick={() => void handleUpdateSourceEnabled(source, !source.enabled)}>
                       {source.enabled ? "停用" : "启用"}
@@ -641,7 +638,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
             <Box className="scan-empty-state">
               <Typography component="strong">尚无扫描来源</Typography>
               <Typography color="text.secondary" variant="body2">
-                添加目录后会保存为本地 SQLite scan_source。添加不会触发扫描。
+                添加目录后会保存为本地来源记录。添加不会触发扫描。
               </Typography>
             </Box>
           )}
@@ -680,7 +677,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
         <AiosSection className="scan-discovery-summary-section">
           <AiosSectionHeader title="发现结果统计" summary="来自同一个 SQLite 动态资源语料；仅展示聚合计数和安全分类。" count={discoveryStats.totalResources} />
           <Box className="scan-summary-grid">
-            <AiosUsageCard title="总资源" purpose="已持久化的 metadata-only 资源数量。" technicalName={`${discoveryStats.totalResources}`} />
+            <AiosUsageCard title="总资源" purpose="已持久化的仅元数据资源数量。" technicalName={`${discoveryStats.totalResources}`} />
             <AiosUsageCard title="扫描来源" purpose="本次或最近发现批次结束的来源数量。" technicalName={`${discoveryStats.scannedSources}`} />
             <AiosUsageCard title="跳过条目" purpose="排除、权限、上限、取消、大小或符号链接等聚合计数。" technicalName={`${discoveryStats.skippedEntries}`} />
             <AiosUsageCard title="权限拒绝" purpose="无法读取元数据或遍历失败的安全聚合计数。" technicalName={`${discoveryStats.permissionDeniedCount}`} />
@@ -845,7 +842,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
       <Box className="scan-boundary-callout info">
         <SecurityRounded fontSize="small" />
         <Typography color="text.secondary" variant="body2">
-          发现模式仅在扫描管理中可启动；Dashboard、Skills、MCP、Scripts、Reports、Project Packs、Policies、Validators、Legacy 和 Inspector 只读取已持久化的动态资源语料。
+          发现模式只能在扫描管理中启动；总览、技能库、MCP、脚本、报告、项目包、策略、验证器、旧入口和详情面板只读取已保存的本机资源。
         </Typography>
       </Box>
 
@@ -931,7 +928,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
 
       {scanResult && (scanResult.warnings.length > 0 || skippedCount > 0) && (
         <AiosSection className="scan-warning-section">
-          <AiosSectionHeader title="跳过与提示" summary="仅显示 redacted 路径和策略原因，不显示敏感值。" count={scanResult.warnings.length} />
+          <AiosSectionHeader title="跳过与提示" summary="仅显示已隐藏路径和策略原因，不显示敏感值。" count={scanResult.warnings.length} />
           <Box className="scan-warning-list">
             {scanResult.warnings.slice(0, 8).map((warning, index) => (
               <Box className="scan-warning-row" key={`${warning.code}:${warning.relativePath ?? index}`}>
@@ -1023,7 +1020,7 @@ function skippedSummaryItems(result: CustomScanResult | null, snapshot: ScanJobS
     {
       label: "上限截断",
       value: counts?.skippedByLimit ?? (counts?.truncated ? 1 : 0),
-      summary: "达到模板 max entries 后停止遍历。"
+      summary: "达到模板条目上限后停止遍历。"
     },
     {
       label: "取消停止",

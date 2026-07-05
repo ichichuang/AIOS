@@ -224,7 +224,7 @@ export const globalCorpusScope: ResourceCorpusScope = {
   id: "global",
   scopeKind: "global",
   label: "全局",
-  description: "全部动态资源库元数据。",
+  description: "全部本机资源库元数据。",
   resourceCount: 0,
   projectLabel: null,
   scanSourceId: null,
@@ -295,7 +295,7 @@ export function getCorpusSourceMode(summary: ResourceCorpusSummary): ResourceCor
 
 export function getCorpusSourceLabel(mode: ResourceCorpusSourceMode): string {
   if (mode === "dynamic-corpus") return "动态资源库";
-  if (mode === "legacy-snapshot") return "Legacy 示例数据";
+  if (mode === "legacy-snapshot") return "旧入口示例";
   return "空资源库";
 }
 
@@ -306,19 +306,19 @@ export function getCorpusEmptyMessage(mode: ResourceCorpusSourceMode): string {
 }
 
 export function getScopeViewingLabel(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
-  if (mode === "legacy-snapshot") return "正在查看 Legacy 示例快照";
+  if (mode === "legacy-snapshot") return "正在查看旧入口示例";
   if (scope.scopeKind === "project") return `正在查看项目：${scope.label}`;
   if (scope.scopeKind === "source") return `正在查看来源：${scope.label}`;
   if (scope.scopeKind === "unclassified") return "正在查看：未归类动态资源";
-  return "正在查看：全局本地资源库";
+  return "正在查看：全部本机资源";
 }
 
 export function getScopeSemanticDescription(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
-  if (mode === "legacy-snapshot") return "Legacy 是内置示例/兼容快照，不代表当前电脑扫描结果，也不会写入 SQLite。";
-  if (scope.scopeKind === "project") return "Project 只显示该项目 / scope 标签下的 SQLite 动态资源。";
-  if (scope.scopeKind === "source") return "Source 只显示该已选择目录来源产生的 SQLite 动态资源。";
-  if (scope.scopeKind === "unclassified") return "Unclassified 只显示尚未设置 project/scope 标签的动态资源。";
-  return "Global 只汇总本机 SQLite 动态资源库，不包含 Legacy 示例快照。";
+  if (mode === "legacy-snapshot") return "旧入口示例不代表当前电脑扫描结果，也不会写入 SQLite。";
+  if (scope.scopeKind === "project") return "仅显示该项目标签下的本机资源。";
+  if (scope.scopeKind === "source") return "仅显示该授权目录来源产生的本机资源。";
+  if (scope.scopeKind === "unclassified") return "仅显示尚未设置项目标签的本机资源。";
+  return "汇总本机 SQLite 资源库，不包含旧入口示例。";
 }
 
 export function buildLocalResourceLibraryViewState(summary: ResourceCorpusSummary, activeScope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): LocalResourceLibraryViewState {
@@ -435,18 +435,18 @@ export function mapCorpusResourceToAiosResource(resource: ResourceCorpusResource
       secretExposureRisk: resource.sensitivePathRedacted ? "medium" : "low",
       executionRisk: executionRiskForKind(String(resource.resourceKind)),
       notes: [
-        "SQLite dynamic resource corpus",
-        "metadata-only persistence",
-        "no file contents read",
-        "no scripts or MCP executed",
+        "本地 SQLite 动态资源库",
+        "仅保存持久化元数据",
+        "不读取文件内容",
+        "不执行脚本或 MCP",
         `scan profile: ${profile.id}`,
-        ...(resource.sensitivePathRedacted ? ["sensitive path segment redacted"] : [])
+        ...(resource.sensitivePathRedacted ? ["敏感路径段已隐藏"] : [])
       ]
     },
     tokenPressure: {
       estimatedTokens: 0,
       level: "low",
-      reason: "metadata-only SQLite resource corpus"
+      reason: "本地资源库仅保存元数据"
     },
     prompts: [],
     metadata: {
@@ -518,14 +518,14 @@ export function getResourceInspectorProvenanceSummary(resource: AiosResource): R
   if (isLegacySnapshotResource(resource)) {
     const snapshotGeneratedAt = getMetadataString(resource, "snapshotGeneratedAt");
     return {
-      dataSourceType: "Legacy 示例数据",
+      dataSourceType: "旧入口示例",
       projectLabel: "不适用",
       scanSourceName: "不适用",
       scanSourceDirectory: "不适用",
       relativePath: getMetadataString(resource, "relativePath") ?? resource.path ?? "未记录",
       profileLabel: "不适用",
       lastScanLabel: snapshotGeneratedAt ? `示例快照 · ${formatDateTime(Date.parse(snapshotGeneratedAt))}` : "示例快照",
-      metadataBoundary: "Legacy 不代表当前电脑扫描结果，不写入 SQLite 动态资源库"
+      metadataBoundary: "旧入口示例不代表当前电脑扫描结果，不写入 SQLite 动态资源库"
     };
   }
 

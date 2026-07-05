@@ -51,15 +51,15 @@ assert.equal(getCorpusSourceLabel("empty"), "空资源库");
 assert.equal(getCorpusEmptyMessage("empty"), "尚未扫描任何目录；请到扫描管理添加项目目录或运行智能发现。");
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, false), true);
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, true), false);
-assert.equal(moduleEmptyStateCopy("skills").body, "尚未发现 Skills；请到扫描管理添加项目目录或运行智能发现。");
-assert.equal(moduleEmptyStateCopy("mcp").body, "尚未发现 MCP metadata。");
+assert.equal(moduleEmptyStateCopy("skills").body, "尚未发现技能；请到扫描管理添加项目目录或运行智能发现。");
+assert.equal(moduleEmptyStateCopy("mcp").body, "尚未发现 MCP 元数据。");
 
 const emptyLibraryView = buildLocalResourceLibraryViewState(fallbackSummary, globalCorpusScope, "empty");
 assert.equal(emptyLibraryView.statusLabel, "空资源库");
 assert.equal(emptyLibraryView.dynamicResourceCount, 0);
 assert.equal(emptyLibraryView.scanSourceCount, 0);
 assert.equal(emptyLibraryView.projectScopeCount, 0);
-assert.equal(emptyLibraryView.activeScopeLabel, "正在查看：全局本地资源库");
+assert.equal(emptyLibraryView.activeScopeLabel, "正在查看：全部本机资源");
 assert.equal(emptyLibraryView.scanManagementCtaVisible, true);
 assert.deepEqual(emptyLibraryView.firstUseActions, ["添加自选目录", "查看智能发现"]);
 
@@ -126,7 +126,7 @@ assert.equal(shouldShowFirstRunOnboarding(dynamicSummary, false), false);
 const dynamicDataSource = buildResourceDataSourceState(dynamicSummary, 4);
 assert.equal(dynamicDataSource.activeSource, "dynamic-corpus");
 assert.equal(dynamicDataSource.displayLabel, "动态资源库");
-assert.equal(getScopeViewingLabel(globalCorpusScope, "dynamic-corpus"), "正在查看：全局本地资源库");
+assert.equal(getScopeViewingLabel(globalCorpusScope, "dynamic-corpus"), "正在查看：全部本机资源");
 assert.equal(getScopeViewingLabel(projectScope, "dynamic-corpus"), "正在查看项目：AIOS");
 assert.equal(getScopeViewingLabel(sourceScope, "dynamic-corpus"), "正在查看来源：custom-scan-basic");
 
@@ -229,7 +229,7 @@ assert.equal(mapped.metadata?.corpusSource, "dynamic-resource-corpus");
 assert.equal(mapped.metadata?.projectLabel, "AIOS");
 assert.equal(mapped.metadata?.rootDisplayPath, "~/custom-scan-basic");
 assert.equal(mapped.safetyProfile.readOnly, true);
-assert.ok(mapped.safetyProfile.notes.includes("metadata-only persistence"));
+assert.ok(mapped.safetyProfile.notes.includes("仅保存持久化元数据"));
 assert.deepEqual(getResourceInspectorProvenanceSummary(mapped), {
   dataSourceType: "动态本地资源库",
   projectLabel: "AIOS",
@@ -274,7 +274,7 @@ assert.equal((merged.metadata?.corpusDetailLocations as unknown[]).length, 1);
 const legacyTabs = buildCorpusScopeTabs([globalCorpusScope, projectScope], fallbackResourceCorpusSummary);
 assert.equal(legacyTabs.length, 1);
 assert.equal(legacyTabs[0].label, "全局");
-assert.equal(getScopeViewingLabel(globalCorpusScope, "legacy-snapshot"), "正在查看 Legacy 示例快照");
+assert.equal(getScopeViewingLabel(globalCorpusScope, "legacy-snapshot"), "正在查看旧入口示例");
 
 const dynamicSkill = {
   id: "dynamic-skill",
@@ -547,7 +547,7 @@ function makeDynamicCorpusResource(input: {
       writesGlobalState: false,
       secretExposureRisk: "low",
       executionRisk: input.capabilityType === "script" || input.capabilityType === "validator" ? "medium" : "low",
-      notes: ["metadata-only persistence"]
+      notes: ["仅保存持久化元数据"]
     },
     tokenPressure: {
       estimatedTokens: 0,

@@ -40,7 +40,7 @@ export interface ScanProfileDefinition {
 export const DEFAULT_SCAN_PROFILE_ID: ScanProfileId = "custom-folder";
 export const DEFAULT_SCAN_MODE_ID: ScanModeId = "custom-directory";
 export const SCAN_JOB_PROGRESS_EVENT = "aios://scan-job-progress";
-export const ADVANCED_FULL_DISK_CONFIRMATION_COPY = "I understand this scan may take time, may skip protected folders, and stores metadata-only results locally.";
+export const ADVANCED_FULL_DISK_CONFIRMATION_COPY = "我确认高级发现可能耗时较长、可能跳过受保护目录，并且只在本地保存元数据结果。";
 export const WEB_DISCOVERY_UNAVAILABLE_COPY = "当前是 Web/Vite 运行时，只展示扫描入口与策略；目录选择、智能发现和高级全盘发现只在 Tauri 桌面应用中启用，不会模拟真实全盘扫描。";
 
 export interface ScanModeDefinition {
@@ -77,29 +77,29 @@ export interface ScanModeUiState {
 export const scanModeDefinitions: ScanModeDefinition[] = [
   {
     id: "custom-directory",
-    title: "Custom Directories",
+    title: "自选目录",
     sourceKind: "custom-directory",
     profileId: DEFAULT_SCAN_PROFILE_ID,
-    summary: "Use the existing system folder picker for one or more explicit project folders.",
-    warning: "Strict root guards stay enabled for normal custom directory scans.",
+    summary: "手动添加明确授权的项目或工作目录，再选择来源扫描。",
+    warning: "普通目录会继续拦截过宽根目录和系统范围。",
     requiresConfirmation: false
   },
   {
     id: "intelligent-discovery",
-    title: "Intelligent Whole-Computer Discovery",
+    title: "智能发现",
     sourceKind: "intelligent-discovery",
     profileId: "intelligent-discovery",
-    summary: "Guided discovery for common user workspaces such as Desktop, Documents, Downloads, Developer, Work, Projects, and AIOS workspace candidates.",
-    warning: "Runs only after Start. It does not scan system roots by default.",
+    summary: "从常见工作区候选中创建来源，适合不想逐个选目录的用户。",
+    warning: "只在点击开始后运行；默认不扫描系统根目录。",
     requiresConfirmation: false
   },
   {
     id: "advanced-full-disk",
-    title: "Advanced Full-Disk Discovery",
+    title: "高级发现",
     sourceKind: "advanced-full-disk",
     profileId: "advanced-full-disk",
-    summary: "Advanced broad discovery path for users who explicitly accept slower, permission-sensitive scanning.",
-    warning: "Requires explicit confirmation and stores metadata-only results locally.",
+    summary: "更宽范围的高级路径，较慢且受权限影响，仅供明确确认时使用。",
+    warning: "必须显式确认；只在本地保存元数据结果。",
     requiresConfirmation: true
   }
 ];
@@ -107,7 +107,7 @@ export const scanModeDefinitions: ScanModeDefinition[] = [
 export const scanModeSafetyCards: ScanModeSafetyCard[] = [
   {
     modeId: "custom-directory",
-    title: "Custom Directories",
+    title: "自选目录",
     intendedUsers: "知道要检查哪些项目文件夹的用户。",
     whatScans: "只扫描用户通过系统目录选择器添加的文件夹。",
     whatSkips: "过宽根目录、home 根、系统根、磁盘根、符号链接、依赖、缓存、构建产物、日志和敏感命名路径段。",
@@ -115,7 +115,7 @@ export const scanModeSafetyCards: ScanModeSafetyCard[] = [
   },
   {
     modeId: "intelligent-discovery",
-    title: "Intelligent Whole-Computer Discovery",
+    title: "智能发现",
     intendedUsers: "不想逐个选择项目文件夹的非技术用户。",
     whatScans: "常见用户工作区候选，例如 Desktop、Documents、Downloads、Developer、Work、Projects、Code、Workspace 和 AIOS 工作区候选。",
     whatSkips: "不存在或不可访问的候选、系统根、home 根、/Users、/Volumes、磁盘根、受保护文件夹、符号链接、凭据、浏览器 cookies、缓存和构建产物。",
@@ -123,9 +123,9 @@ export const scanModeSafetyCards: ScanModeSafetyCard[] = [
   },
   {
     modeId: "advanced-full-disk",
-    title: "Advanced Full-Disk Discovery",
-    intendedUsers: "理解较慢、权限敏感 broad discovery 的高级用户。",
-    whatScans: "显式确认后的 broad discovery 来源，受深度、条目上限、强 exclude 和取消机制约束。",
+    title: "高级发现",
+    intendedUsers: "理解较慢、权限敏感的宽范围发现用户。",
+    whatScans: "显式确认后的宽范围来源，受深度、条目上限、强排除规则和取消机制约束。",
     whatSkips: "受保护系统区域、Library/System/Applications/Volumes、凭据、SSH/GPG/Kube、Keychains、Cookies、符号链接、缓存、依赖和拒绝元数据访问的条目。",
     confirmation: "UI 与 Rust command path 都必须收到显式确认后才允许高级来源扫描。"
   }
@@ -404,10 +404,10 @@ export const fallbackScanProfiles: ScanProfileDefinition[] = [
   {
     id: "advanced-full-disk",
     displayName: "高级全盘发现",
-    shortDescription: "高风险高级模式，只在用户勾选确认后创建 broad discovery 来源。",
+    shortDescription: "高风险高级模式，只在用户勾选确认后创建宽范围发现来源。",
     recommendedUseCase: "仅在普通目录和智能发现无法定位资源时使用；受保护目录和权限失败会被跳过。",
     safetyBoundary: "必须显式确认；仅保存元数据，不读取内容、不执行脚本/MCP、不跟随符号链接，并使用更强 exclude。",
-    exampleFolderTypes: ["用户 home 根", "受限 broad discovery 来源"],
+    exampleFolderTypes: ["用户主目录根", "受限宽范围来源"],
     maxDepth: 5,
     maxEntries: 3_000,
     maxDepthEntryPolicy: "高级模式每个来源最多 5 层、3,000 个条目；达到上限即停止并记录跳过摘要。",
@@ -538,17 +538,17 @@ export function mapScanResourcesToAiosResources(result: CustomScanResult, profil
         secretExposureRisk: scanResource.sensitive ? "medium" : "low",
         executionRisk: executionRiskForScanResource(scanResource),
         notes: [
-          "metadata-only custom directory scan",
-          "no file contents read",
-          "no scripts or MCP executed",
+          "仅保存目录扫描元数据",
+          "不读取文件内容",
+          "不执行脚本或 MCP",
           `scan profile: ${scanProfile.id}`,
-          ...(scanResource.sensitive ? ["sensitive path segment redacted"] : [])
+          ...(scanResource.sensitive ? ["敏感路径段已隐藏"] : [])
         ]
       },
       tokenPressure: {
         estimatedTokens: 0,
         level: "low",
-        reason: "metadata-only custom directory scan"
+        reason: "目录扫描仅保存元数据"
       },
       prompts: [],
       metadata: {

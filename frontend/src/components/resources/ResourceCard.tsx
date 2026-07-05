@@ -95,7 +95,7 @@ function getUsageChips(resource: AiosResource, server: McpServerRecord | null, v
 
 function getExtraChips(resource: AiosResource, server: McpServerRecord | null, variant: ResourceCardVariant): string[] {
   if (isDynamicCorpusResource(resource)) return ["动态资源库", getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "未归类"];
-  if (isLegacySnapshotResource(resource)) return ["Legacy 示例数据", "非本机扫描"];
+  if (isLegacySnapshotResource(resource)) return ["旧入口示例", "非本机扫描"];
   if (variant === "mcp" && server) return [server.transport, ...getMcpRiskLabels(server)];
   if (variant === "skill") return [getSkillRuntimeLabel(resource)];
   if (variant === "script") return [getScriptKind(resource), "只读清单"];
@@ -129,7 +129,7 @@ function getInventorySourceLabel(resource: AiosResource, server: McpServerRecord
   if (isDynamicCorpusResource(resource)) {
     return getMetadataString(resource, "projectLabel") ?? getMetadataString(resource, "scanSourceName") ?? "动态资源库";
   }
-  if (isLegacySnapshotResource(resource)) return "Legacy 示例数据";
+  if (isLegacySnapshotResource(resource)) return "旧入口示例";
   if (server) return `${server.transport} · ${zhCN.mcp.localRemoteRisk[server.localRemoteRisk]}`;
   if (variant === "report") return "本地报告";
   if (variant === "project-pack") return getProjectPackArea(resource);
