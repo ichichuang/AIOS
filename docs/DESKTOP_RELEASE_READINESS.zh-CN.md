@@ -1,5 +1,9 @@
 # AIOS Desktop 本地发行准备
 
+文档类型：内部发行准备文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文服务内部发行和测试，不定义普通用户主导航。
+
 ## 范围
 
 本文件记录 Phase 4C 的本地 installable-product 验证准备。此阶段只覆盖 unsigned macOS `.app` / `.dmg` dry run、产品元数据、bundle 命令和发行准备说明。

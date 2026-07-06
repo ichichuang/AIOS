@@ -1,72 +1,56 @@
 # AIOS Desktop 产品 RFC
 
-## 状态
+文档类型：历史产品 RFC，已被 `docs/product/` 取代。
 
-Phase 0 文档草案。本文只定义 AIOS Desktop / Tauri 产品化方向，不代表已经引入 Tauri、Rust 后端或桌面运行时。
+本文件保留为工程历史参考。当前权威产品定义见 `docs/product/README.zh-CN.md`。如果本文和 `docs/product/` 不一致，以 `docs/product/` 为准。
 
-## 产品定位
+## 当前产品定位
 
-AIOS Desktop 是本地优先、默认只读的本地 AI 能力与资源控制中心。它用于解释、索引和展示本机 AIOS 相关资源，包括技能、MCP 配置元数据、脚本入口、报告、项目包和策略状态。
+AIOS Desktop 是一个简单的本地桌面应用，帮助用户查看、理解、整理和使用本机 AI 技能与 MCP 工具。
 
-AIOS Desktop 不是默认全盘扫描器，不是自动修复器，不是 MCP 执行器，也不是全局 skill 同步器。
+它不是复杂的 AI 资源管控后台，也不是脚本执行器、MCP 运行器或自动修复工具。
+
+## 当前主导航
+
+目标主导航只有四项：
+
+- 首页。
+- 技能。
+- MCP。
+- 高级。
+
+旧工程阶段中提到的脚本、报告、项目包、策略、检查器和旧示例不是普通用户主功能。只有当它们直接帮助理解技能或 MCP 时，才可以作为高级信息出现。
 
 ## 核心原则
 
-- 默认本地运行，不依赖远程服务完成核心资源查看。
-- 默认只读；任何未来写入能力都必须单独设计、单独授权、单独验证。
-- 扫描必须可解释、可取消、可限速，并能说明跳过原因。
-- 不默认全盘扫描；MVP 不包含全盘扫描。
-- 不从 UI 执行任意 shell、脚本、MCP server 或 MCP tool。
-- 不读取、保存或展示 auth、session、token、credential、private key、cookie、env 原始值。
-- 不把扫描到的技能、脚本或 MCP 自动同步到全局入口。
-- JSON snapshot 导出兼容性必须保留，便于现有 Web/UI 阶段继续验证。
+- 默认本地运行，不依赖远程服务完成核心查看。
+- 默认只读。
+- 首次启动不自动查找。
+- 普通用户通过首页的一键查找开始。
+- 高级用户可以手动选择明确文件夹。
+- 不执行脚本。
+- 不启动 MCP 服务，不调用 MCP 工具。
+- 不读取、保存或展示密钥、令牌、密码、私钥、Cookie、登录会话或环境变量值。
+- 不把查找到的技能或 MCP 自动同步到全局入口。
 
-## 当前 UI 基线
+## 产品阶段说明
 
-当前 Material Console UI 是 AIOS Desktop 的 UI 基线。桌面产品化应复用现有 React、MUI、Vite、GSAP 约束和 Material Console 信息架构。
+旧阶段名称仍可作为工程历史使用，但不再定义用户看到的主导航。
 
-Tauri 架构、Rust 扫描引擎、权限模型和本地索引属于桌面产品化提交范围，不应与无关 UI polish、视觉重排或交互重构混入同一提交范围。必要 UI 变更必须与对应桌面阶段直接相关，并在提交说明中明确理由。
-
-## 开发与提交策略
-
-后续 AIOS Desktop 工作直接在 `main` 上推进，不创建长期产品分支。每个阶段使用清晰、可回滚的本地提交表达边界。
-
-提交要求：
-
-- 每次提交只覆盖一个明确阶段或一个明确子范围。
-- commit message 使用详细中文，说明目的、变更区域、验证方式和残余风险。
-- 不使用 `git add .`；仅暂存明确路径。
-- 不把 Phase 1 Tauri shell、Phase 2 Rust scanner、Phase 3 SQLite、Phase 4 自定义扫描 UI、Phase 5 高级全盘扫描混在同一提交里。
-- 不把桌面架构提交与无关 Material Console UI polish 混在一起。
-
-## MVP 边界
-
-Phase 1 Tauri shell MVP 只做桌面壳层和只读状态承载：
-
-- 保留 Material Console UI。
-- 嵌入现有前端构建产物。
-- 读取现有 snapshot 或等价只读本地数据。
-- 提供窗口、应用元信息、基础本地状态页。
-- 不实现全盘扫描。
-- 不执行 shell、脚本、MCP。
-- 不修改全局 AIOS、Codex、Claude、Agents、MCP 或 credential 配置。
-
-## 产品阶段
-
-| 阶段 | 目标 | 明确非目标 |
-| --- | --- | --- |
-| Phase 0 | 架构、安全、迁移和产品 RFC 文档 | 不改运行时 |
-| Phase 1 | Tauri shell MVP | 不实现扫描引擎 |
-| Phase 2 | 受控 Rust 扫描引擎 | 不做全盘扫描 |
-| Phase 3 | SQLite 本地索引与 snapshot 导出兼容 | 不取消 JSON 导出 |
-| Phase 4 | 自定义目录扫描 UI | 不默认扩大扫描范围 |
-| Phase 5 | 高级全盘扫描 | 未获明确批准前不启用 |
+| 阶段 | 当前解释 |
+| --- | --- |
+| Phase 0 | 历史架构、安全、迁移和产品 RFC 文档。 |
+| Phase 1 | 桌面壳基础。 |
+| Phase 2 | 用户确认后的本地查找能力。 |
+| Phase 3 | 本地结果保存和重新打开后查看。 |
+| Phase 4 | 普通用户一键查找、高级来源管理和隐私控制。 |
+| Phase 5 | 仅作为未来高级能力讨论，不能进入普通用户默认流程。 |
 
 ## 相关文档
 
+- `docs/product/README.zh-CN.md`
+- `docs/product/10-documentation-map.zh-CN.md`
 - `docs/DESKTOP_ARCHITECTURE.zh-CN.md`
 - `docs/SCANNER_POLICY.zh-CN.md`
 - `docs/TAURI_MIGRATION_PLAN.zh-CN.md`
-- `docs/ARCHITECTURE.zh-CN.md`
 - `docs/SAFETY.zh-CN.md`
-- `docs/DESIGN_SYSTEM.zh-CN.md`

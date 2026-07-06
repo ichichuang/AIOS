@@ -1,5 +1,9 @@
 # AIOS Desktop 内部发行 Playbook
 
+文档类型：内部发行文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文服务内部测试版分发，不定义普通用户主功能。
+
 ## 范围
 
 本 playbook 面向 AIOS Desktop 内部 unsigned packaging 验收。

@@ -1,25 +1,48 @@
-# Roadmap
+# AIOS Desktop Roadmap
 
-## Phase 1
+文档类型：产品规划支持文档。
 
-- pnpm monorepo。
-- TypeScript read-only inventory engine and CLI。
-- React + TypeScript + Vite UI。
-- Static local snapshot。
-- Prompt copy for Codex and Claude。
-- Safety, MCP drift, token pressure, and resource classification views。
+权威产品定义见 `docs/product/`。本路线图只说明后续方向，不把工程内部概念定义为普通用户主功能。
 
-## Phase 2
+## 当前产品方向
 
-- Tauri 2 desktop shell。
-- Allowlist file-read bridge。
-- Optional local refresh command with explicit user action。
-- Better report parsing and diff views。
-- Optional validator run summaries, still read-only by default.
+AIOS Desktop 是一个简单的本地桌面应用，帮助用户查看、理解、整理和使用本机 AI 技能与 MCP 工具。
 
-## Phase 3
+目标主导航：
 
-- Dry-run write planner for carefully scoped future actions.
-- Explicit diff and confirmation before any apply action.
-- No silent global skill entrypoint changes.
-- No marketplace or remote package install without a separate approval model.
+- 首页。
+- 技能。
+- MCP。
+- 高级。
+
+普通用户默认使用首页的一键查找、技能库和 MCP 工具库。开发者需要的来源分组、手动文件夹、问题摘要和更细的技术信息放在“高级”。
+
+## Phase 1：产品文档和主体验收敛
+
+- 以 `docs/product/` 作为产品规划入口。
+- 首页回答技能数量、MCP 数量和需要处理数量。
+- 技能页回答用途、来源、可用工具、使用方式和状态。
+- MCP 页回答服务、工具、配置来源、状态、问题和人工处理建议。
+- 主导航收敛为：首页、技能、MCP、高级。
+
+## Phase 2：普通用户一键查找
+
+- 首次启动不自动查找。
+- 首页提供“开始查找”。
+- 查找前说明会做什么、不会做什么。
+- 查找结果只保存在本机。
+- 没有结果时，引导用户手动选择明确文件夹。
+
+## Phase 3：高级来源管理
+
+- 开发者可以按全局、本项目、Codex、Claude、手动文件夹查看来源。
+- 开发者可以查看重复、已损坏、来源不明和缺少依赖的问题摘要。
+- 高级页只提供人工排查信息，不自动修改配置、不执行脚本、不启动 MCP。
+
+## 延后工作
+
+- 自动修复。
+- 自动安装依赖。
+- 修改技能或 MCP 配置。
+- 启动 MCP 服务或调用 MCP 工具。
+- 团队共享、云同步或远程备份。

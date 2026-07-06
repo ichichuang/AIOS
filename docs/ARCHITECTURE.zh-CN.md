@@ -1,5 +1,9 @@
 # AIOS Control Center 架构
 
+文档类型：开发者内部历史文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文中的旧模块名、资源分类和工程术语只用于解释早期实现，不代表 AIOS Desktop 的主导航或普通用户功能。目标主导航是：首页、技能、MCP、高级。
+
 ## Phase 1 定位
 
 Phase 1 是本地-only、默认只读的库存与解释工具。它不是 AIOS baseline remediation 工具，也不是 skill 同步器。

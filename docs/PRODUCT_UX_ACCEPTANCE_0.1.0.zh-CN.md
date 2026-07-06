@@ -1,5 +1,9 @@
 # AIOS Desktop 0.1.0 产品体验验收
 
+文档类型：历史验收文档。
+
+当前产品验收标准见 `docs/product/09-product-acceptance-criteria.zh-CN.md`。本文保留 0.1.0 阶段的旧模块和工程术语作为历史证据，不定义当前普通用户主导航。当前目标主导航是：首页、技能、MCP、高级。
+
 ## 范围
 
 本文件记录 AIOS Desktop Phase 4C.4 产品 UX acceptance gate。目标是确认首次使用、动态本地资源库、项目 / 来源 scope、Legacy 示例隔离和扫描安全在用户界面中可理解、可验证、且不扩大 scanner 或 Tauri 权限边界。

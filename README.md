@@ -1,19 +1,49 @@
 # AIOS Desktop
 
-AIOS Desktop 是面向内部用户与公司测试人员的本地优先 AI 能力、资源发现与控制中心。
+AIOS Desktop 是一个简单的本地桌面应用，用来帮助你看清这台电脑上有哪些 AI 技能和 MCP 工具。
 
-它用于在本机查看和管理 AIOS 相关资源的安全元数据，例如 Skills、MCP、Scripts、Reports、Project Packs、Policies 和 Validators。AIOS Desktop 不把本机资源上传到云端，也不把 Legacy 示例数据当作当前电脑的扫描结果。
+它要回答六个问题：
 
-## 重要安全边界
+- 我有多少 AI 技能？
+- 每个技能能做什么？
+- 它来自哪里？
+- 哪个 AI 工具可以使用它？
+- 我该怎么使用它？
+- 哪些技能或 MCP 工具需要处理？
 
-- 首次启动时，AIOS Desktop 不扫描任何目录。
-- 扫描只会在用户进入 Scan Management 并明确点击开始后执行。
-- 扫描是 metadata-only：只保存路径展示名、类型、计数、状态、时间等安全元数据。
-- AIOS Desktop 不读取文件内容，不执行脚本，不启动或执行 MCP server，不读取或保存 secrets、token values、cookies、provider keys、auth/session values 或 raw environment values。
-- Reset / 清空本地库只删除 AIOS Desktop 本地数据库记录，不删除用户文件、目录、脚本或项目。
-- Advanced Full-Disk Discovery 保持显式确认门控；没有确认时不能启动。
+MCP 是一种让 AI 应用连接外部工具的方式。AIOS Desktop 只显示你电脑上已经配置的 MCP 服务和工具，不会直接运行它们。
 
-本地资源库由 AIOS Desktop 自己管理，存储在应用本地数据目录的 SQLite 数据库中。Legacy / demo snapshot 只用于兼容或演示入口，不参与 Dashboard、Skills、MCP、Scripts 等默认动态计数。
+当前产品规划以 [产品文档集](docs/product/README.zh-CN.md) 为准。旧的工程、发行和验收文档只作为内部参考，不定义普通用户看到的主功能。
+
+## 主要页面
+
+目标主导航只有四项：
+
+| 页面 | 用途 |
+| --- | --- |
+| 首页 | 查看技能数量、MCP 数量、需要处理的项目和一键查找入口。 |
+| 技能 | 查看每个技能的用途、来源、可用工具、使用方式和状态。 |
+| MCP | 查看 MCP 服务和工具、配置来源、状态、问题和人工处理建议。 |
+| 高级 | 给开发者查看来源分组、手动选择文件夹、问题摘要和本地数据控制。 |
+
+脚本、报告、策略、检查器、旧示例和原始查找诊断不是普通用户的主页面。只有当它们能帮助理解技能或 MCP 时，才可以放在“高级”里。
+
+## 首次使用
+
+1. 打开应用后，首页应显示空状态，不会自动查找。
+2. 点击“开始查找”，应用会说明将查找 AI 技能和 MCP 工具的基本信息。
+3. 查找结果只保存在这台电脑上。
+4. 查找结束后，首页显示技能数量、MCP 服务数量、MCP 工具数量和需要处理的项目数量。
+5. 如果没有找到结果，可以手动选择一个明确的项目或工具文件夹。
+
+## 隐私与安全
+
+- AIOS Desktop 不上传查找结果。
+- AIOS Desktop 不读取密钥、令牌、密码、浏览器 Cookie、登录会话或环境变量的值。
+- AIOS Desktop 不执行脚本。
+- AIOS Desktop 不启动 MCP 服务，也不调用 MCP 工具。
+- AIOS Desktop 不修改技能文件、MCP 配置、系统设置或用户文件。
+- 清空本地记录只删除 AIOS Desktop 自己保存的结果，不删除你的文件。
 
 ## 内部测试版下载与安装
 
@@ -30,17 +60,6 @@ AIOS Desktop 是面向内部用户与公司测试人员的本地优先 AI 能力
 
 Tauri updater 当前未启用，应用不会自动更新。需要测试新版本时，请重新进入 GitHub Releases 下载新的内部测试版。
 
-## 首次使用检查
-
-1. 启动后先确认 Dashboard 处于首次/空库状态，没有自动扫描或运行中的批次。
-2. Skills、MCP、Scripts、Reports、Policies、Validators 等动态资源计数为空时，应显示 0 或空库引导。
-3. Legacy / demo 数据只应在 Legacy 入口出现，不应进入默认动态资源计数。
-4. 在 Scan Management 中添加一个明确的项目文件夹，确认扫描范围是你主动选择的目录。
-5. 使用 Custom Directories 时，只选择当前测试需要的目录；避免选择 home root、系统盘、`/Users`、`/Volumes` 或无关大目录。
-6. 使用 Intelligent Whole-Computer Discovery 时，先阅读提示，再确认它会从常见工作目录候选中发现资源；不要把它当作全盘扫描。
-7. Advanced Full-Disk Discovery 必须保持确认门控。没有明确测试授权时，不要运行 full-disk 级别扫描。
-8. 如需清空测试数据，使用 Privacy & Data Controls 中的 reset。该操作只删除 AIOS Desktop 本地数据库记录，不删除用户文件。
-
 ## 问题反馈
 
 反馈问题时，请尽量提供：
@@ -51,20 +70,16 @@ Tauri updater 当前未启用，应用不会自动更新。需要测试新版本
 - 预期结果、实际结果和可复现步骤。
 - 关键错误摘要；如需日志，请先脱敏。
 
-不要在 issue、聊天、截图、日志或文档中粘贴以下内容：
-
-- secrets、token values、provider keys、cookies、OpenIDs、auth/session values。
-- raw environment values 或 credential logs。
-- 包含密钥、账号、私有 URL、内部 asset 链接或凭据的截图。
-- 未脱敏的私有路径、用户名、公司项目名、客户名或个人文件名。
-- Apple、Windows、GitHub、OpenAI 或其他服务的账号值、证书、签名 key、session 文件或授权材料。
+不要在 issue、聊天、截图、日志或文档中粘贴密钥、令牌、密码、Cookie、登录会话、环境变量值、账号值、证书、签名 key、私有路径或未脱敏的客户/项目名称。
 
 ## 开发者入口
+
+以下内容仅面向开发者，不定义普通用户主功能。
 
 本仓库是 AIOS Desktop 的 Tauri v2 桌面应用工程：
 
 - 前端：React + TypeScript + Vite，位于 `frontend/`。
-- 静态 inventory scanner：TypeScript，位于 `server/`。
+- 本地查找与整理逻辑：TypeScript / Rust，位于 `server/` 和 `src-tauri/`。
 - 桌面壳：Tauri v2 / Rust，位于 `src-tauri/`。
 - 包管理器：`pnpm@10.28.2`。
 - Node.js：`>=22`。
@@ -85,21 +100,15 @@ pnpm desktop:build
 pnpm desktop:bundle:mac
 ```
 
-说明：
+更深入的内部文档：
 
-- `pnpm desktop:build` 构建 release executable，不生成安装包。
-- `pnpm desktop:bundle:mac` 执行 unsigned macOS `.app` / `.dmg` dry run。
-- 当前未配置 signing、notarization、stapling、Windows code signing、Tauri updater 或公开分发渠道。
-- 当前未启用 Tauri SQL、filesystem、shell、process、autostart、global-shortcut、notification 或 updater plugin。
-
-更深入的设计、发行和安全文档：
-
+- [产品文档集](docs/product/README.zh-CN.md)
+- [文档地图](docs/product/10-documentation-map.zh-CN.md)
+- [Desktop 架构](docs/DESKTOP_ARCHITECTURE.zh-CN.md)
+- [扫描与隐私策略](docs/SCANNER_POLICY.zh-CN.md)
+- [Safety](docs/SAFETY.zh-CN.md)
+- [Roadmap](docs/ROADMAP.zh-CN.md)
 - [Desktop 发行准备](docs/DESKTOP_RELEASE_READINESS.zh-CN.md)
 - [内部发行 Playbook](docs/INTERNAL_RELEASE_PLAYBOOK.zh-CN.md)
 - [GitHub Actions 打包计划](docs/GITHUB_ACTIONS_PACKAGING_PLAN.zh-CN.md)
 - [Windows / macOS 打包兼容性审计](docs/WIN_MAC_PACKAGING_COMPATIBILITY_AUDIT.zh-CN.md)
-- [Desktop 架构](docs/DESKTOP_ARCHITECTURE.zh-CN.md)
-- [Scanner Policy](docs/SCANNER_POLICY.zh-CN.md)
-- [Safety](docs/SAFETY.zh-CN.md)
-- [Architecture](docs/ARCHITECTURE.zh-CN.md)
-- [Roadmap](docs/ROADMAP.zh-CN.md)

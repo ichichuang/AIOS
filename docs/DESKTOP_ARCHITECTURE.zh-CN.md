@@ -1,5 +1,9 @@
 # AIOS Desktop Tauri 架构
 
+文档类型：开发者内部架构文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文保留 Tauri、权限、存储和扫描实现细节；这些不是普通用户主功能。目标主导航是：首页、技能、MCP、高级。
+
 ## 目标
 
 AIOS Desktop 将现有 AIOS Control Center 产品化为本地桌面应用。目标是把 Material Console UI 固化为桌面控制台，并逐步引入受控 Rust 本地能力层。

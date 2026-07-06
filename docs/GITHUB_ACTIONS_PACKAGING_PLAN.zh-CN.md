@@ -1,5 +1,9 @@
 # AIOS Desktop GitHub Actions 打包计划
 
+文档类型：内部发行工程文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文服务打包自动化，不定义普通用户主功能。
+
 ## 范围
 
 本文件记录 AIOS Desktop 内部安装包的 GitHub Actions 打包入口。

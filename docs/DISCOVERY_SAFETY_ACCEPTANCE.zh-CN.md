@@ -1,5 +1,9 @@
 # AIOS Desktop Phase 4A.1 发现扫描安全验收
 
+文档类型：内部安全验收文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文保留发现扫描安全验收历史，相关工程术语只用于内部边界说明。普通用户默认只应看到首页一键查找，开发者细节放在高级。
+
 ## 范围
 
 本报告记录 AIOS Desktop Phase 4A.1 对既有 `Custom Directories`、`Intelligent Whole-Computer Discovery` 和 `Advanced Full-Disk Discovery` 的安全验收与小幅加固。

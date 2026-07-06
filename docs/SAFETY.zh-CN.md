@@ -1,5 +1,9 @@
 # 安全边界
 
+文档类型：开发者内部安全文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文记录工程边界和禁止事项，不定义普通用户主功能。
+
 ## 只读数据源
 
 `/Users/cc/.ai` 是 canonical AIOS root。Phase 1 只读取安全元数据，唯一写入路径是 `/Users/cc/.ai/AIOS`。

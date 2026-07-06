@@ -1,5 +1,9 @@
 # AIOS Desktop Tauri 桌面壳冒烟验证
 
+文档类型：内部验收文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文保留桌面壳冒烟验证记录，不定义当前普通用户主功能。
+
 ## 范围
 
 本报告记录 Phase 1 Tauri v2 桌面壳的本地冒烟验证。验证范围仅覆盖已提交的桌面壳、现有 Material Console 前端集成、Tauri CLI、Rust 编译和 release 可执行产物。

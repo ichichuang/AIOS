@@ -1,5 +1,9 @@
 # AIOS Desktop 0.1.0 本地发行基线
 
+文档类型：内部发行基线文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文保留 0.1.0 发行和验收历史，旧模块名和工程术语不代表当前普通用户主功能。当前目标主导航是：首页、技能、MCP、高级。
+
 ## 基线摘要
 
 本文件记录 AIOS Desktop Phase 4C.1 同步门的本地发行基线。当前产品状态是本机 unsigned AIOS Desktop 0.1.0：Tauri v2 桌面壳承载现有 React/Vite 前端，扫描只能由用户在扫描管理中显式启动，扫描结果以 metadata-only 形式写入 Rust-owned SQLite 本地资源库，主资源模块以 dynamic-corpus 为产品数据源；未扫描时默认显示空资源库和 0 计数，repo-local snapshot 只作为 Legacy 示例/兼容数据显式查看。

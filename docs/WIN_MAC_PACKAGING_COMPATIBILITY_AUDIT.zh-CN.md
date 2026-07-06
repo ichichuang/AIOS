@@ -1,5 +1,9 @@
 # AIOS Desktop Windows / macOS 打包兼容性审计
 
+文档类型：内部发行审计文档。
+
+当前用户-facing 产品定义见 `docs/product/`。本文服务 Windows / macOS 内部打包审计，不定义普通用户主功能。
+
 ## 范围
 
 本文件记录 AIOS Desktop 0.1.0 在 Windows 与 macOS 内部分发打包前的兼容性审计。
@@ -143,13 +147,13 @@ Windows 11 通常预装 WebView2 Runtime，Windows 10 多数设备也已有 Runt
 - SSH private key、GPG private key、codesign identity private material。
 - OpenAI 或其他 provider API key、auth/session 文件、cookie、token、环境变量值。
 
-文档和 workflow 只能提到 secret 名称占位和注入边界，不得出现真实值。
+文档和 workflow 只能提到 secret 名称和注入边界，不得出现真实值。
 
 ## 后续阶段可能需要修改的仓库文件
 
 仅在进入后续明确阶段时，才可能修改：
 
-- `src-tauri/tauri.conf.json`：Windows bundle target、Windows installer 配置、WebView2 `webviewInstallMode`、未来签名配置占位。
+- `src-tauri/tauri.conf.json`：Windows bundle target、Windows installer 配置、WebView2 `webviewInstallMode`、未来签名配置草案。
 - `package.json`：新增明确的 Windows/macOS matrix 打包脚本，例如 Windows bundle 命令。
 - `src-tauri/Cargo.toml`：仅当后续阶段明确批准新增 Tauri plugin 或 Rust 依赖时修改。
 - `.github/workflows/*.yml`：仅在 workflow 计划被批准后新增；本步骤不新增。
