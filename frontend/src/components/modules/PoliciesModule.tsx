@@ -4,11 +4,12 @@ import { shortHash, zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageRow } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
+import { renderBackButton } from "./moduleBackButton";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function PoliciesModule({ baseline, resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function PoliciesModule({ baseline, resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => [{ title: "策略守卫", summary: "策略资源仅展示哈希、路径和边界说明，不读取或修改策略内容。", resources }], [resources]);
 
   const guardrails = useMemo(
@@ -29,6 +30,7 @@ export function PoliciesModule({ baseline, resourceCorpus, resources, selectedId
       summary={zhCN.moduleSummaries.policies}
       count={resources.length}
       ariaLabel={moduleAriaLabel("policies")}
+      backButton={renderBackButton("policies", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

@@ -1,6 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
+import { AdvancedModule } from "./components/modules/AdvancedModule";
 import { DashboardModule } from "./components/modules/DashboardModule";
 import { CustomScanModule } from "./components/modules/CustomScanModule";
 import { LegacyModule } from "./components/modules/LegacyModule";
@@ -40,7 +41,9 @@ import {
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
-import { useModuleSwapMotion } from "./lib/useAiosMotion";
+import { getAdvancedSubviewParent } from "./lib/productShell";
+import { useModuleSwapMotion, useSelectedCardEmphasisMotion } from "./lib/useAiosMotion";
+
 import type { AiosInventory, AiosResource } from "./types/inventory";
 
 export default function App() {
@@ -172,6 +175,7 @@ export default function App() {
   const selectedSkillIdentity = selection?.context?.skillIdentity ?? null;
   const selectedId = selectedResource?.id ?? null;
   const selectedSkillCapability = useMemo(() => (selectedId ? skillCapabilityById.get(selectedId) ?? null : null), [selectedId, skillCapabilityById]);
+  useSelectedCardEmphasisMotion(moduleRef, selectedId);
   const refreshResourceCorpus = useCallback(() => setCorpusRefreshToken((current) => current + 1), []);
 
   const handleSetFirstRunOnboardingDismissed = useCallback((dismissed: boolean) => {
@@ -190,6 +194,11 @@ export default function App() {
       setRenderedView(view);
     });
   }, [activeView, startRouteTransition]);
+
+  const handleBack = useCallback(() => {
+    const parent = getAdvancedSubviewParent(renderedView);
+    if (parent) handleViewChange(parent);
+  }, [renderedView, handleViewChange]);
 
   const handleScopeChange = useCallback((scope: ResourceCorpusScope) => {
     setActiveCorpusScope(scope);
@@ -286,6 +295,7 @@ export default function App() {
     selectedId,
     skillCapabilityById,
     viewCounts,
+    onBack: handleBack,
     onClearSelection: clearSelection,
     onSelect: selectResource,
     onViewChange: handleViewChange,
@@ -335,6 +345,8 @@ function renderModule(activeView: ResourceView, moduleProps: AiosModuleProps) {
       return <SkillsModule {...moduleProps} />;
     case "mcp":
       return <McpModule {...moduleProps} />;
+    case "advanced":
+      return <AdvancedModule {...moduleProps} />;
     case "scripts":
       return <ScriptsModule {...moduleProps} />;
     case "reports":

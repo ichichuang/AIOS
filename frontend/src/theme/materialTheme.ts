@@ -154,6 +154,20 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           "--aios-inspector-summary-max-height": `${designTokens.shell.inspectorFirstScreenSummaryMaxHeight}px`,
           "--aios-motion-fast": `${designTokens.motion.durationFast}s`,
           "--aios-motion-base": `${designTokens.motion.durationBase}s`,
+          "--aios-motion-slow": `${designTokens.motion.durationSlow}s`,
+          "--aios-motion-hover": `${designTokens.motion.durationHover}s`,
+          "--aios-motion-hover-exit": `${designTokens.motion.durationHoverExit}s`,
+          "--aios-motion-selected": `${designTokens.motion.durationSelected}s`,
+          "--aios-motion-reveal": `${designTokens.motion.durationReveal}s`,
+          "--aios-motion-panel": `${designTokens.motion.durationPanel}s`,
+          "--aios-motion-press": `${designTokens.motion.durationPress}s`,
+          "--aios-motion-ease": "cubic-bezier(0.22, 1, 0.36, 1)",
+          "--aios-motion-emphasis": "cubic-bezier(0.16, 1, 0.3, 1)",
+          "--aios-motion-press-ease": "cubic-bezier(0.2, 0, 0, 1)",
+          "--aios-transition-hover": "var(--aios-motion-hover) var(--aios-motion-ease)",
+          "--aios-transition-selected": "var(--aios-motion-selected) var(--aios-motion-emphasis)",
+          "--aios-transition-reveal": "var(--aios-motion-reveal) var(--aios-motion-ease)",
+          "--aios-transition-press": "var(--aios-motion-press) var(--aios-motion-press-ease)",
           "--aios-module-content-padding": "16px",
           "--aios-card-padding-x": "16px",
           "--aios-card-padding-y": "14px",
@@ -268,7 +282,17 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
         root: {
           borderRadius: 999,
           minHeight: 34,
-          textTransform: "none"
+          textTransform: "none",
+          transition:
+            "background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), box-shadow var(--aios-transition-hover)",
+          "&:active": {
+            transform: "translateY(1px) scale(0.992)",
+            transition: "transform var(--aios-transition-press), background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), box-shadow var(--aios-transition-hover)"
+          },
+          "&:focus-visible": {
+            outline: `2px solid ${palette.primary}`,
+            outlineOffset: 2
+          }
         },
         outlined: {
           borderColor: palette.outlineStrong,
@@ -300,16 +324,37 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
       styleOverrides: {
         root: {
           color: palette.textMuted,
+          transition:
+            "background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), color var(--aios-transition-hover)",
           "&:hover": {
             backgroundColor: palette.selectedSurface,
             color: palette.primary
+          },
+          "&:active": {
+            transform: "translateY(1px) scale(0.992)",
+            transition: "transform var(--aios-transition-press), background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), color var(--aios-transition-hover)"
+          },
+          "&:focus-visible": {
+            outline: `2px solid ${palette.primary}`,
+            outlineOffset: 2
           }
         }
       }
     },
-    MuiTextField: {
-      defaultProps: {
-        size: "small" as const
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          transition:
+            "background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), color var(--aios-transition-hover), box-shadow var(--aios-transition-hover)",
+          "&:active": {
+            transform: "translateY(1px) scale(0.992)",
+            transition: "transform var(--aios-transition-press), background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), color var(--aios-transition-hover), box-shadow var(--aios-transition-hover)"
+          },
+          "&:focus-visible": {
+            outline: `2px solid ${palette.primary}`,
+            outlineOffset: 1
+          }
+        }
       }
     },
     MuiOutlinedInput: {
@@ -318,6 +363,8 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           borderRadius: 999,
           backgroundColor: palette.surface,
           color: palette.text,
+          transition:
+            "background-color var(--aios-transition-hover), border-color var(--aios-transition-hover), box-shadow var(--aios-transition-hover)",
           "& .MuiOutlinedInput-notchedOutline": {
             borderColor: palette.outline
           },
@@ -326,6 +373,9 @@ function createAiosComponentOverrides(resolvedMode: AiosResolvedColorMode, palet
           },
           "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
             borderColor: palette.primary
+          },
+          "&:focus-within": {
+            boxShadow: `0 0 0 2px ${alpha(palette.primary, 0.18)}`
           }
         },
         input: {

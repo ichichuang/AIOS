@@ -6,7 +6,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
-import { useInspectorMotion } from "../../lib/useAiosMotion";
+import { useInspectorMotion, useSmoothHoverSurfaceMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
 import { ResourceInspector } from "../inspector/ResourceInspector";
 
@@ -59,9 +59,10 @@ interface InspectorBodyProps {
 function InspectorBody({ activeView, resource, skillIdentity, skillCapability, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
+  useSmoothHoverSurfaceMotion(bodyRef, resource?.id ?? "empty", { selector: ".inspector-panel, .aios-inspector-section, .copy-button", scale: 1.006, y: -1 });
 
   return (
-    <Box className="inspector-body" ref={bodyRef}>
+    <Box className="inspector-body" ref={bodyRef} data-aios-motion-surface>
       <Box className="inspector-header">
         <Typography className="eyebrow" component="p">
           {zhCN.app.detailPanel}

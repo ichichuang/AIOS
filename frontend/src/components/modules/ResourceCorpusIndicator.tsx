@@ -10,10 +10,10 @@ export function ResourceCorpusIndicator({ state }: ResourceCorpusIndicatorProps)
   const activeSource = state.dataSource.activeSource;
   const detailLabel =
     activeSource === "dynamic-corpus"
-      ? `本机资源 · ${state.dataSource.dynamicResourceCount} 项`
+      ? `本机结果 · ${state.dataSource.dynamicResourceCount} 项`
       : activeSource === "legacy-snapshot"
-        ? "旧入口示例"
-        : "尚未扫描任何目录";
+        ? "历史示例"
+        : "还没有查找";
   const viewingLabel = getScopeViewingLabel(state.activeScope, state.mode);
   return (
     <>

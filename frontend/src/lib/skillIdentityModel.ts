@@ -31,12 +31,12 @@ const SKILL_VIEW_CAPABILITIES = new Set<CapabilityType>(["skill", "runtime-view"
 
 const SOURCE_BADGE_LABELS: Record<string, string> = {
   "skills-index": "索引",
-  "custom-registry": "Registry",
+  "custom-registry": "目录",
   filesystem: "文件系统",
   codex: "Codex",
   agents: "Agents",
   claude: "Claude",
-  "project-pack": "项目包"
+  "project-pack": "项目"
 };
 
 const SOURCE_BADGE_ORDER = ["skills-index", "custom-registry", "filesystem", "codex", "agents", "claude", "project-pack"] as const;
@@ -134,7 +134,7 @@ export function getSkillIdentitySearchText(row: SkillIdentityRow, options: Skill
   const rowEnrichment = buildSkillDisplayEnrichment(row, rowDisplay);
   const terms = [
     row.identityKey,
-    row.mode === "source" ? "入口视图 来源视图 source runtime entrypoint" : "合并来源 技能身份 merged identity",
+    row.mode === "source" ? "来源视图" : "合并视图",
     ...row.sourceBadges.flatMap((badge) => [badge.key, badge.label]),
     ...row.inheritedAliases,
     getSkillQualitySearchText(rowEnrichment)

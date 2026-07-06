@@ -4,11 +4,12 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
+import { renderBackButton } from "./moduleBackButton";
 import { makeGroups, moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function LegacyModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function LegacyModule({ resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(
     () =>
       makeGroups(
@@ -28,6 +29,7 @@ export function LegacyModule({ resourceCorpus, resources, selectedId, onSelect }
       summary="这是内置示例/兼容快照，不代表当前电脑扫描结果。"
       count={resources.length}
       ariaLabel={moduleAriaLabel("legacy")}
+      backButton={renderBackButton("legacy", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

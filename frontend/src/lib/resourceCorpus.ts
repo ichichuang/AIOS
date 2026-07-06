@@ -224,7 +224,7 @@ export const globalCorpusScope: ResourceCorpusScope = {
   id: "global",
   scopeKind: "global",
   label: "全局",
-  description: "全部本机资源库元数据。",
+  description: "全部本机结果。",
   resourceCount: 0,
   projectLabel: null,
   scanSourceId: null,
@@ -294,44 +294,44 @@ export function getCorpusSourceMode(summary: ResourceCorpusSummary): ResourceCor
 }
 
 export function getCorpusSourceLabel(mode: ResourceCorpusSourceMode): string {
-  if (mode === "dynamic-corpus") return "动态资源库";
-  if (mode === "legacy-snapshot") return "旧入口示例";
-  return "空资源库";
+  if (mode === "dynamic-corpus") return "本机结果";
+  if (mode === "legacy-snapshot") return "历史示例";
+  return "还没有查找";
 }
 
 export function getCorpusEmptyMessage(mode: ResourceCorpusSourceMode): string {
-  if (mode === "dynamic-corpus") return "当前 scope 下没有匹配的动态资源。";
-  if (mode === "legacy-snapshot") return "这是内置示例/兼容快照，不代表当前电脑扫描结果。";
-  return "尚未扫描任何目录；请到扫描管理添加项目目录或运行智能发现。";
+  if (mode === "dynamic-corpus") return "当前来源下没有匹配的本机结果。";
+  if (mode === "legacy-snapshot") return "这是历史示例，不代表当前电脑查找结果。";
+  return "还没有查找这台电脑上的 AI 技能和 MCP 工具；请从首页开始查找或在高级里手动选择文件夹。";
 }
 
 export function getScopeViewingLabel(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
-  if (mode === "legacy-snapshot") return "正在查看旧入口示例";
+  if (mode === "legacy-snapshot") return "正在查看历史示例";
   if (scope.scopeKind === "project") return `正在查看项目：${scope.label}`;
   if (scope.scopeKind === "source") return `正在查看来源：${scope.label}`;
-  if (scope.scopeKind === "unclassified") return "正在查看：未归类动态资源";
-  return "正在查看：全部本机资源";
+  if (scope.scopeKind === "unclassified") return "正在查看：来源不明的本机结果";
+  return "正在查看：全部本机结果";
 }
 
 export function getScopeSemanticDescription(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {
-  if (mode === "legacy-snapshot") return "旧入口示例不代表当前电脑扫描结果，也不会写入 SQLite。";
-  if (scope.scopeKind === "project") return "仅显示该项目标签下的本机资源。";
-  if (scope.scopeKind === "source") return "仅显示该授权目录来源产生的本机资源。";
-  if (scope.scopeKind === "unclassified") return "仅显示尚未设置项目标签的本机资源。";
-  return "汇总本机 SQLite 资源库，不包含旧入口示例。";
+  if (mode === "legacy-snapshot") return "历史示例不代表当前电脑查找结果，也不会写入本机记录。";
+  if (scope.scopeKind === "project") return "仅显示该项目标签下的本机结果。";
+  if (scope.scopeKind === "source") return "仅显示该授权目录来源产生的本机结果。";
+  if (scope.scopeKind === "unclassified") return "仅显示尚未设置项目标签的本机结果。";
+  return "汇总 AIOS Desktop 已保存的本机结果，不包含历史示例。";
 }
 
 export function buildLocalResourceLibraryViewState(summary: ResourceCorpusSummary, activeScope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): LocalResourceLibraryViewState {
   const latestScan = summary.latestScan ?? summary.latestSuccessfulScan;
   return {
-    statusLabel: summary.resourceCount > 0 ? "已建立本地资源库" : "空资源库",
+    statusLabel: summary.resourceCount > 0 ? "已有本机结果" : "还没有查找",
     dynamicResourceCount: Math.max(0, summary.resourceCount),
     scanSourceCount: Math.max(0, summary.sourceCount),
     projectScopeCount: Math.max(0, summary.projectScopeCount),
-    latestScanLabel: latestScan ? `${latestScan.status} · ${formatDateTime(latestScan.finishedAtMs ?? latestScan.startedAtMs)}` : "暂无扫描记录",
+    latestScanLabel: latestScan ? `${latestScan.status} · ${formatDateTime(latestScan.finishedAtMs ?? latestScan.startedAtMs)}` : "暂无查找记录",
     activeScopeLabel: getScopeViewingLabel(activeScope, mode),
     scanManagementCtaVisible: summary.resourceCount === 0,
-    firstUseActions: ["添加自选目录", "查看智能发现"]
+    firstUseActions: ["开始查找", "手动选择文件夹"]
   };
 }
 
@@ -525,7 +525,7 @@ export function getResourceInspectorProvenanceSummary(resource: AiosResource): R
       relativePath: getMetadataString(resource, "relativePath") ?? resource.path ?? "未记录",
       profileLabel: "不适用",
       lastScanLabel: snapshotGeneratedAt ? `示例快照 · ${formatDateTime(Date.parse(snapshotGeneratedAt))}` : "示例快照",
-      metadataBoundary: "旧入口示例不代表当前电脑扫描结果，不写入 SQLite 动态资源库"
+      metadataBoundary: "历史示例不代表当前电脑查找结果，不写入应用自己的本地记录"
     };
   }
 
@@ -534,14 +534,14 @@ export function getResourceInspectorProvenanceSummary(resource: AiosResource): R
   const scanJobStatus = getMetadataString(resource, "scanJobStatus");
   const scanJobId = getMetadataString(resource, "scanJobId");
   return {
-    dataSourceType: isDynamicCorpusResource(resource) ? "动态本地资源库" : "本地清单元数据",
+    dataSourceType: isDynamicCorpusResource(resource) ? "本机结果" : "本地清单元数据",
     projectLabel: getMetadataString(resource, "projectLabel") ?? "未归类",
     scanSourceName: getMetadataString(resource, "scanSourceName") ?? "未记录",
     scanSourceDirectory: getMetadataString(resource, "rootDisplayPath") ?? getMetadataString(resource, "root") ?? "未记录",
     relativePath: getMetadataString(resource, "relativePath") ?? getMetadataString(resource, "displayPath") ?? resource.path ?? "未记录",
     profileLabel: profile.displayName,
     lastScanLabel: scanJobStatus && scanJobId ? `${scanJobStatus} · ${scanJobId}` : scanJobStatus ?? "未记录",
-    metadataBoundary: isDynamicCorpusResource(resource) ? "仅展示 SQLite 持久化元数据，不读取文件内容" : "仅展示本地清单元数据"
+    metadataBoundary: isDynamicCorpusResource(resource) ? "仅展示应用自己保存的基本信息，不读取文件内容" : "仅展示本地清单元数据"
   };
 }
 

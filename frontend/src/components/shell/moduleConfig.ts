@@ -7,14 +7,16 @@ import HistoryRounded from "@mui/icons-material/HistoryRounded";
 import HubRounded from "@mui/icons-material/HubRounded";
 import Inventory2Rounded from "@mui/icons-material/Inventory2Rounded";
 import PolicyRounded from "@mui/icons-material/PolicyRounded";
+import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import type { SvgIconComponent } from "@mui/icons-material";
 import type { ResourceView } from "../../lib/filtering";
+import { advancedSupportViews, primaryNavigationViews } from "../../lib/productShell";
 
-export const consoleViews: ResourceView[] = ["dashboard", "custom-scan", "skills", "mcp", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
+export const consoleViews: ResourceView[] = [...primaryNavigationViews, ...advancedSupportViews];
 
 export interface NavigationGroup {
-  key: "overview" | "inventory" | "operations" | "governance" | "legacy";
+  key: "primary";
   title: string;
   summary: string;
   views: ResourceView[];
@@ -22,34 +24,10 @@ export interface NavigationGroup {
 
 export const navigationGroups: NavigationGroup[] = [
   {
-    key: "overview",
-    title: "总览",
-    summary: "桌面工作台入口、产品边界与指定目录扫描。",
-    views: ["dashboard", "custom-scan"]
-  },
-  {
-    key: "inventory",
-    title: "清单",
-    summary: "本地能力、MCP 元数据与项目包清单。",
-    views: ["skills", "mcp", "project-packs"]
-  },
-  {
-    key: "operations",
-    title: "操作",
-    summary: "脚本与报告仅作为只读清单展示。",
-    views: ["scripts", "reports"]
-  },
-  {
-    key: "governance",
-    title: "治理",
-    summary: "策略守卫和观察型验证器状态。",
-    views: ["policies", "validators"]
-  },
-  {
-    key: "legacy",
-    title: "兼容",
-    summary: "旧入口与兼容边界，不恢复旧工作流。",
-    views: ["legacy"]
+    key: "primary",
+    title: "主导航",
+    summary: "首页、技能、MCP 和高级。",
+    views: primaryNavigationViews
   }
 ];
 
@@ -58,6 +36,7 @@ export const moduleIcons: Record<ResourceView, SvgIconComponent> = {
   "custom-scan": FolderOpenRounded,
   skills: ExtensionRounded,
   mcp: HubRounded,
+  advanced: SettingsRounded,
   scripts: TerminalRounded,
   reports: ArticleRounded,
   "project-packs": Inventory2Rounded,

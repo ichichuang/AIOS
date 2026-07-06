@@ -47,21 +47,21 @@ assert.deepEqual(fallbackProjectMap, []);
 assert.deepEqual(fallbackSourceMap, []);
 await assert.rejects(() => getResourceDetail("resource-1"), /Tauri 桌面运行时/);
 assert.equal(getCorpusSourceMode(fallbackSummary), "empty");
-assert.equal(getCorpusSourceLabel("empty"), "空资源库");
-assert.equal(getCorpusEmptyMessage("empty"), "尚未扫描任何目录；请到扫描管理添加项目目录或运行智能发现。");
+assert.equal(getCorpusSourceLabel("empty"), "还没有查找");
+assert.equal(getCorpusEmptyMessage("empty"), "还没有查找这台电脑上的 AI 技能和 MCP 工具；请从首页开始查找或在高级里手动选择文件夹。");
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, false), true);
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, true), false);
-assert.equal(moduleEmptyStateCopy("skills").body, "尚未发现技能；请到扫描管理添加项目目录或运行智能发现。");
-assert.equal(moduleEmptyStateCopy("mcp").body, "尚未发现 MCP 元数据。");
+assert.equal(moduleEmptyStateCopy("skills").body, "开始查找后，这里会显示技能名称、用途、来源和使用方法。");
+assert.equal(moduleEmptyStateCopy("mcp").body, "开始查找后，这里会显示本机已配置的 MCP 服务和工具。");
 
 const emptyLibraryView = buildLocalResourceLibraryViewState(fallbackSummary, globalCorpusScope, "empty");
-assert.equal(emptyLibraryView.statusLabel, "空资源库");
+assert.equal(emptyLibraryView.statusLabel, "还没有查找");
 assert.equal(emptyLibraryView.dynamicResourceCount, 0);
 assert.equal(emptyLibraryView.scanSourceCount, 0);
 assert.equal(emptyLibraryView.projectScopeCount, 0);
-assert.equal(emptyLibraryView.activeScopeLabel, "正在查看：全部本机资源");
+assert.equal(emptyLibraryView.activeScopeLabel, "正在查看：全部本机结果");
 assert.equal(emptyLibraryView.scanManagementCtaVisible, true);
-assert.deepEqual(emptyLibraryView.firstUseActions, ["添加自选目录", "查看智能发现"]);
+assert.deepEqual(emptyLibraryView.firstUseActions, ["开始查找", "手动选择文件夹"]);
 
 const emptyDataSource = buildResourceDataSourceState(fallbackSummary, 4);
 assert.deepEqual(emptyDataSource, {
@@ -70,7 +70,7 @@ assert.deepEqual(emptyDataSource, {
   legacySnapshotCount: 4,
   hasDynamicCorpus: false,
   hasLegacySnapshot: true,
-  displayLabel: "空资源库"
+  displayLabel: "还没有查找"
 });
 
 const projectScope: ResourceCorpusScope = {
@@ -121,12 +121,12 @@ assert.deepEqual(scopeToResourceQuery(projectScope, 20), {
   offset: 0
 });
 assert.equal(getCorpusSourceMode(dynamicSummary), "dynamic-corpus");
-assert.equal(getCorpusSourceLabel("dynamic-corpus"), "动态资源库");
+assert.equal(getCorpusSourceLabel("dynamic-corpus"), "本机结果");
 assert.equal(shouldShowFirstRunOnboarding(dynamicSummary, false), false);
 const dynamicDataSource = buildResourceDataSourceState(dynamicSummary, 4);
 assert.equal(dynamicDataSource.activeSource, "dynamic-corpus");
-assert.equal(dynamicDataSource.displayLabel, "动态资源库");
-assert.equal(getScopeViewingLabel(globalCorpusScope, "dynamic-corpus"), "正在查看：全部本机资源");
+assert.equal(dynamicDataSource.displayLabel, "本机结果");
+assert.equal(getScopeViewingLabel(globalCorpusScope, "dynamic-corpus"), "正在查看：全部本机结果");
 assert.equal(getScopeViewingLabel(projectScope, "dynamic-corpus"), "正在查看项目：AIOS");
 assert.equal(getScopeViewingLabel(sourceScope, "dynamic-corpus"), "正在查看来源：custom-scan-basic");
 
@@ -231,14 +231,14 @@ assert.equal(mapped.metadata?.rootDisplayPath, "~/custom-scan-basic");
 assert.equal(mapped.safetyProfile.readOnly, true);
 assert.ok(mapped.safetyProfile.notes.includes("仅保存持久化元数据"));
 assert.deepEqual(getResourceInspectorProvenanceSummary(mapped), {
-  dataSourceType: "动态本地资源库",
+  dataSourceType: "本机结果",
   projectLabel: "AIOS",
   scanSourceName: "custom-scan-basic",
   scanSourceDirectory: "~/custom-scan-basic",
   relativePath: "skills/writer/SKILL.md",
   profileLabel: "项目根目录",
   lastScanLabel: "completed · job-1",
-  metadataBoundary: "仅展示 SQLite 持久化元数据，不读取文件内容"
+  metadataBoundary: "仅展示应用自己保存的基本信息，不读取文件内容"
 });
 
 const detail: ResourceCorpusDetail = {
@@ -274,7 +274,7 @@ assert.equal((merged.metadata?.corpusDetailLocations as unknown[]).length, 1);
 const legacyTabs = buildCorpusScopeTabs([globalCorpusScope, projectScope], fallbackResourceCorpusSummary);
 assert.equal(legacyTabs.length, 1);
 assert.equal(legacyTabs[0].label, "全局");
-assert.equal(getScopeViewingLabel(globalCorpusScope, "legacy-snapshot"), "正在查看旧入口示例");
+assert.equal(getScopeViewingLabel(globalCorpusScope, "legacy-snapshot"), "正在查看历史示例");
 
 const dynamicSkill = {
   id: "dynamic-skill",
@@ -348,6 +348,7 @@ const emptyCounts = getViewCountsForDataSource(emptyDataSource, [dynamicSkill], 
 assert.equal(emptyCounts.dashboard, 0);
 assert.equal(emptyCounts.skills, 0);
 assert.equal(emptyCounts.mcp, 0);
+assert.equal(emptyCounts.advanced, 0);
 assert.equal(emptyCounts.scripts, 0);
 assert.equal(emptyCounts.reports, 0);
 assert.equal(emptyCounts["project-packs"], 0);
@@ -365,6 +366,7 @@ assert.equal(emptyCounts.dashboard, 0, "legacy snapshot must not affect default 
 const dynamicCounts = getViewCountsForDataSource(dynamicDataSource, [dynamicSkill, dynamicScript], [legacySnapshotSkill, legacySnapshotPrompt]);
 assert.equal(dynamicCounts.dashboard, 2);
 assert.equal(dynamicCounts.skills, 1);
+assert.equal(dynamicCounts.advanced, 1);
 assert.equal(dynamicCounts.scripts, 1);
 assert.equal(dynamicCounts.legacy, 0);
 assert.deepEqual(getModuleResourcesForDataSource("skills", dynamicDataSource, [dynamicSkill, dynamicScript], [legacySnapshotSkill]), [dynamicSkill]);
@@ -372,12 +374,14 @@ assert.deepEqual(getModuleResourcesForDataSource("legacy", dynamicDataSource, [d
 
 const promptCounts = getViewCountsForDataSource(dynamicDataSource, [dynamicPrompt], [legacySnapshotSkill, legacySnapshotPrompt]);
 assert.equal(promptCounts.dashboard, 1);
+assert.equal(promptCounts.advanced, 1);
 assert.equal(promptCounts.legacy, 0, "dynamic prompt metadata must not appear as Legacy count");
 assert.equal(getResourceDisplay(dynamicPrompt).uiGroup, "dashboard", "dynamic prompt metadata must not be labeled as Legacy UI data");
 
 const legacyModeCounts = getViewCountsForDataSource(asLegacySnapshotDataSource(dynamicDataSource), [], [legacySnapshotSkill, legacySnapshotPrompt]);
 assert.equal(legacyModeCounts.dashboard, 0);
 assert.equal(legacyModeCounts.skills, 0);
+assert.equal(legacyModeCounts.advanced, 0);
 assert.equal(legacyModeCounts.legacy, 0, "navigation counts must stay dynamic-only even when viewing Legacy");
 
 const projectAlphaScope: ResourceCorpusScope = {
@@ -491,6 +495,7 @@ const twoProjectGlobalCounts = getViewCountsForDataSource(twoProjectDataSource, 
 assert.equal(twoProjectGlobalCounts.dashboard, 7);
 assert.equal(twoProjectGlobalCounts.skills, 1);
 assert.equal(twoProjectGlobalCounts.mcp, 1);
+assert.equal(twoProjectGlobalCounts.advanced, 5);
 assert.equal(twoProjectGlobalCounts.scripts, 1);
 assert.equal(twoProjectGlobalCounts.reports, 1);
 assert.equal(twoProjectGlobalCounts["project-packs"], 0);
@@ -501,6 +506,7 @@ assert.equal(twoProjectGlobalCounts.legacy, 0);
 const alphaCounts = getViewCountsForDataSource(twoProjectDataSource, projectAlphaResources, [legacySnapshotSkill, legacySnapshotPrompt]);
 assert.equal(alphaCounts.dashboard, 3);
 assert.equal(alphaCounts.skills, 1);
+assert.equal(alphaCounts.advanced, 2);
 assert.equal(alphaCounts.scripts, 1);
 assert.equal(alphaCounts.mcp, 0);
 assert.equal(alphaCounts.policies, 0);
@@ -513,6 +519,7 @@ const betaCounts = getViewCountsForDataSource(twoProjectDataSource, projectBetaR
 assert.equal(betaCounts.dashboard, 4);
 assert.equal(betaCounts.skills, 0);
 assert.equal(betaCounts.mcp, 1);
+assert.equal(betaCounts.advanced, 3);
 assert.equal(betaCounts.scripts, 0);
 assert.equal(betaCounts.reports, 1);
 assert.equal(betaCounts.policies, 1);

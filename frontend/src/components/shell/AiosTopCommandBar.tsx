@@ -1,12 +1,11 @@
 import { Box, Chip, InputAdornment, TextField, Tooltip, Typography } from "@mui/material";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
-import TuneRounded from "@mui/icons-material/TuneRounded";
 import type { KeyboardEvent } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { resolvePrimaryNavigationSearch, topSearchCopy } from "../../lib/productShell";
 import type { AiosInventory } from "../../types/inventory";
-import { consoleViews } from "./moduleConfig";
 import labelIcon from "../../assets/image/label.png";
 
 interface AiosTopCommandBarProps {
@@ -19,15 +18,13 @@ interface AiosTopCommandBarProps {
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosTopCommandBar({ activeView, inventory, query, shownCount, sourceLabel, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
+export function AiosTopCommandBar({ activeView, query, shownCount, sourceLabel, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
   const activeModuleLabel = VIEW_LABELS[activeView];
-  const boundaryLabel = "本地只读 · 显式扫描 · 高级发现需确认";
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter") return;
     const target = event.target as HTMLInputElement;
-    const value = (target.value ?? query).trim().toLowerCase();
-    const match = consoleViews.find((view) => view === value || VIEW_LABELS[view].toLowerCase() === value || `${VIEW_LABELS[view]} ${view}`.toLowerCase() === value);
+    const match = resolvePrimaryNavigationSearch(target.value ?? query);
     if (match) onViewChange(match);
   }
 
@@ -35,18 +32,22 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, so
     <Box className="aios-top-command-bar">
       <Box className="command-title">
         <Box className="command-title-logo" component="img" src={labelIcon} alt="AIOS Logo" />
-        <Typography component="h1" variant="h2">
-          AIOS Desktop
-        </Typography>
-        <Chip className="status-chip status-ok command-boundary-chip" label="本地只读" title={boundaryLabel} />
+        <Box className="command-title-copy">
+          <Typography component="h1" variant="h2">
+            {activeModuleLabel}
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            {sourceLabel} · {shownCount} 项
+          </Typography>
+        </Box>
       </Box>
 
       <Box className="command-search-wrap">
         <TextField
-          aria-label={zhCN.app.commandLabel}
+          aria-label={topSearchCopy.ariaLabel}
           className="command-search"
           fullWidth
-          placeholder="搜索资源、路径、风险；输入模块名后按 Enter 切换"
+          placeholder={topSearchCopy.placeholder}
           type="search"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -60,7 +61,7 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, so
               ),
               endAdornment: (
                 <InputAdornment position="end">
-                  <Tooltip title="搜索仅筛选与导航，不执行命令">
+                  <Tooltip title="搜索只筛选技能、MCP 和来源，不执行命令">
                     <ManageSearchRounded fontSize="small" />
                   </Tooltip>
                 </InputAdornment>
@@ -71,24 +72,8 @@ export function AiosTopCommandBar({ activeView, inventory, query, shownCount, so
       </Box>
 
       <Box className="command-status">
-        <Box className="command-meta">
-          <Typography className="caption" component="p">
-            数据来源
-          </Typography>
-          <Typography component="strong">{sourceLabel}</Typography>
-        </Box>
-        <Box className="command-meta compact">
-          <Typography className="caption" component="p">
-            {zhCN.app.activeModule}
-          </Typography>
-          <Typography component="strong" title={`${activeModuleLabel} · ${shownCount} 项可见，总计 ${inventory.resources.length} 项`}>
-            {activeModuleLabel} · {shownCount} 项
-          </Typography>
-        </Box>
-        <Tooltip title={`${zhCN.app.safetyState} · 无自动扫描`}>
-          <Box className="command-safe-indicator" component="span" aria-label={`${zhCN.app.safetyState}，无自动扫描`}>
-            <TuneRounded className="command-safe-icon" fontSize="small" />
-          </Box>
+        <Tooltip title="AIOS Desktop 只读取本机基本信息，结果只保存在这台电脑上">
+          <Chip className="status-chip status-ok" label="本地只读" size="small" />
         </Tooltip>
       </Box>
     </Box>

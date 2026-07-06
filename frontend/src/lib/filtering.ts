@@ -9,6 +9,7 @@ export type ResourceView =
   | "custom-scan"
   | "skills"
   | "mcp"
+  | "advanced"
   | "scripts"
   | "reports"
   | "project-packs"
@@ -21,6 +22,7 @@ export const VIEW_LABELS: Record<ResourceView, string> = {
   "custom-scan": zhCN.views["custom-scan"],
   skills: zhCN.views.skills,
   mcp: zhCN.views.mcp,
+  advanced: zhCN.views.advanced,
   scripts: zhCN.views.scripts,
   reports: zhCN.views.reports,
   "project-packs": zhCN.views["project-packs"],
@@ -32,6 +34,7 @@ export const VIEW_LABELS: Record<ResourceView, string> = {
 const capabilityByView: Partial<Record<ResourceView, CapabilityType[]>> = {
   skills: ["skill", "runtime-view", "registry", "project-pack"],
   mcp: ["mcp-server", "mcp-client"],
+  advanced: ["script", "report", "project-pack", "policy", "validator", "usage-prompt"],
   scripts: ["script"],
   reports: ["report"],
   "project-packs": ["project-pack"],
@@ -100,6 +103,7 @@ export function buildResourcesByView(resources: AiosResource[]): Record<Resource
     "custom-scan": [],
     skills: resources.filter((resource) => belongsToView(resource, "skills")),
     mcp: resources.filter((resource) => belongsToView(resource, "mcp")),
+    advanced: resources.filter((resource) => belongsToView(resource, "advanced")),
     scripts: resources.filter((resource) => belongsToView(resource, "scripts")),
     reports: resources.filter((resource) => belongsToView(resource, "reports")),
     "project-packs": resources.filter((resource) => belongsToView(resource, "project-packs")),

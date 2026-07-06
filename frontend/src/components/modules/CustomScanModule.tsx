@@ -1,4 +1,4 @@
-import { Box, Button, Checkbox, Chip, IconButton, LinearProgress, MenuItem, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Alert, Box, Button, Checkbox, Chip, IconButton, LinearProgress, MenuItem, Paper, Skeleton, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import AddRounded from "@mui/icons-material/AddRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import DeleteSweepRounded from "@mui/icons-material/DeleteSweepRounded";
@@ -9,7 +9,7 @@ import SecurityRounded from "@mui/icons-material/SecurityRounded";
 import StorageRounded from "@mui/icons-material/StorageRounded";
 import StopCircleRounded from "@mui/icons-material/StopCircleRounded";
 import WarningAmberRounded from "@mui/icons-material/WarningAmberRounded";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { filterResourceList } from "../../lib/filtering";
 import {
@@ -72,13 +72,24 @@ import {
   type ScanBatchSnapshot
 } from "../../lib/resourceStore";
 import { ResourceGroup, type ResourceGroupData } from "../resources/ResourceGroup";
-import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosTechnicalDetails, AiosUsageCard, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
+import {
+  AiosAccordionPanel,
+  AiosHeroPanel,
+  AiosModuleControls,
+  AiosModuleFrame,
+  AiosSection,
+  AiosSectionHeader,
+  AiosTechnicalDetails,
+  AiosUsageCard,
+  type AiosTechnicalDetailRow
+} from "../ui/AiosUiPrimitives";
 import type { ResourceCardVariant } from "../resources/ResourceCard";
+import { renderBackButton } from "./moduleBackButton";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 
-export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }: AiosModuleProps) {
+export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, onSelect }: AiosModuleProps) {
   const [policy, setPolicy] = useState<ScannerPolicy>(fallbackScanPolicy);
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
   const [activeScanModeId, setActiveScanModeId] = useState<ScanModeId>(DEFAULT_SCAN_MODE_ID);
@@ -369,601 +380,595 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onSelect }
     }
   }, [refreshResourceLibrary]);
 
+  const isLibraryReady = resourceStoreStatus.databaseReady;
+
   return (
     <AiosModuleFrame
       view="custom-scan"
       summary={zhCN.moduleSummaries["custom-scan"]}
       count={librarySummary.resourceCount}
       ariaLabel={moduleAriaLabel("custom-scan")}
+      backButton={renderBackButton("custom-scan", onBack)}
       actions={
         <>
-          <Chip className="status-chip status-ok" label="扫描管理" />
-          <Chip label="仅元数据" variant="outlined" />
+          <Chip className="status-chip status-ok" label="仅元数据" />
           <Chip className="status-chip status-disabled" label="显式启动" variant="outlined" />
         </>
       }
+      contentClassName="custom-scan-scroll"
     >
-      <AiosSection className="scan-profile-section">
-        <AiosSectionHeader
-          title="扫描模式"
-          summary="选择一种来源方式后手动开始。AIOS 不会在启动或切换模式时扫描。"
-          action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />}
-        />
-        {resourceCorpus.summary.resourceCount === 0 && (
-          <Box className="scan-boundary-callout info">
-            <SecurityRounded fontSize="small" />
-            <Typography color="text.secondary" variant="body2">
-              还没有本机资源。可以添加项目目录，或使用智能发现创建候选来源；高级发现更慢且必须确认。所有结果只保存本地元数据。
-            </Typography>
-          </Box>
-        )}
-        {resourceCorpus.summary.resourceCount > 0 && (
-          <Box className="scan-boundary-callout info">
-            <StorageRounded fontSize="small" />
-            <Typography color="text.secondary" variant="body2">
-              本机已有 AIOS 本地资源库：{resourceCorpus.summary.resourceCount} 项动态资源。清空本地数据仍需用户手动触发，不会自动删除或重置。
-            </Typography>
-          </Box>
-        )}
-        <Box className="scan-mode-card-grid" aria-label="扫描模式选择">
-          {scanModeDefinitions.map((mode) => {
-            const safetyCard = getScanModeSafetyCard(mode.id);
-            return (
-              <Button
-                className={`scan-mode-card ${activeScanMode.id === mode.id ? "active" : ""}`}
-                disabled={scanLocked}
-                key={mode.id}
-                variant="outlined"
-                onClick={() => handleScanModeChange(mode.id)}
-              >
-                <Box className="scan-mode-card-copy">
-                  <Typography component="strong">{mode.title}</Typography>
+      <AiosHeroPanel className="scan-hero" data-aios-layout-fixed>
+        <Box className="scan-hero-copy">
+          <Typography component="h3" variant="h3">
+            {activeScanMode.title}
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            {activeScanMode.summary}
+          </Typography>
+        </Box>
+        <Box className="scan-hero-chips">
+          <Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />
+          <Chip label={activeScanMode.id === "custom-directory" ? "自选目录" : "发现模式"} size="small" variant="outlined" />
+          {scanLocked && <Chip className="status-chip status-disabled" label="扫描中" size="small" />}
+          {isLibraryReady ? (
+            <Chip className="status-chip status-ok" label="本地记录已就绪" size="small" variant="outlined" />
+          ) : (
+            <Chip className="status-chip status-disabled" label="未连接本地记录" size="small" variant="outlined" />
+          )}
+        </Box>
+      </AiosHeroPanel>
+
+      <Box className="custom-scan-workspace" data-aios-motion-surface>
+        <Box className="custom-scan-pane custom-scan-pane--sources" data-aios-internal-scroll="true">
+          <AiosSection className="scan-control-section">
+            <AiosSectionHeader
+              title="来源管理"
+              summary={activeScanMode.id === "custom-directory" ? "添加目录后手动选择并扫描；添加不会自动开始。" : "发现模式会先创建候选来源，再开始扫描。"}
+            />
+            <Paper className="scan-control-card" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+              <Box className="scan-control-heading">
+                <FolderOpenRounded fontSize="small" />
+                <Box className="scan-control-copy">
+                  <Typography component="strong">{activeScanMode.id === "custom-directory" ? "添加并扫描来源" : "启动发现扫描"}</Typography>
                   <Typography color="text.secondary" variant="body2">
-                    {mode.summary}
+                    {activeScanMode.id === "custom-directory"
+                      ? "系统目录选择器可一次选择多个目录。"
+                      : "候选来源只在点击开始后解析。"}
                   </Typography>
-                  <Box className="scan-mode-safety-list">
+                </Box>
+              </Box>
+              <AiosModuleControls className="scan-action-row">
+                <TextField
+                  disabled={scanLocked}
+                  label="默认项目标签"
+                  size="small"
+                  value={newProjectLabel}
+                  onChange={(event) => setNewProjectLabel(event.target.value)}
+                />
+                {activeScanMode.id === "advanced-full-disk" && (
+                  <Box className="scan-advanced-confirmation">
+                    <Checkbox checked={advancedConfirmed} disabled={scanLocked} onChange={(event) => setAdvancedConfirmed(event.target.checked)} />
                     <Typography color="text.secondary" variant="body2">
-                      适合：{safetyCard.intendedUsers}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      扫描：{safetyCard.whatScans}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      不扫描：{safetyCard.whatSkips}
+                      {ADVANCED_FULL_DISK_CONFIRMATION_COPY}
                     </Typography>
                   </Box>
-                  <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
+                )}
+                <Box className="scan-action-row aios-action-group scan-control-actions">
+                  {activeScanMode.id === "custom-directory" && (
+                    <Button className="aios-action-button aios-action-button--secondary" disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
+                      添加目录
+                    </Button>
+                  )}
+                  <Button className="aios-action-button aios-action-button--primary" disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
+                    {activeScanMode.id === "custom-directory" ? "扫描所选" : "开始发现"}
+                  </Button>
+                  <Button className="aios-action-button aios-action-button--secondary" disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
+                    刷新
+                  </Button>
+                  {scanLocked && (
+                    <Button className="aios-action-button aios-action-button--warning" color="warning" disabled={!batchSnapshot || batchBusyState === "cancelling"} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelBatch}>
+                      取消扫描
+                    </Button>
+                  )}
                 </Box>
-              </Button>
-            );
-          })}
-        </Box>
-      </AiosSection>
+              </AiosModuleControls>
+            </Paper>
+          </AiosSection>
 
-      <AiosSection className="scan-profile-section">
-        <AiosSectionHeader
-          title={activeScanMode.id === "custom-directory" ? "扫描模板" : "发现模式边界"}
-          summary={activeScanMode.id === "custom-directory" ? "模板只改变分类重点；添加来源不会自动扫描。" : activeScanMode.warning}
-          action={<Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />}
-        />
-        <Box className="scan-profile-selector" aria-label="扫描模板选择">
-          <ToggleButtonGroup disabled={scanLocked || activeScanMode.id !== "custom-directory"} exclusive value={activeScanMode.id === "custom-directory" ? activeProfile.id : activeProfile.id} onChange={handleProfileChange}>
-            {customProfiles.map((profile) => (
-              <ToggleButton disabled={scanLocked || activeScanMode.id !== "custom-directory"} key={profile.id} value={profile.id}>
-                <Box component="span">{profile.displayName}</Box>
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-        </Box>
-        <Box className="scan-profile-detail-grid">
-          <Box className="scan-profile-detail">
-            <Typography component="strong">{activeProfile.shortDescription}</Typography>
-            <Typography color="text.secondary" variant="body2">
-              {activeProfile.recommendedUseCase}
-            </Typography>
-          </Box>
-          <Box className="scan-profile-detail">
-            <Typography component="strong">安全边界</Typography>
-            <Typography color="text.secondary" variant="body2">
-              {activeProfile.safetyBoundary}
-            </Typography>
-          </Box>
-          <Box className="scan-profile-detail">
-            <Typography component="strong">分类重点</Typography>
-            <Typography color="text.secondary" variant="body2">
-              {activeProfile.classificationEmphasis.join(" / ")}
-            </Typography>
-          </Box>
-        </Box>
-      </AiosSection>
-
-      <AiosSection className="scan-first-use-section">
-        <AiosSectionHeader title="来源设置" summary="添加来源只保存授权目录元数据，不会自动扫描；扫描必须手动启动。" />
-        <Box className="scan-first-use-grid">
-          {firstUseGuides.map((guide) => (
-            <Box className={`scan-first-use-item ${guide.tone}`} key={guide.title}>
-              <Typography component="strong">{guide.title}</Typography>
-              <Typography color="text.secondary" variant="body2">
-                {guide.summary}
-              </Typography>
+          <AiosSection className="scan-sources-section">
+            <AiosSectionHeader title="已保存来源" summary="移除来源只删除 AIOS 本地记录，不删除用户文件。" count={persistedSources.length} />
+            <Box className="scan-source-list" aria-label="扫描来源列表">
+              {persistedSources.length > 0 ? (
+                persistedSources.map((source) => {
+                  const row = persistedLibraryState.sourceRows.find((candidate) => candidate.id === source.id);
+                  const sourceBusy = sourceBusyId === source.id || scanLocked;
+                  const batchSource = batchSnapshot?.sources.find((candidate) => candidate.scanSourceId === source.id);
+                  const status = batchSource?.status ?? row?.status ?? "idle";
+                  const sourceProfileOptions = source.sourceKind === "custom-directory" ? customProfiles : [getScanProfileById(source.profileId, profiles)];
+                  return (
+                    <Paper className={`scan-source-card ${source.enabled ? "" : "disabled"}`} key={source.id} elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+                      <Box className="scan-source-row">
+                        <Checkbox
+                          checked={selectedSourceIds.includes(source.id)}
+                          disabled={!source.enabled || sourceBusy}
+                          slotProps={{ input: { "aria-label": `选择扫描来源 ${source.displayName}` } }}
+                          onChange={(event) => handleToggleSourceSelection(source.id, event.target.checked)}
+                        />
+                        <Box className="scan-source-main">
+                          <Typography component="strong" title={source.displayName}>
+                            {source.displayName}
+                          </Typography>
+                          <Typography color="text.secondary" variant="body2" title={source.rootDisplayPath}>
+                            {source.rootDisplayPath}
+                          </Typography>
+                          <Box className="scan-source-chip-row">
+                            <Chip className={`status-chip ${source.enabled ? "status-ok" : "status-disabled"}`} label={source.enabled ? "已启用" : "已停用"} size="small" />
+                            <Chip label={scanBatchStatusLabel(status)} size="small" variant="outlined" />
+                            <Chip label={sourceKindLabel(source.sourceKind)} size="small" variant="outlined" />
+                            {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
+                            {source.lastScanFinishedAtMs && <Chip label={`最近 ${formatDate(source.lastScanFinishedAtMs)}`} size="small" variant="outlined" />}
+                          </Box>
+                        </Box>
+                      </Box>
+                      <Box className="scan-source-controls">
+                        <TextField disabled={sourceBusy || source.sourceKind !== "custom-directory"} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
+                          {sourceProfileOptions.map((profile) => (
+                            <MenuItem key={profile.id} value={profile.id}>
+                              {profile.displayName}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          disabled={sourceBusy}
+                          label="项目标签"
+                          size="small"
+                          value={sourceProjectDrafts[source.id] ?? source.projectLabel ?? ""}
+                          onBlur={() => void handleProjectBlur(source)}
+                          onChange={(event) => handleProjectDraftChange(source.id, event.target.value)}
+                        />
+                      </Box>
+                      <Box className="scan-source-metrics">
+                        <ProgressMetric label="资源" value={batchSource?.resourcesFound ?? source.resourceCount} />
+                        <ProgressMetric label="跳过" value={batchSource?.skippedEntries ?? source.skippedEntries} />
+                        <ProgressMetric label="错误" value={batchSource?.errorCount ?? source.errorCount} />
+                      </Box>
+                      <Box className="scan-source-actions">
+                        <Button disabled={!resourceCorpus.scopes.some((scope) => scope.scanSourceId === source.id)} size="small" variant="outlined" onClick={() => handleSourceScopeSwitch(source.id)}>
+                          查看来源范围
+                        </Button>
+                        <Button disabled={sourceBusyId === source.id || scanLocked} size="small" variant="outlined" onClick={() => void handleUpdateSourceEnabled(source, !source.enabled)}>
+                          {source.enabled ? "停用" : "启用"}
+                        </Button>
+                        <IconButton aria-label={`移除扫描来源 ${source.displayName}`} disabled={sourceBusyId === source.id || scanLocked} size="small" onClick={() => void handleRemoveSource(source)}>
+                          <DeleteRounded fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </Paper>
+                  );
+                })
+              ) : (
+                <ModuleEmptyState
+                  title="尚无扫描来源"
+                  body="添加目录后会保存为本地来源记录。添加不会触发扫描。"
+                />
+              )}
             </Box>
-          ))}
+          </AiosSection>
         </Box>
-      </AiosSection>
 
-      <AiosSection className="scan-control-section">
-        <AiosSectionHeader title="批次控制" summary={activeScanMode.id === "custom-directory" ? `默认新来源模板：${activeProfile.displayName}。批次扫描按已选择且已启用的来源顺序执行。` : "发现模式会先创建用户确认的来源，再使用同一个可取消批次扫描运行时。"} />
-        <Box className="scan-control-grid">
-          <Box className="scan-control-card">
-            <Box className="scan-control-heading">
-              <FolderOpenRounded fontSize="small" />
-              <Box className="scan-control-copy">
-                <Typography component="strong">{activeScanMode.id === "custom-directory" ? "添加扫描来源" : "启动发现扫描"}</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {activeScanMode.id === "custom-directory" ? "系统目录选择器可一次选择多个目录；添加后不会自动扫描。" : "候选来源只在点击开始后解析；Web/Vite 预览不会运行真实发现扫描。"}
-                </Typography>
-              </Box>
+        <Box className="custom-scan-pane custom-scan-pane--policy" data-aios-internal-scroll="true">
+          <AiosSection className="scan-profile-section">
+            <AiosSectionHeader title="扫描模式" summary="选择一种来源方式后手动开始。切换模式不会自动扫描。" action={<Chip className="status-chip status-ok" label={activeScanMode.title} variant="outlined" />} />
+            <Box className="scan-mode-card-grid" aria-label="扫描模式选择">
+              {scanModeDefinitions.map((mode) => {
+                const safetyCard = getScanModeSafetyCard(mode.id);
+                return (
+                  <Button
+                    className={`scan-mode-card ${activeScanMode.id === mode.id ? "active" : ""}`}
+                    data-aios-hover-card
+                    data-aios-motion-surface
+                    data-aios-selected-surface={activeScanMode.id === mode.id ? "true" : undefined}
+                    disabled={scanLocked}
+                    key={mode.id}
+                    variant="outlined"
+                    onClick={() => handleScanModeChange(mode.id)}
+                  >
+                    <Box className="scan-mode-card-copy">
+                      <Typography component="strong">{mode.title}</Typography>
+                      <Typography color="text.secondary" variant="body2">
+                        {mode.summary}
+                      </Typography>
+                      <Box className="scan-mode-safety-list">
+                        <Typography color="text.secondary" variant="body2">
+                          适合：{safetyCard.intendedUsers}
+                        </Typography>
+                        <Typography color="text.secondary" variant="body2">
+                          扫描：{safetyCard.whatScans}
+                        </Typography>
+                        <Typography color="text.secondary" variant="body2">
+                          不扫描：{safetyCard.whatSkips}
+                        </Typography>
+                      </Box>
+                      <Chip label={mode.requiresConfirmation ? "需要确认" : "手动启动"} size="small" variant="outlined" />
+                    </Box>
+                  </Button>
+                );
+              })}
             </Box>
-            <TextField
-              disabled={scanLocked}
-              label="默认项目标签"
-              size="small"
-              value={newProjectLabel}
-              onChange={(event) => setNewProjectLabel(event.target.value)}
+          </AiosSection>
+
+          <AiosSection className="scan-profile-section">
+            <AiosSectionHeader
+              title={activeScanMode.id === "custom-directory" ? "扫描模板" : "发现模式边界"}
+              summary={activeScanMode.id === "custom-directory" ? "模板只改变分类重点；添加来源不会自动扫描。" : activeScanMode.warning}
+              action={<Chip className="status-chip status-ok" label={activeProfile.displayName} variant="outlined" />}
             />
-            {activeScanMode.id === "advanced-full-disk" && (
-              <Box className="scan-advanced-confirmation">
-                <Checkbox checked={advancedConfirmed} disabled={scanLocked} onChange={(event) => setAdvancedConfirmed(event.target.checked)} />
+            <Box className="scan-profile-selector" aria-label="扫描模板选择">
+              <ToggleButtonGroup disabled={scanLocked || activeScanMode.id !== "custom-directory"} exclusive value={activeScanMode.id === "custom-directory" ? activeProfile.id : activeProfile.id} onChange={handleProfileChange}>
+                {customProfiles.map((profile) => (
+                  <ToggleButton disabled={scanLocked || activeScanMode.id !== "custom-directory"} key={profile.id} value={profile.id}>
+                    <Box component="span">{profile.displayName}</Box>
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+            <Box className="scan-profile-detail-grid">
+              <Box className="scan-profile-detail">
+                <Typography component="strong">{activeProfile.shortDescription}</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  {ADVANCED_FULL_DISK_CONFIRMATION_COPY}
+                  {activeProfile.recommendedUseCase}
                 </Typography>
               </Box>
-            )}
-            <Box className="scan-action-row aios-action-group scan-control-actions">
-              {activeScanMode.id === "custom-directory" && (
-                <Button className="aios-action-button aios-action-button--secondary" disabled={!tauriAvailable || batchBusyState !== "idle" || scanLocked} startIcon={<AddRounded />} variant="outlined" onClick={handleAddSources}>
-                  添加目录
-                </Button>
-              )}
-              <Button className="aios-action-button aios-action-button--primary" disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
-                {activeScanMode.id === "custom-directory" ? "扫描所选" : "开始发现"}
-              </Button>
-              <Button className="aios-action-button aios-action-button--secondary" disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
-                刷新
-              </Button>
-              {scanLocked && (
-                <Button className="aios-action-button aios-action-button--warning" color="warning" disabled={!batchSnapshot || batchBusyState === "cancelling"} startIcon={<StopCircleRounded />} variant="outlined" onClick={handleCancelBatch}>
-                  取消批次
-                </Button>
-              )}
+              <Box className="scan-profile-detail">
+                <Typography component="strong">安全边界</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {activeProfile.safetyBoundary}
+                </Typography>
+              </Box>
+              <Box className="scan-profile-detail">
+                <Typography component="strong">分类重点</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {activeProfile.classificationEmphasis.join(" / ")}
+                </Typography>
+              </Box>
             </Box>
-          </Box>
+          </AiosSection>
 
-          <Box className="scan-control-card boundary">
-            <Box className="scan-control-heading">
-              <SecurityRounded fontSize="small" />
-              <Box className="scan-control-copy">
-                <Typography component="strong">策略摘要</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  深度 {activeProfile.maxDepth} · 上限 {activeProfile.maxEntries} 项 · 单文件元数据阈值 {formatBytes(policy.maxFileSizeBytes)}
-                </Typography>
-              </Box>
+          <AiosSection className="scan-first-use-section">
+            <AiosSectionHeader title="来源设置建议" summary="添加来源只保存授权目录元数据，不会自动扫描。" />
+            <Box className="scan-first-use-grid">
+              {firstUseGuides.map((guide) => (
+                <Box className={`scan-first-use-item ${guide.tone}`} key={guide.title}>
+                  <Typography component="strong">{guide.title}</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {guide.summary}
+                  </Typography>
+                </Box>
+              ))}
             </Box>
+          </AiosSection>
+
+          <AiosAccordionPanel title="策略摘要" summary={`深度 ${activeProfile.maxDepth} · 上限 ${activeProfile.maxEntries} 项 · 单文件元数据阈值 ${formatBytes(policy.maxFileSizeBytes)}`} defaultExpanded>
             <AiosTechnicalDetails rows={policyRows(policy, activeProfile)} />
             <Box className="scan-policy-chip-row">
               <Chip className="status-chip status-ok" label="不读取内容" size="small" />
               <Chip className="status-chip status-ok" label="不执行脚本/MCP" size="small" />
               <Chip className="status-chip status-disabled" label="不跟随符号链接" size="small" />
-              <Chip className="status-chip status-disabled" label="本地 SQLite" size="small" />
+              <Chip className="status-chip status-disabled" label="本地记录" size="small" />
               <Chip className="status-chip status-disabled" label="可取消" size="small" />
             </Box>
-            <Box className="scan-boundary-callout warn">
-              <WarningAmberRounded fontSize="small" />
-              <Typography color="text.secondary" variant="body2">
-                macOS 或桌面受保护文件夹可能被跳过，permission denied 属于预期结果。你可以改为手动添加具体项目文件夹；AIOS 不会自动修改系统设置。
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-      </AiosSection>
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              macOS 或桌面受保护文件夹可能被跳过，permission denied 属于预期结果。你可以改为手动添加具体项目文件夹；AIOS 不会自动修改系统设置。
+            </Alert>
+          </AiosAccordionPanel>
 
-      <AiosSection className="scan-sources-section">
-        <AiosSectionHeader title="已保存扫描来源" summary="移除来源只删除 AIOS 本地库中的来源、任务和资源位置记录，不删除用户文件。" count={persistedSources.length} />
-        <Box className="scan-source-list" aria-label="扫描来源列表">
-          {persistedSources.length > 0 ? (
-            persistedSources.map((source) => {
-              const row = persistedLibraryState.sourceRows.find((candidate) => candidate.id === source.id);
-              const sourceBusy = sourceBusyId === source.id || scanLocked;
-              const batchSource = batchSnapshot?.sources.find((candidate) => candidate.scanSourceId === source.id);
-              const status = batchSource?.status ?? row?.status ?? "idle";
-              const sourceProfileOptions = source.sourceKind === "custom-directory" ? customProfiles : [getScanProfileById(source.profileId, profiles)];
-              return (
-                <Box className={`scan-source-row ${source.enabled ? "" : "disabled"}`} key={source.id}>
-                  <Checkbox
-                    checked={selectedSourceIds.includes(source.id)}
-                    disabled={!source.enabled || sourceBusy}
-                    slotProps={{ input: { "aria-label": `选择扫描来源 ${source.displayName}` } }}
-                    onChange={(event) => handleToggleSourceSelection(source.id, event.target.checked)}
-                  />
-                  <Box className="scan-source-main">
-                    <Typography component="strong" title={source.displayName}>
-                      {source.displayName}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2" title={source.rootDisplayPath}>
-                      {source.rootDisplayPath}
-                    </Typography>
-                    <Box className="scan-source-chip-row">
-                      <Chip className={`status-chip ${source.enabled ? "status-ok" : "status-disabled"}`} label={source.enabled ? "已启用" : "已停用"} size="small" />
-                      <Chip label={scanBatchStatusLabel(status)} size="small" variant="outlined" />
-                      <Chip label={sourceKindLabel(source.sourceKind)} size="small" variant="outlined" />
-                      {source.projectLabel && <Chip label={source.projectLabel} size="small" variant="outlined" />}
-                      {source.lastScanFinishedAtMs && <Chip label={`最近 ${formatDate(source.lastScanFinishedAtMs)}`} size="small" variant="outlined" />}
-                    </Box>
-                  </Box>
-                  <TextField disabled={sourceBusy || source.sourceKind !== "custom-directory"} label="模板" select size="small" value={source.profileId} onChange={(event) => void handleUpdateSourceProfile(source, event.target.value)}>
-                    {sourceProfileOptions.map((profile) => (
-                      <MenuItem key={profile.id} value={profile.id}>
-                        {profile.displayName}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    disabled={sourceBusy}
-                    label="项目标签"
-                    size="small"
-                    value={sourceProjectDrafts[source.id] ?? source.projectLabel ?? ""}
-                    onBlur={() => void handleProjectBlur(source)}
-                    onChange={(event) => handleProjectDraftChange(source.id, event.target.value)}
-                  />
-                  <Box className="scan-source-metrics">
-                    <ProgressMetric label="资源" value={batchSource?.resourcesFound ?? source.resourceCount} />
-                    <ProgressMetric label="跳过" value={batchSource?.skippedEntries ?? source.skippedEntries} />
-                    <ProgressMetric label="错误" value={batchSource?.errorCount ?? source.errorCount} />
-                  </Box>
-                  <Box className="scan-source-actions">
-                    <Button disabled={!resourceCorpus.scopes.some((scope) => scope.scanSourceId === source.id)} size="small" variant="outlined" onClick={() => handleSourceScopeSwitch(source.id)}>
-                      查看来源范围
-                    </Button>
-                    <Button disabled={sourceBusyId === source.id || scanLocked} size="small" variant="outlined" onClick={() => void handleUpdateSourceEnabled(source, !source.enabled)}>
-                      {source.enabled ? "停用" : "启用"}
-                    </Button>
-                    <IconButton aria-label={`移除扫描来源 ${source.displayName}`} disabled={sourceBusyId === source.id || scanLocked} size="small" onClick={() => void handleRemoveSource(source)}>
-                      <DeleteRounded fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Box>
-              );
-            })
-          ) : (
-            <Box className="scan-empty-state">
-              <Typography component="strong">尚无扫描来源</Typography>
-              <Typography color="text.secondary" variant="body2">
-                添加目录后会保存为本地来源记录。添加不会触发扫描。
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      </AiosSection>
-
-      {batchSnapshot && (
-        <AiosSection className="scan-progress-section">
-          <AiosSectionHeader
-            title="批次进度"
-            summary={`状态：${scanBatchStatusLabel(batchSnapshot.status)}。当前来源：${batchSnapshot.activeSourceId ?? "无"}`}
-            action={<Chip className={`status-chip ${batchSnapshot.status === "completed" ? "status-ok" : batchSnapshot.status === "failed" || batchSnapshot.status === "cancelled" ? "status-warn" : "status-disabled"}`} label={scanBatchStatusLabel(batchSnapshot.status)} variant="outlined" />}
-          />
-          <Box className="scan-progress-card">
-            <Box className="scan-progress-heading">
-              <Typography component="strong">
-                {batchSnapshot.completedSources} / {batchSnapshot.totalSources} 来源已结束
-              </Typography>
-              <Typography color="text.secondary" variant="body2">
-                活动来源已访问 {batchSnapshot.progress.activeVisitedEntries} 项，匹配 {batchSnapshot.progress.activeMatchedResources} 项，跳过 {batchSnapshot.progress.activeSkippedEntries} 项。
-              </Typography>
-            </Box>
-            <LinearProgress className="scan-progress-bar" value={batchProgressPercent} variant="determinate" />
-            <Box className="scan-progress-grid">
-              <ProgressMetric label="总来源" value={batchSnapshot.totalSources} />
-              <ProgressMetric label="已结束" value={batchSnapshot.completedSources} />
-              <ProgressMetric label="已取消" value={batchSnapshot.cancelledSources} />
-              <ProgressMetric label="失败" value={batchSnapshot.failedSources} />
-              <ProgressMetric label="耗时" value={`${Math.max(0, Math.round(batchSnapshot.progress.elapsedMs / 1000))}s`} />
-            </Box>
-          </Box>
-        </AiosSection>
-      )}
-
-      {(hasDiscoverySources || activeScanMode.id !== "custom-directory") && (
-        <AiosSection className="scan-discovery-summary-section">
-          <AiosSectionHeader title="发现结果统计" summary="来自同一个 SQLite 动态资源语料；仅展示聚合计数和安全分类。" count={discoveryStats.totalResources} />
-          <Box className="scan-summary-grid">
-            <AiosUsageCard title="总资源" purpose="已持久化的仅元数据资源数量。" technicalName={`${discoveryStats.totalResources}`} />
-            <AiosUsageCard title="扫描来源" purpose="本次或最近发现批次结束的来源数量。" technicalName={`${discoveryStats.scannedSources}`} />
-            <AiosUsageCard title="跳过条目" purpose="排除、权限、上限、取消、大小或符号链接等聚合计数。" technicalName={`${discoveryStats.skippedEntries}`} />
-            <AiosUsageCard title="权限拒绝" purpose="无法读取元数据或遍历失败的安全聚合计数。" technicalName={`${discoveryStats.permissionDeniedCount}`} />
-            <AiosUsageCard title="排除目录" purpose="命中强 exclude 的目录或条目计数。" technicalName={`${discoveryStats.excludedCount}`} />
-            <AiosUsageCard title="错误" purpose="保存到本地库的安全错误摘要数量。" technicalName={`${discoveryStats.errors}`} />
-            <AiosUsageCard title="耗时" purpose="最近发现批次的聚合耗时。" technicalName={`${discoveryStats.elapsedSeconds}s`} />
-            <AiosUsageCard title="本地库" purpose="当前 SQLite 动态资源库资源数量。" technicalName={`${discoveryStats.storedLibraryCount}`} />
-          </Box>
-          <Box className="scan-category-summary-grid compact" aria-label="发现资源分类计数">
-            {discoveryStats.resourcesByKind.length > 0 ? (
-              discoveryStats.resourcesByKind.map((item) => (
-                <Box className="scan-category-summary-item" key={item.resourceKind}>
-                  <Typography component="strong">{item.label}</Typography>
-                  <Typography className="scan-category-count" component="span">
-                    {item.count}
-                  </Typography>
-                </Box>
-              ))
-            ) : (
-              <Box className="scan-category-summary-item">
-                <Typography component="strong">暂无发现结果</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  选择发现模式并手动开始后，统计会从本地 SQLite 资源库读取。
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </AiosSection>
-      )}
-
-      <AiosSection className="scan-library-section">
-        <AiosSectionHeader
-          title="本地资源库"
-          summary={tauriAvailable ? "Rust 后端拥有的 SQLite 元数据资源库；不保存文件内容、secret、env value、auth/session 或 cookie。" : "Web/Vite 预览模式不连接本地 SQLite，仅显示空的降级状态。"}
-          action={<Chip className={`status-chip ${resourceStoreStatus.databaseReady ? "status-ok" : "status-disabled"}`} label={resourceStoreStatus.databaseReady ? "SQLite 已就绪" : "未连接本地库"} variant="outlined" />}
-        />
-        <Box className="scan-library-grid">
-          <Box className="scan-control-card library">
-            <Box className="scan-control-heading">
-              <StorageRounded fontSize="small" />
-              <Box className="scan-control-copy">
-                <Typography component="strong">持久化摘要</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  最近任务：{persistedLibraryState.latestJobLabel}
-                </Typography>
-              </Box>
-            </Box>
-            <Box className="scan-progress-grid">
-              <ProgressMetric label="保存来源" value={librarySummary.sourceCount} />
-              <ProgressMetric label="已启用" value={librarySummary.enabledSourceCount} />
-              <ProgressMetric label="扫描任务" value={librarySummary.jobCount} />
-              <ProgressMetric label="资源" value={librarySummary.resourceCount} />
-              <ProgressMetric label="跳过" value={librarySummary.skippedEntryTotal} />
-              <ProgressMetric label="错误" value={librarySummary.errorTotal} />
-            </Box>
-            <Box className="scan-library-list" aria-label="已保存扫描来源">
-              <Typography component="strong">最近成功扫描</Typography>
-              <Box className="scan-library-row">
-                <Typography component="span">{persistedLibraryState.latestSuccessfulScanLabel}</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  最近任务：{persistedLibraryState.latestJobLabel}
-                </Typography>
-              </Box>
-              <Typography component="strong">扫描来源</Typography>
-              {persistedLibraryState.sourceRows.length > 0 ? (
-                persistedLibraryState.sourceRows.slice(0, 4).map((source) => (
-                  <Box className="scan-library-row" key={source.id}>
-                    <Typography component="span" title={source.primary}>
-                      {source.primary}
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2" title={source.secondary}>
-                      {source.secondary}
-                    </Typography>
-                  </Box>
-                ))
-              ) : (
-                <Typography color="text.secondary" variant="body2">
-                  尚无持久化扫描来源。完成一次指定目录扫描后会出现在这里。
-                </Typography>
-              )}
-            </Box>
-          </Box>
-
-          <Box className="scan-control-card library">
-            <Box className="scan-control-heading">
-              <SecurityRounded fontSize="small" />
-              <Box className="scan-control-copy">
-                <Typography component="strong">隐私与数据控制</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  本地库只属于 AIOS Desktop；重置只删除应用记录，不删除用户文件。
-                </Typography>
-              </Box>
-            </Box>
+          <AiosAccordionPanel title="高级策略详情" summary="模板与策略的完整技术参数" defaultExpanded={false}>
             <AiosTechnicalDetails
               rows={[
-                { label: "数据边界", value: privacySummary.localBoundaryLabel },
-                { label: "数据库", value: privacySummary.databaseStatus },
-                { label: "扫描来源", value: privacySummary.sourceCountLabel },
-                { label: "持久资源", value: privacySummary.persistedResourceCountLabel },
-                { label: "最近扫描", value: privacySummary.lastScanLabel },
-                { label: "扫描时间", value: privacySummary.lastScanTimeLabel },
-                { label: "元数据策略", value: privacySummary.metadataPolicyLabel },
-                { label: "内容存储", value: privacySummary.contentPolicyLabel },
-                { label: "执行边界", value: privacySummary.executionPolicyLabel }
+                { label: "当前模板", value: activeProfile.displayName },
+                { label: "模板 ID", value: activeProfile.id, code: true },
+                { label: "最大深度", value: activeProfile.maxDepth },
+                { label: "最大条目", value: activeProfile.maxEntries },
+                { label: "单文件阈值", value: formatBytes(policy.maxFileSizeBytes) },
+                { label: "内容读取", value: policy.contentReadingEnabled ? "启用" : "禁用" },
+                { label: "执行能力", value: policy.executionEnabled ? "启用" : "禁用" },
+                { label: "高级发现", value: activeProfile.fullDiskScanEnabled ? "需显式确认" : "普通模式禁用" },
+                { label: "忽略规则", value: policy.respectsIgnoreFiles ? "尊重 .ignore/.gitignore" : "未启用" }
               ]}
             />
-            <Box className="scan-privacy-copy-grid">
-              <Box className="scan-first-use-item ok">
-                <Typography component="strong">AIOS 保存</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {WHAT_AIOS_STORES_COPY}
-                </Typography>
-              </Box>
-              <Box className="scan-first-use-item warn">
-                <Typography component="strong">AIOS 不保存</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {WHAT_AIOS_NEVER_STORES_COPY}
-                </Typography>
-              </Box>
-            </Box>
-            <Box className="scan-boundary-callout warn">
-              <WarningAmberRounded fontSize="small" />
-              <Typography color="text.secondary" variant="body2">
-                {privacySummary.resetWarning}
-              </Typography>
-            </Box>
-            <Box className="scan-category-summary-grid compact" aria-label="持久化资源分类计数">
-              {persistedLibraryState.categoryRows.length > 0 ? (
-                persistedLibraryState.categoryRows.slice(0, 6).map((item) => (
-                  <Box className="scan-category-summary-item" key={item.resourceKind}>
-                    <Typography component="strong">{item.label}</Typography>
-                    <Typography className="scan-category-count" component="span">
-                      {item.count}
-                    </Typography>
-                  </Box>
-                ))
-              ) : (
-                <Box className="scan-category-summary-item">
-                  <Typography component="strong">无持久资源</Typography>
+            {activeScanMode.id === "advanced-full-disk" && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                {ADVANCED_FULL_DISK_CONFIRMATION_COPY}
+              </Alert>
+            )}
+          </AiosAccordionPanel>
+
+          {batchSnapshot && (
+            <AiosSection className="scan-progress-section">
+              <AiosSectionHeader
+                title="扫描进度"
+                summary={`状态：${scanBatchStatusLabel(batchSnapshot.status)}。当前来源：${batchSnapshot.activeSourceId ?? "无"}`}
+                action={<Chip className={`status-chip ${batchSnapshot.status === "completed" ? "status-ok" : batchSnapshot.status === "failed" || batchSnapshot.status === "cancelled" ? "status-warn" : "status-disabled"}`} label={scanBatchStatusLabel(batchSnapshot.status)} variant="outlined" />}
+              />
+              <Paper className="scan-progress-card" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+                <Box className="scan-progress-heading">
+                  <Typography component="strong">
+                    {batchSnapshot.completedSources} / {batchSnapshot.totalSources} 来源已结束
+                  </Typography>
                   <Typography color="text.secondary" variant="body2">
-                    本地资源库为空。
+                    活动来源已访问 {batchSnapshot.progress.activeVisitedEntries} 项，匹配 {batchSnapshot.progress.activeMatchedResources} 项，跳过 {batchSnapshot.progress.activeSkippedEntries} 项。
                   </Typography>
                 </Box>
-              )}
-            </Box>
-            <Box className="scan-action-row aios-action-group scan-danger-actions">
-              <Button
-                className="aios-action-button aios-action-button--warning"
-                color="warning"
-                disabled={!tauriAvailable || scanLocked || libraryBusyState !== "idle" || !persistedLibraryState.canClear}
-                startIcon={<DeleteSweepRounded />}
-                variant="outlined"
-                onClick={handleClearResourceLibrary}
-              >
-                删除 AIOS 本地数据
-              </Button>
-              <Chip label={libraryBusyState === "idle" ? "本地记录可重建" : libraryBusyState === "clearing" ? "正在清空" : "正在读取"} size="small" variant="outlined" />
-            </Box>
-          </Box>
-        </Box>
-      </AiosSection>
+                <LinearProgress className="scan-progress-bar" value={batchProgressPercent} variant="determinate" />
+                <Box className="scan-progress-grid">
+                  <ProgressMetric label="总来源" value={batchSnapshot.totalSources} />
+                  <ProgressMetric label="已结束" value={batchSnapshot.completedSources} />
+                  <ProgressMetric label="已取消" value={batchSnapshot.cancelledSources} />
+                  <ProgressMetric label="失败" value={batchSnapshot.failedSources} />
+                  <ProgressMetric label="耗时" value={`${Math.max(0, Math.round(batchSnapshot.progress.elapsedMs / 1000))}s`} />
+                </Box>
+              </Paper>
+            </AiosSection>
+          )}
 
-      <Box className="scan-boundary-callout info">
-        <SecurityRounded fontSize="small" />
-        <Typography color="text.secondary" variant="body2">
-          发现模式只能在扫描管理中启动；总览、技能库、MCP、脚本、报告、项目包、策略、验证器、旧入口和详情面板只读取已保存的本机资源。
-        </Typography>
+          <AiosSection className="scan-library-section">
+            <AiosSectionHeader
+              title="本地记录摘要"
+              summary={tauriAvailable ? "Rust 后端拥有的本地元数据资源库；不保存文件内容、secret、env value、auth/session 或 cookie。" : "Web/Vite 预览模式不连接本地库，仅显示空的降级状态。"}
+              action={<Chip className={`status-chip ${resourceStoreStatus.databaseReady ? "status-ok" : "status-disabled"}`} label={resourceStoreStatus.databaseReady ? "本地记录已就绪" : "未连接本地库"} variant="outlined" />}
+            />
+            <Paper className="scan-control-card library" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+              <Box className="scan-control-heading">
+                <StorageRounded fontSize="small" />
+                <Box className="scan-control-copy">
+                  <Typography component="strong">持久化摘要</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    最近任务：{persistedLibraryState.latestJobLabel}
+                  </Typography>
+                </Box>
+              </Box>
+              <Box className="scan-progress-grid">
+                <ProgressMetric label="保存来源" value={librarySummary.sourceCount} />
+                <ProgressMetric label="已启用" value={librarySummary.enabledSourceCount} />
+                <ProgressMetric label="扫描任务" value={librarySummary.jobCount} />
+                <ProgressMetric label="资源" value={librarySummary.resourceCount} />
+                <ProgressMetric label="跳过" value={librarySummary.skippedEntryTotal} />
+                <ProgressMetric label="错误" value={librarySummary.errorTotal} />
+              </Box>
+              <Box className="scan-library-list" aria-label="已保存扫描来源">
+                <Typography component="strong">最近成功扫描</Typography>
+                <Box className="scan-library-row">
+                  <Typography component="span">{persistedLibraryState.latestSuccessfulScanLabel}</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    最近任务：{persistedLibraryState.latestJobLabel}
+                  </Typography>
+                </Box>
+                <Typography component="strong">扫描来源</Typography>
+                {persistedLibraryState.sourceRows.length > 0 ? (
+                  persistedLibraryState.sourceRows.slice(0, 4).map((source) => (
+                    <Box className="scan-library-row" key={source.id}>
+                      <Typography component="span" title={source.primary}>
+                        {source.primary}
+                      </Typography>
+                      <Typography color="text.secondary" variant="body2" title={source.secondary}>
+                        {source.secondary}
+                      </Typography>
+                    </Box>
+                  ))
+                ) : (
+                  <Typography color="text.secondary" variant="body2">
+                    尚无持久化扫描来源。完成一次指定目录扫描后会出现在这里。
+                  </Typography>
+                )}
+              </Box>
+            </Paper>
+          </AiosSection>
+
+          {(hasDiscoverySources || activeScanMode.id !== "custom-directory") && (
+            <AiosSection className="scan-discovery-summary-section">
+              <AiosSectionHeader title="发现结果统计" summary="来自同一个本地资源语料；仅展示聚合计数和安全分类。" count={discoveryStats.totalResources} />
+              <Box className="scan-summary-grid">
+                <AiosUsageCard title="总资源" purpose="已持久化的仅元数据资源数量。" technicalName={`${discoveryStats.totalResources}`} />
+                <AiosUsageCard title="扫描来源" purpose="本次或最近发现批次结束的来源数量。" technicalName={`${discoveryStats.scannedSources}`} />
+                <AiosUsageCard title="跳过条目" purpose="排除、权限、上限、取消、大小或符号链接等聚合计数。" technicalName={`${discoveryStats.skippedEntries}`} />
+                <AiosUsageCard title="权限拒绝" purpose="无法读取元数据或遍历失败的安全聚合计数。" technicalName={`${discoveryStats.permissionDeniedCount}`} />
+                <AiosUsageCard title="排除目录" purpose="命中强 exclude 的目录或条目计数。" technicalName={`${discoveryStats.excludedCount}`} />
+                <AiosUsageCard title="错误" purpose="保存到本地库的安全错误摘要数量。" technicalName={`${discoveryStats.errors}`} />
+                <AiosUsageCard title="耗时" purpose="最近发现批次的聚合耗时。" technicalName={`${discoveryStats.elapsedSeconds}s`} />
+                <AiosUsageCard title="本地库" purpose="当前本地资源库资源数量。" technicalName={`${discoveryStats.storedLibraryCount}`} />
+              </Box>
+              <Box className="scan-category-summary-grid compact" aria-label="发现资源分类计数">
+                {discoveryStats.resourcesByKind.length > 0 ? (
+                  discoveryStats.resourcesByKind.map((item) => (
+                    <Box className="scan-category-summary-item" key={item.resourceKind}>
+                      <Typography component="strong">{item.label}</Typography>
+                      <Typography className="scan-category-count" component="span">
+                        {item.count}
+                      </Typography>
+                    </Box>
+                  ))
+                ) : (
+                  <Box className="scan-category-summary-item">
+                    <Typography component="strong">暂无发现结果</Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      选择发现模式并手动开始后，统计会从本地资源库读取。
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </AiosSection>
+          )}
+
+          {scanResult && (
+            <AiosSection className="scan-result-section">
+              <AiosSectionHeader title="扫描结果" summary={`${scanResult.rootSummary} · ${profileForVisibleResults.displayName} · ${formatDate(scanResult.scannedAtMs)}`} />
+              <Box className="scan-summary-grid">
+                <AiosUsageCard title="模板" purpose={profileForVisibleResults.shortDescription} technicalName={profileForVisibleResults.displayName} />
+                <AiosUsageCard title="已访问" purpose="遍历到的目录与文件条目数量。" technicalName={`${scanResult.counts.visitedEntries}`} />
+                <AiosUsageCard title="已归类" purpose="返回到当前界面的元数据资源数量。" technicalName={`${scanResult.counts.returnedResources}`} />
+                <AiosUsageCard title="已跳过" purpose="排除、过大、符号链接或权限失败条目。" technicalName={`${skippedCount}`} />
+                <AiosUsageCard title="提示" purpose="扫描策略提示和可解释跳过原因。" technicalName={`${scanResult.warnings.length}`} />
+              </Box>
+              <Box className="scan-category-summary-grid" aria-label="扫描模板分类摘要">
+                {categorySummary.map((item) => (
+                  <Box className="scan-category-summary-item" key={item.title}>
+                    <Typography component="strong">{item.title}</Typography>
+                    <Typography className="scan-category-count" component="span">
+                      {item.value}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      {item.summary}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </AiosSection>
+          )}
+
+          {scanResult && (
+            <AiosSection className="scan-skipped-summary-section">
+              <AiosSectionHeader title="跳过摘要" summary="仅展示聚合计数；不会暴露绝对路径或敏感值。" count={skippedSummaryItems(scanResult, null).reduce((total, item) => total + item.value, 0)} />
+              <Box className="scan-skipped-summary-grid">
+                {skippedSummaryItems(scanResult, null).map((item) => (
+                  <Box className="scan-skipped-summary-item" key={item.label}>
+                    <Typography component="strong">{item.label}</Typography>
+                    <Typography className="scan-category-count" component="span">
+                      {item.value}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      {item.summary}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </AiosSection>
+          )}
+
+          {scanResult && (scanResult.warnings.length > 0 || skippedCount > 0) && (
+            <AiosSection className="scan-warning-section">
+              <AiosSectionHeader title="跳过与提示" summary="仅显示已隐藏路径和策略原因，不显示敏感值。" count={scanResult.warnings.length} />
+              <Box className="scan-warning-list">
+                {scanResult.warnings.slice(0, 8).map((warning, index) => (
+                  <Box className="scan-warning-row" key={`${warning.code}:${warning.relativePath ?? index}`}>
+                    <Chip label={warning.code} size="small" variant="outlined" />
+                    <Typography color="text.secondary" variant="body2">
+                      {warning.relativePath ? `${warning.relativePath} · ${warning.message}` : warning.message}
+                    </Typography>
+                  </Box>
+                ))}
+                {scanResult.warnings.length > 8 && (
+                  <Typography color="text.secondary" variant="body2">
+                    还有 {scanResult.warnings.length - 8} 条提示已折叠。
+                  </Typography>
+                )}
+              </Box>
+            </AiosSection>
+          )}
+
+          {scanResult ? (
+            groups.length === 0 ? (
+              <ModuleEmptyState />
+            ) : (
+              groups.map((group) => (
+                <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant={variantForGroup(group)} onSelect={onSelect} />
+              ))
+            )
+          ) : (
+            <Paper className="scan-empty-state" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+              <Typography component="strong">{scanManagementEmptyTitle(batchSnapshot)}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {scanManagementEmptySummary(batchSnapshot)}
+              </Typography>
+            </Paper>
+          )}
+
+          <AiosSection className="scan-library-section">
+            <AiosSectionHeader
+              title="隐私与数据控制"
+              summary="本地记录只属于 AIOS Desktop；重置只删除应用记录，不删除用户文件。"
+            />
+            <Paper className="scan-control-card library" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+              <Box className="scan-control-heading">
+                <SecurityRounded fontSize="small" />
+                <Box className="scan-control-copy">
+                  <Typography component="strong">数据边界</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {privacySummary.localBoundaryLabel}
+                  </Typography>
+                </Box>
+              </Box>
+              <AiosTechnicalDetails
+                rows={[
+                  { label: "数据库", value: privacySummary.databaseStatus },
+                  { label: "扫描来源", value: privacySummary.sourceCountLabel },
+                  { label: "持久资源", value: privacySummary.persistedResourceCountLabel },
+                  { label: "最近扫描", value: privacySummary.lastScanLabel },
+                  { label: "扫描时间", value: privacySummary.lastScanTimeLabel },
+                  { label: "元数据策略", value: privacySummary.metadataPolicyLabel },
+                  { label: "内容存储", value: privacySummary.contentPolicyLabel },
+                  { label: "执行边界", value: privacySummary.executionPolicyLabel }
+                ]}
+              />
+              <Box className="scan-privacy-copy-grid">
+                <Box className="scan-first-use-item ok">
+                  <Typography component="strong">AIOS 保存</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {WHAT_AIOS_STORES_COPY}
+                  </Typography>
+                </Box>
+                <Box className="scan-first-use-item warn">
+                  <Typography component="strong">AIOS 不保存</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {WHAT_AIOS_NEVER_STORES_COPY}
+                  </Typography>
+                </Box>
+              </Box>
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {privacySummary.resetWarning}
+              </Alert>
+              <Box className="scan-action-row aios-action-group scan-danger-actions" sx={{ mt: 2 }}>
+                <Button
+                  className="aios-action-button aios-action-button--warning"
+                  color="warning"
+                  disabled={!tauriAvailable || scanLocked || libraryBusyState !== "idle" || !persistedLibraryState.canClear}
+                  startIcon={<DeleteSweepRounded />}
+                  variant="outlined"
+                  onClick={handleClearResourceLibrary}
+                >
+                  删除 AIOS 本地数据
+                </Button>
+                <Chip label={libraryBusyState === "idle" ? "本地记录可重建" : libraryBusyState === "clearing" ? "正在清空" : "正在读取"} size="small" variant="outlined" />
+              </Box>
+            </Paper>
+          </AiosSection>
+        </Box>
       </Box>
 
-      {!tauriAvailable && (
-        <Box className="scan-boundary-callout warn">
-          <WarningAmberRounded fontSize="small" />
-          <Typography color="text.secondary" variant="body2">
+      <Box className="scan-footer-alerts" data-aios-layout-footer>
+        {!tauriAvailable && (
+          <Alert severity="warning">
             {WEB_DISCOVERY_UNAVAILABLE_COPY}
-          </Typography>
-        </Box>
-      )}
+          </Alert>
+        )}
 
-      {libraryError && (
-        <Box className="scan-boundary-callout warn">
-          <WarningAmberRounded fontSize="small" />
-          <Typography color="text.secondary" variant="body2">
+        {libraryError && (
+          <Alert severity="error">
             {libraryError}
-          </Typography>
-        </Box>
-      )}
+          </Alert>
+        )}
 
-      {error && (
-        <Box className="scan-boundary-callout warn">
-          <WarningAmberRounded fontSize="small" />
-          <Typography color="text.secondary" variant="body2">
+        {error && (
+          <Alert severity="error">
             {error}
-          </Typography>
-        </Box>
-      )}
+          </Alert>
+        )}
 
-      {batchBusyState === "adding" && (
-        <Box className="scan-boundary-callout info">
-          <Typography color="text.secondary" variant="body2">
+        {batchBusyState === "adding" && (
+          <Alert severity="info">
             正在等待目录选择器返回结果；添加来源不会自动扫描。
-          </Typography>
-        </Box>
-      )}
-
-      {scanResult && (
-        <AiosSection className="scan-result-section">
-          <AiosSectionHeader title="扫描结果" summary={`${scanResult.rootSummary} · ${profileForVisibleResults.displayName} · ${formatDate(scanResult.scannedAtMs)}`} />
-          <Box className="scan-summary-grid">
-            <AiosUsageCard title="模板" purpose={profileForVisibleResults.shortDescription} technicalName={profileForVisibleResults.displayName} />
-            <AiosUsageCard title="已访问" purpose="遍历到的目录与文件条目数量。" technicalName={`${scanResult.counts.visitedEntries}`} />
-            <AiosUsageCard title="已归类" purpose="返回到当前界面的元数据资源数量。" technicalName={`${scanResult.counts.returnedResources}`} />
-            <AiosUsageCard title="已跳过" purpose="排除、过大、符号链接或权限失败条目。" technicalName={`${skippedCount}`} />
-            <AiosUsageCard title="提示" purpose="扫描策略提示和可解释跳过原因。" technicalName={`${scanResult.warnings.length}`} />
-          </Box>
-          <Box className="scan-category-summary-grid" aria-label="扫描模板分类摘要">
-            {categorySummary.map((item) => (
-              <Box className="scan-category-summary-item" key={item.title}>
-                <Typography component="strong">{item.title}</Typography>
-                <Typography className="scan-category-count" component="span">
-                  {item.value}
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {item.summary}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </AiosSection>
-      )}
-
-      {scanResult && (
-        <AiosSection className="scan-skipped-summary-section">
-          <AiosSectionHeader title="跳过摘要" summary="仅展示聚合计数；不会暴露绝对路径或敏感值。" count={skippedSummaryItems(scanResult, null).reduce((total, item) => total + item.value, 0)} />
-          <Box className="scan-skipped-summary-grid">
-            {skippedSummaryItems(scanResult, null).map((item) => (
-              <Box className="scan-skipped-summary-item" key={item.label}>
-                <Typography component="strong">{item.label}</Typography>
-                <Typography className="scan-category-count" component="span">
-                  {item.value}
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {item.summary}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </AiosSection>
-      )}
-
-      {scanResult && (scanResult.warnings.length > 0 || skippedCount > 0) && (
-        <AiosSection className="scan-warning-section">
-          <AiosSectionHeader title="跳过与提示" summary="仅显示已隐藏路径和策略原因，不显示敏感值。" count={scanResult.warnings.length} />
-          <Box className="scan-warning-list">
-            {scanResult.warnings.slice(0, 8).map((warning, index) => (
-              <Box className="scan-warning-row" key={`${warning.code}:${warning.relativePath ?? index}`}>
-                <Chip label={warning.code} size="small" variant="outlined" />
-                <Typography color="text.secondary" variant="body2">
-                  {warning.relativePath ? `${warning.relativePath} · ${warning.message}` : warning.message}
-                </Typography>
-              </Box>
-            ))}
-            {scanResult.warnings.length > 8 && (
-              <Typography color="text.secondary" variant="body2">
-                还有 {scanResult.warnings.length - 8} 条提示已折叠。
-              </Typography>
-            )}
-          </Box>
-        </AiosSection>
-      )}
-
-      {scanResult ? (
-        groups.length === 0 ? (
-          <ModuleEmptyState />
-        ) : (
-          groups.map((group) => (
-            <ResourceGroup key={group.title} group={group} selectedId={selectedId} variant={variantForGroup(group)} onSelect={onSelect} />
-          ))
-        )
-      ) : (
-        <Box className="scan-empty-state">
-          <Typography component="strong">{scanManagementEmptyTitle(batchSnapshot)}</Typography>
-          <Typography color="text.secondary" variant="body2">
-            {scanManagementEmptySummary(batchSnapshot)}
-          </Typography>
-        </Box>
-      )}
+          </Alert>
+        )}
+      </Box>
     </AiosModuleFrame>
   );
 }
@@ -978,15 +983,15 @@ function ProgressMetric({ label, value }: { label: string; value: string | numbe
 }
 
 function scanManagementEmptyTitle(snapshot: ScanBatchSnapshot | null): string {
-  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "批次扫描运行中";
-  if (snapshot?.status === "completed") return "批次扫描已完成";
-  if (snapshot?.status === "cancelled") return "批次扫描已取消";
-  if (snapshot?.status === "failed") return "批次扫描有失败来源";
+  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "扫描运行中";
+  if (snapshot?.status === "completed") return "扫描已完成";
+  if (snapshot?.status === "cancelled") return "扫描已取消";
+  if (snapshot?.status === "failed") return "扫描有失败来源";
   return "等待配置扫描来源";
 }
 
 function scanManagementEmptySummary(snapshot: ScanBatchSnapshot | null): string {
-  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "结果会写入本地 SQLite 资源库；此视图展示来源状态和持久资源计数。";
+  if (snapshot?.status === "running" || snapshot?.status === "queued" || snapshot?.status === "cancelling") return "结果会写入本地资源库；此视图展示来源状态和持久资源计数。";
   if (snapshot?.status === "completed") return "可在本地资源库摘要和来源行查看持久资源计数。";
   if (snapshot?.status === "cancelled") return "当前来源已安全停止，队列中未开始的来源会标记为取消。";
   if (snapshot?.status === "failed") return "失败来源只保留安全错误摘要；可调整来源后重新手动扫描。";

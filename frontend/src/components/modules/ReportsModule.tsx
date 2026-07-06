@@ -3,12 +3,13 @@ import { useMemo } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
+import { renderBackButton } from "./moduleBackButton";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel, moduleEmptyStateCopy, sortByUpdatedAt } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ReportsModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function ReportsModule({ resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => [{ title: "报告时间线", summary: "按更新时间展示本地报告摘要，避免原始密集文件列表。", resources: sortByUpdatedAt(resources) }], [resources]);
 
   return (
@@ -17,6 +18,7 @@ export function ReportsModule({ resourceCorpus, resources, selectedId, onSelect 
       summary={zhCN.moduleSummaries.reports}
       count={resources.length}
       ariaLabel={moduleAriaLabel("reports")}
+      backButton={renderBackButton("reports", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

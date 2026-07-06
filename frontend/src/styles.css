@@ -44,10 +44,10 @@
   );
   color: var(--aios-accent);
   box-shadow: none;
-  transition: border-color var(--aios-motion-fast) ease,
-              box-shadow var(--aios-motion-fast) ease,
-              background var(--aios-motion-fast) ease,
-              transform var(--aios-motion-fast) ease;
+  transition: border-color var(--aios-transition-hover),
+              box-shadow var(--aios-transition-hover),
+              background var(--aios-transition-hover),
+              transform var(--aios-transition-hover);
   cursor: default;
 }
 
@@ -64,11 +64,11 @@
   width: 26px;
   height: 26px;
   object-fit: contain;
-  transition: transform var(--aios-motion-fast) ease;
+  transition: transform var(--aios-transition-hover);
 }
 
 .rail-brand:hover .rail-brand-logo {
-  transform: scale(1.08) translateY(-1px);
+  transform: scale(1.014) translateY(-1px);
 }
 
 .rail-brand-mark {
@@ -78,7 +78,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   opacity: 0.9;
-  transition: opacity var(--aios-motion-fast) ease, letter-spacing var(--aios-motion-fast) ease;
+  transition: opacity var(--aios-transition-hover), letter-spacing var(--aios-transition-hover);
 }
 
 .rail-brand:hover .rail-brand-mark {
@@ -152,10 +152,10 @@
   padding: 0;
   text-align: center;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .rail-item:hover {
@@ -200,8 +200,8 @@
   text-overflow: ellipsis;
   transform: translateY(2px);
   transition:
-    opacity var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    opacity var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
   white-space: nowrap;
 }
 
@@ -227,10 +227,10 @@
   background: var(--aios-surface-muted);
   color: var(--aios-muted);
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .theme-mode-button.MuiIconButton-root:hover,
@@ -241,7 +241,8 @@
 }
 
 .theme-mode-button.MuiIconButton-root:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.992);
+  transition: transform var(--aios-transition-press);
 }
 
 .aios-console-main {
@@ -753,22 +754,6 @@
   color: var(--aios-accent);
 }
 
-.aios-pill-rail {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: var(--aios-category-rail-height);
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 4px 0;
-  scrollbar-width: none;
-}
-
-.aios-pill-rail::-webkit-scrollbar {
-  display: none;
-}
-
 .aios-usage-card {
   min-width: 0;
   overflow: hidden;
@@ -778,15 +763,14 @@
   color: var(--aios-text);
   text-align: left;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .aios-usage-card:hover {
   border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
-  transform: translateY(-1px);
 }
 
 .aios-usage-card.selected,
@@ -915,123 +899,105 @@
   min-height: var(--aios-row-min-height, 86px);
 }
 
-.dashboard-summary {
+.dashboard-hero {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.dashboard-summary-item {
-  display: grid;
-  gap: 4px;
+  gap: 16px;
   min-width: 0;
-  border: 1px solid var(--aios-outline);
-  border-radius: 14px;
-  background: var(--aios-surface-muted);
-  padding: 8px 10px;
+  margin: -4px 0 6px;
 }
 
-.dashboard-summary-item strong {
-  overflow: hidden;
-  color: var(--aios-text);
-  font-size: 13px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dashboard-section {
-  min-width: 0;
-}
-
-.dashboard-section-heading {
-  min-width: 0;
-}
-
-.dashboard-brand-card {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) minmax(280px, 0.95fr);
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-  border: 1px solid var(--aios-outline);
-  border-radius: 16px;
-  background: var(--aios-surface);
-  padding: 12px 14px;
-}
-
-.dashboard-brand-logo {
-  flex: none;
-  height: 32px;
-  max-width: 104px;
-  object-fit: contain;
-}
-
-.dashboard-brand-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  text-align: left;
-}
-
-.dashboard-brand-copy h3 {
-  overflow: hidden;
-  font-size: 14px;
+.dashboard-hero .MuiTypography-h1 {
+  max-width: 34ch;
+  font-size: clamp(22px, 3vw, 30px);
   font-weight: 800;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
-.dashboard-brand-copy p {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dashboard-hero-summary {
+  max-width: 56ch;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.dashboard-desktop-status {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  border-left: 1px solid var(--aios-outline);
-  padding-left: 14px;
-}
-
-.dashboard-status-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.dashboard-status-copy strong {
-  color: var(--aios-text);
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.2;
-}
-
-.dashboard-status-copy p {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.dashboard-status-chip-row {
+.dashboard-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.dashboard-hero-actions .aios-action-button.MuiButton-root {
+  min-height: 40px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.dashboard-privacy-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.dashboard-privacy-line .MuiChip-root {
+  height: 26px;
+  font-size: 12px;
+}
+
+.dashboard-summary-section {
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-summary-card {
   min-width: 0;
 }
 
-.dashboard-status-chip-row .MuiChip-root {
-  max-width: 100%;
-  height: 24px;
-  font-size: 11px;
+.dashboard-summary-card .aios-usage-action {
+  min-height: 92px;
+}
+
+.mcp-intro-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mcp-intro-text {
+  max-width: 82ch;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--aios-surface) 84%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 28%, transparent);
+  color: var(--aios-text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 16px 18px;
+}
+
+.mcp-intro-text p {
+  margin: 0;
+}
+
+.mcp-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.mcp-summary-card .aios-usage-action {
+  min-height: 82px;
 }
 
 .desktop-boundary-grid {
@@ -1864,15 +1830,14 @@
   color: var(--aios-text);
   text-align: left;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .aios-capability-launcher-card:hover {
   border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
-  transform: translateY(-1px);
 }
 
 .aios-capability-launcher-action,
@@ -1976,10 +1941,10 @@
   padding: 8px 10px;
   text-align: left;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .quick-entry:hover {
@@ -2084,68 +2049,29 @@
   color: var(--aios-accent);
 }
 
-.skill-group-index.horizontal-rail {
-  display: flex;
-  flex-direction: row;
-  overflow-x: auto;
-  gap: 8px;
+.skill-filter-toggle.MuiToggleButtonGroup-root {
   min-width: 0;
-  padding: 4px 0;
-  min-height: 44px;
-  max-height: 52px;
-  align-items: center;
-  scrollbar-width: none;
-}
-.skill-group-index.horizontal-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.skill-group-button.MuiButtonBase-root {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 36px;
   border: 1px solid var(--aios-outline);
-  border-radius: 20px;
+  border-radius: 999px;
   background: var(--aios-surface);
-  color: var(--aios-text);
-  padding: 6px 12px;
-  text-align: center;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+  padding: 2px;
 }
 
-.skill-group-button.capability.MuiButtonBase-root {
-  min-height: auto;
-  height: 36px;
-}
-
-.skill-group-button:hover,
-.skill-group-button.active {
-  border-color: var(--aios-selected-border);
-  background: var(--aios-selected-bg);
-}
-
-.skill-group-button:active {
-  transform: translateY(1px);
-}
-
-.skill-group-button strong {
-  font-size: 13px;
+.skill-filter-toggle .MuiToggleButton-root {
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px !important;
+  color: var(--aios-muted);
+  font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
+  padding: 4px 12px;
+  text-transform: none;
 }
 
-.skill-group-count.MuiChip-root {
-  height: 18px;
-  font-size: 10px;
-  pointer-events: none;
+.skill-filter-toggle .MuiToggleButton-root.Mui-selected,
+.skill-filter-toggle .MuiToggleButton-root.Mui-selected:hover {
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
 }
 
 .compact-skill-list-shell {
@@ -2185,8 +2111,8 @@
   cursor: pointer;
   padding: 16px 18px;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover);
 }
 
 .compact-skill-row-inner:hover {
@@ -2266,37 +2192,20 @@
 }
 
 .compact-skill-meta-line {
+  display: none;
+}
+
+.compact-skill-chip-line {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
   align-items: center;
-  flex-wrap: nowrap;
+  gap: 6px;
   min-width: 0;
-  overflow: hidden;
-  color: var(--aios-muted);
-  font-size: 10.5px;
-  font-weight: 800;
-  line-height: 1.2;
 }
 
-.compact-skill-meta-line span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compact-skill-meta-line .MuiTypography-root {
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  letter-spacing: 0;
-}
-
-.compact-skill-meta-line span:not(:last-child)::after {
-  content: "·";
-  margin-left: 8px;
-  color: var(--aios-subtle);
+.compact-skill-chip-line .MuiChip-root {
+  height: 22px;
+  font-size: 11px;
 }
 
 .compact-path-code {
@@ -2434,16 +2343,15 @@
   border-color: var(--aios-outline) !important;
   background: var(--aios-surface);
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .resource-card:hover,
 .resource-card.selected {
   border-color: var(--aios-selected-border) !important;
   background: var(--aios-surface-hover);
-  transform: translateY(-1px);
 }
 
 .resource-card.selected,
@@ -2480,15 +2388,14 @@
   color: var(--aios-text);
   text-align: left;
   transition:
-    background-color var(--aios-motion-fast) ease,
-    border-color var(--aios-motion-fast) ease,
-    transform var(--aios-motion-fast) ease;
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
 }
 
 .timeline-row:hover {
   border-color: var(--aios-selected-border);
   background: var(--aios-surface-hover);
-  transform: translateY(-1px);
 }
 
 .timeline-row.selected,
@@ -3361,6 +3268,527 @@
   line-height: 1.2;
 }
 
+/* AIOS Desktop product polish pass */
+.aios-console-shell {
+  grid-template-columns: var(--aios-rail-width) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.aios-console-shell.inspector-open {
+  grid-template-columns: var(--aios-rail-width) minmax(0, 1fr) minmax(320px, var(--aios-inspector-width));
+}
+
+.aios-navigation-rail,
+.aios-top-command-bar,
+.module-surface,
+.aios-inspector-sheet {
+  border-color: color-mix(in srgb, var(--aios-outline) 64%, transparent);
+  background: color-mix(in srgb, var(--aios-surface-raised) 92%, var(--aios-bg));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--aios-text) 7%, transparent);
+}
+
+.aios-navigation-rail {
+  border: 0;
+  border-radius: 28px;
+  padding: 16px 8px 10px;
+}
+
+.rail-brand {
+  min-height: 60px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rail-brand-logo {
+  width: 32px;
+  height: 32px;
+}
+
+.rail-items {
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.rail-item.MuiButtonBase-root {
+  width: 56px;
+  max-width: 56px;
+  height: 54px;
+  min-height: 54px;
+  border: 0;
+  border-radius: 18px;
+  color: var(--aios-muted);
+}
+
+.rail-item:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--aios-selected-bg) 72%, transparent);
+  color: var(--aios-accent);
+}
+
+.rail-item.active {
+  color: var(--aios-accent);
+}
+
+.rail-label.MuiTypography-root {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rail-selected-pill {
+  border: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-selected-bg) 82%, var(--aios-surface));
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border);
+}
+
+.rail-action-dock {
+  border-top: 0;
+}
+
+.aios-console-main {
+  gap: 14px;
+}
+
+.aios-top-command-bar {
+  grid-template-columns: minmax(0, 180px) minmax(260px, 1fr) auto;
+  height: 56px;
+  border: 0;
+  border-radius: 26px;
+  padding: 8px 12px;
+}
+
+.command-title h1 {
+  font-size: 15px;
+}
+
+.command-title-copy .MuiTypography-body2 {
+  font-size: 11px;
+}
+
+.command-search .MuiOutlinedInput-root {
+  min-height: 40px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aios-surface) 88%, var(--aios-bg));
+}
+
+.command-status .MuiChip-root {
+  height: 30px;
+}
+
+.module-surface {
+  border: 0;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--aios-surface-raised) 94%, var(--aios-bg));
+}
+
+.module-header {
+  min-height: 68px;
+  border-bottom: 0;
+  padding: 18px 22px 8px;
+}
+
+.module-header-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.module-header-title h2 {
+  font-size: 21px;
+}
+
+.module-header-title p:last-child {
+  max-width: 70ch;
+  font-size: 13px;
+}
+
+.module-header-actions .MuiChip-root {
+  height: 28px;
+}
+
+.module-scroll,
+.dashboard-scroll {
+  gap: 18px;
+  padding: 14px 22px 22px;
+}
+
+.aios-back-header.MuiButtonBase-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border-radius: 999px;
+  color: var(--aios-accent);
+  padding: 0 10px;
+  transition:
+    background-color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.aios-back-header.MuiButtonBase-root:hover,
+.aios-back-header.MuiButtonBase-root:focus-visible {
+  background: var(--aios-selected-bg);
+}
+
+.aios-back-header.MuiButtonBase-root:active {
+  transform: translateX(-1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.aios-hero-panel.MuiPaper-root {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 28px;
+  align-self: start;
+  overflow: visible;
+  border: 0;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--aios-accent-soft) 80%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--aios-surface) 96%, var(--aios-bg)) 0%, color-mix(in srgb, var(--aios-surface-muted) 82%, var(--aios-surface)) 100%);
+  box-shadow: none;
+  padding: 30px;
+}
+
+.dashboard-hero {
+  margin: 0;
+}
+
+.dashboard-hero-copy {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dashboard-hero .MuiTypography-h1 {
+  max-width: 22ch;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.dashboard-hero-summary {
+  max-width: 54ch;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.dashboard-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.dashboard-hero-actions .aios-action-button.MuiButton-root {
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 8px 18px;
+}
+
+.dashboard-hero-status {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-self: center;
+  min-width: 0;
+}
+
+.dashboard-hero-stat {
+  display: grid;
+  gap: 4px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 76%, transparent);
+  padding: 14px 16px;
+}
+
+.dashboard-hero-stat strong {
+  overflow-wrap: anywhere;
+  color: var(--aios-text);
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.dashboard-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-summary-card .aios-usage-action {
+  min-height: 112px;
+}
+
+.dashboard-privacy-section {
+  gap: 12px;
+}
+
+.dashboard-privacy-alert.MuiAlert-root,
+.mcp-local-reminder.MuiAlert-root,
+.advanced-support-alert.MuiAlert-root {
+  align-items: center;
+  border-color: color-mix(in srgb, var(--aios-info-border) 72%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-info-bg) 34%, var(--aios-surface));
+  color: var(--aios-text);
+}
+
+.dashboard-privacy-line {
+  gap: 8px;
+  padding-top: 0;
+}
+
+.dashboard-privacy-line .MuiChip-root {
+  height: 28px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--aios-surface-muted) 86%, var(--aios-surface));
+}
+
+.aios-accordion-panel.MuiAccordion-root {
+  overflow: hidden;
+  border: 0;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--aios-surface) 90%, var(--aios-bg));
+  box-shadow: none;
+}
+
+.aios-accordion-panel.MuiAccordion-root::before {
+  display: none;
+}
+
+.aios-accordion-panel .MuiAccordionSummary-root {
+  min-height: 62px;
+  padding: 0 18px;
+}
+
+.aios-accordion-panel .MuiAccordionSummary-content {
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.aios-accordion-summary-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aios-accordion-summary-copy h3 {
+  color: var(--aios-text);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.aios-accordion-summary-copy p {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aios-accordion-panel .MuiAccordionDetails-root {
+  display: grid;
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+.skill-library-toolbar {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.skill-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 74%, transparent);
+  padding: 8px 10px;
+}
+
+.skill-filter-search-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--aios-muted);
+}
+
+.skill-filter-search-state p {
+  min-width: 0;
+}
+
+.skill-group-button.MuiButtonBase-root {
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aios-surface) 82%, transparent);
+  padding: 6px 14px;
+}
+
+.skill-group-button:hover,
+.skill-group-button.active {
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
+}
+
+.skill-list-accordion.MuiAccordion-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.skill-list-accordion .MuiCollapse-root.MuiCollapse-entered,
+.skill-list-accordion .MuiCollapse-wrapper,
+.skill-list-accordion .MuiCollapse-wrapperInner,
+.skill-list-accordion .MuiAccordion-region {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.skill-list-accordion .MuiAccordionDetails-root {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.compact-skill-list-shell {
+  flex: 1 1 auto;
+  min-height: min(420px, 48dvh);
+}
+
+.compact-skill-row {
+  padding: 6px 0;
+}
+
+.compact-skill-row-inner {
+  border: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 88%, var(--aios-bg));
+  padding: 18px 20px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 46%, transparent);
+}
+
+.compact-skill-row-inner:hover {
+  background: var(--aios-surface);
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border), 0 8px 18px color-mix(in srgb, var(--aios-text) 5%, transparent);
+}
+
+.compact-skill-title {
+  font-size: 15.5px;
+  letter-spacing: 0;
+}
+
+.compact-skill-description {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.resource-group.accordion {
+  display: block;
+}
+
+.resource-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+}
+
+.aios-usage-card,
+.timeline-row,
+.aios-capability-launcher-card {
+  border: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 90%, var(--aios-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 48%, transparent);
+}
+
+.aios-usage-card:hover,
+.timeline-row:hover,
+.aios-capability-launcher-card:hover {
+  background: var(--aios-surface);
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border), 0 8px 18px color-mix(in srgb, var(--aios-text) 5%, transparent);
+}
+
+.aios-usage-card.selected,
+.aios-usage-card.selected:hover,
+.resource-card.selected,
+.resource-card.selected:hover,
+.compact-skill-row-inner.selected,
+.compact-skill-row-inner.selected:hover,
+.timeline-row.selected,
+.timeline-row.selected:hover {
+  border-color: transparent !important;
+  background: var(--aios-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border), inset 4px 0 0 var(--aios-selected-marker);
+}
+
+.inventory-meta-strip {
+  display: none;
+}
+
+.resource-chip-row {
+  max-width: min(100%, 164px);
+}
+
+.resource-chip-row .MuiChip-root,
+.compact-skill-chip-line .MuiChip-root {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--aios-surface-muted) 86%, var(--aios-surface));
+}
+
+.advanced-module .local-library-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aios-inspector-sheet {
+  border: 0;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--aios-surface-raised) 92%, var(--aios-bg));
+}
+
+.inspector-body {
+  gap: 8px;
+  padding: 16px;
+}
+
+.inspector-body > .MuiDivider-root {
+  display: none;
+}
+
+.inspector-header {
+  min-height: 40px;
+}
+
+.inspector-scroll {
+  gap: 12px;
+  padding-right: 0;
+}
+
+.inspector-panel,
+.aios-inspector-section.MuiAccordion-root,
+.aios-inspector-usage-panel {
+  border: 0;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--aios-surface) 90%, var(--aios-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 44%, transparent);
+}
+
+.aios-inspector-section .MuiAccordionSummary-root {
+  background: transparent;
+}
+
 .capability-inspector-section,
 .metadata-quality-section,
 .source-provenance-section {
@@ -3476,7 +3904,11 @@
 
 @media (max-width: 1320px) and (min-width: 1024px) {
   .aios-console-shell {
-    grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr) var(--aios-inspector-width);
+    grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr);
+  }
+
+  .aios-console-shell.inspector-open {
+    grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr) minmax(310px, var(--aios-inspector-width));
   }
 
   .aios-top-command-bar {
@@ -3494,6 +3926,10 @@
 
 @media (max-width: 1023px) {
   .aios-console-shell {
+    grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr);
+  }
+
+  .aios-console-shell.inspector-open {
     grid-template-columns: var(--aios-rail-compact-width) minmax(0, 1fr);
   }
 
@@ -3527,16 +3963,11 @@
     justify-content: flex-end;
   }
 
-  .dashboard-summary,
   .quick-entry-grid,
   .local-library-grid,
   .resource-map-grid,
   .scan-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dashboard-brand-card {
-    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .scan-control-grid,
@@ -3559,16 +3990,9 @@
     grid-column: 2;
   }
 
-  .dashboard-desktop-status {
-    grid-column: 1 / -1;
-    border-top: 1px solid var(--aios-outline);
-    border-left: 0;
-    padding-top: 12px;
-    padding-left: 0;
+  .scan-source-row {
+    grid-template-columns: auto minmax(0, 1fr);
   }
-}
-
-@media (max-width: 720px) {
   .aios-console-shell {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto;
@@ -3673,15 +4097,15 @@
     display: none;
   }
 
-  .dashboard-summary,
   .quick-entry-grid,
   .local-library-grid,
   .resource-map-grid,
   .scan-summary-grid,
-  .skill-group-index,
   .resource-card-grid,
   .policy-guardrail-grid,
-  .validator-notice-grid {
+  .validator-notice-grid,
+  .dashboard-summary-grid,
+  .mcp-summary-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3702,16 +4126,6 @@
 
   .scan-warning-row {
     grid-template-columns: 1fr;
-  }
-
-  .dashboard-brand-card {
-    gap: 10px;
-    padding: 10px;
-  }
-
-  .dashboard-brand-logo {
-    height: 28px;
-    max-width: 88px;
   }
 
   .aios-section-header {
@@ -3829,5 +4243,804 @@
     justify-self: start;
     justify-content: flex-start;
     max-width: 100%;
+  }
+}
+
+@media (max-width: 980px) {
+  .aios-hero-panel.MuiPaper-root {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 22px;
+  }
+
+  .dashboard-hero .MuiTypography-h1 {
+    font-size: clamp(25px, 8vw, 34px);
+  }
+
+  .dashboard-hero-status {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skill-filter-toggle.MuiToggleButtonGroup-root {
+    align-self: flex-start;
+  }
+
+  .advanced-module .local-library-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Transition and layout-measurement polish */
+.aios-transition {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.module-scroll,
+.dashboard-scroll,
+.skills-module-scroll,
+.custom-scan-scroll,
+.inspector-scroll {
+  max-height: var(--aios-module-content-height, 100%);
+}
+
+.rail-item.MuiButtonBase-root {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.rail-item.MuiButtonBase-root:active {
+  transform: translateY(1px) scale(0.992);
+  transition: transform var(--aios-transition-press);
+}
+
+.resource-scope-tab {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.resource-scope-tab:active {
+  transform: translateY(1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.aios-accordion-panel .MuiAccordionSummary-root {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover);
+}
+
+.aios-accordion-panel .MuiAccordionSummary-root:hover {
+  background-color: color-mix(in srgb, var(--aios-selected-bg) 64%, transparent);
+}
+
+.aios-action-button.MuiButton-root,
+.scan-mode-card.MuiButton-root,
+.scan-source-row {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.aios-action-button.MuiButton-root:active,
+.scan-mode-card.MuiButton-root:active,
+.scan-source-card:active {
+  transform: translateY(1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.scan-source-card {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.scan-source-card:hover {
+  background-position: 100% 0;
+}
+
+.custom-scan-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aios-section-gap, 14px);
+  padding: 14px 22px 22px;
+}
+
+.scan-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.scan-hero-copy {
+  min-width: 0;
+}
+
+.scan-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 46%;
+}
+
+.scan-source-card {
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 80%, var(--aios-bg));
+  padding: 14px 16px;
+}
+
+.scan-source-card.disabled {
+  opacity: 0.72;
+}
+
+.scan-source-card .scan-source-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.scan-source-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.scan-source-controls .MuiTextField-root {
+  min-width: 140px;
+  flex: 1 1 160px;
+}
+
+.scan-source-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.scan-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scan-control-card {
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 80%, var(--aios-bg));
+  padding: 16px;
+}
+
+.scan-progress-card {
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 80%, var(--aios-bg));
+  padding: 16px;
+}
+
+.scan-empty-state {
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--aios-surface) 80%, var(--aios-bg));
+  padding: 28px 22px;
+  text-align: center;
+}
+
+.scan-source-row:hover,
+.scan-mode-card.MuiButton-root:hover {
+  background-color: color-mix(in srgb, var(--aios-selected-bg) 52%, transparent);
+}
+
+.MuiIconButton-root {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    transform var(--aios-transition-hover);
+}
+
+.MuiIconButton-root:active {
+  transform: translateY(1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.command-search-wrap {
+  transition:
+    box-shadow var(--aios-transition-hover),
+    border-radius var(--aios-transition-hover);
+}
+
+.command-search-wrap:focus-within {
+  box-shadow: 0 0 0 2px var(--aios-selected-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aios-transition,
+  .rail-item.MuiButtonBase-root,
+  .aios-usage-card,
+  .resource-card,
+  .timeline-row,
+  .scan-source-row,
+  .scan-source-card,
+  .scan-mode-card.MuiButton-root,
+  .resource-scope-tab,
+  .aios-action-button.MuiButton-root,
+  .MuiIconButton-root,
+  .aios-accordion-panel .MuiAccordionSummary-root {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Measured desktop layout and motion contracts */
+.aios-console-shell {
+  --aios-transition-hover: var(--aios-motion-hover, 0.42s) var(--aios-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  --aios-transition-selected: var(--aios-motion-selected, 0.56s) var(--aios-motion-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
+  --aios-transition-reveal: var(--aios-motion-reveal, 0.58s) var(--aios-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  --aios-transition-press: var(--aios-motion-press, 0.15s) var(--aios-motion-press-ease, cubic-bezier(0.2, 0, 0, 1));
+  --aios-transition-fast: var(--aios-transition-hover);
+  --aios-transition-base: var(--aios-transition-hover);
+  --aios-transition-emphasis: var(--aios-transition-selected);
+}
+
+.module-workspace,
+.module-transition-scope {
+  height: var(--aios-module-height, 100%);
+  max-height: var(--aios-module-height, 100%);
+  overflow: hidden;
+}
+
+.module-surface {
+  height: var(--aios-module-height, 100%);
+  max-height: var(--aios-module-height, 100%);
+}
+
+.module-scroll,
+.dashboard-scroll,
+.mcp-module-scroll,
+.skills-module-scroll,
+.custom-scan-scroll {
+  height: var(--aios-module-content-height, 100%);
+  max-height: var(--aios-module-content-height, 100%);
+}
+
+.skills-module-scroll,
+.custom-scan-scroll,
+.mcp-module-scroll {
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-aios-motion-surface],
+[data-aios-hover-card],
+.resource-scope-tab,
+.skill-group-button.MuiButtonBase-root,
+.skill-filter-toggle .MuiToggleButton-root,
+.scan-profile-selector .MuiToggleButton-root,
+.MuiButtonBase-root,
+.MuiButton-root,
+.MuiIconButton-root,
+.MuiChip-root,
+.MuiOutlinedInput-root {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover),
+    opacity var(--aios-transition-hover),
+    box-shadow var(--aios-transition-base),
+    transform var(--aios-transition-hover);
+}
+
+[data-aios-hover-card],
+[data-aios-hover-surface],
+[data-aios-nav-motion],
+[data-aios-scope-motion] {
+  transition:
+    background-color var(--aios-transition-hover),
+    background-position var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-selected),
+    color var(--aios-transition-hover),
+    opacity var(--aios-transition-hover);
+}
+
+[data-aios-hover-card]:active,
+[data-aios-hover-surface]:active,
+[data-aios-nav-motion]:active,
+[data-aios-scope-motion]:active {
+  transition:
+    transform var(--aios-transition-press),
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-selected),
+    color var(--aios-transition-hover);
+}
+
+[data-aios-hover-card]:hover {
+  background-position: 100% 0;
+}
+
+[data-aios-selected-surface="true"],
+.selected[data-aios-motion-surface] {
+  background: var(--aios-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border), inset 4px 0 0 var(--aios-selected-marker);
+  transition:
+    background-color var(--aios-transition-selected),
+    border-color var(--aios-transition-selected),
+    box-shadow var(--aios-transition-selected),
+    color var(--aios-transition-selected);
+}
+
+.aios-accordion-panel.MuiAccordion-root {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 44%, transparent);
+}
+
+.aios-accordion-panel.Mui-expanded {
+  background: color-mix(in srgb, var(--aios-surface) 94%, var(--aios-bg));
+}
+
+.aios-accordion-panel .MuiAccordionSummary-root:focus-visible {
+  outline: 2px solid var(--aios-accent);
+  outline-offset: -2px;
+}
+
+/* New desktop workspace primitives */
+.aios-segmented-switcher {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aios-surface-muted) 82%, var(--aios-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 34%, transparent);
+}
+
+.aios-segmented-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aios-segmented-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: var(--aios-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--aios-text) 8%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.aios-segmented-button.MuiButtonBase-root {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  min-width: 0;
+  border-radius: 999px;
+  color: var(--aios-muted);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 14px;
+  text-transform: none;
+  transition:
+    background-color var(--aios-transition-hover),
+    color var(--aios-transition-hover);
+}
+
+.aios-segmented-button.MuiButtonBase-root:hover,
+.aios-segmented-button.MuiButtonBase-root:focus-visible {
+  background: color-mix(in srgb, var(--aios-selected-bg) 62%, transparent);
+  color: var(--aios-accent);
+}
+
+.aios-segmented-button.MuiButtonBase-root.active {
+  color: var(--aios-accent);
+}
+
+.aios-segmented-button.MuiButtonBase-root:active {
+  transform: translateY(1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.aios-section-rail {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+  max-width: 220px;
+  padding: 6px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--aios-surface-muted) 72%, var(--aios-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 34%, transparent);
+}
+
+.aios-section-rail-item.MuiButtonBase-root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--aios-text);
+  padding: 8px 12px;
+  text-align: left;
+  text-transform: none;
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    color var(--aios-transition-hover);
+}
+
+.aios-section-rail-item.MuiButtonBase-root:hover,
+.aios-section-rail-item.MuiButtonBase-root:focus-visible {
+  border-color: var(--aios-selected-border);
+  background: color-mix(in srgb, var(--aios-selected-bg) 62%, transparent);
+  color: var(--aios-accent);
+}
+
+.aios-section-rail-item.MuiButtonBase-root.active {
+  border-color: var(--aios-selected-border);
+  background: var(--aios-selected-bg);
+  color: var(--aios-accent);
+  box-shadow: inset 2px 0 0 var(--aios-selected-marker);
+}
+
+.aios-section-rail-item.MuiButtonBase-root:active {
+  transform: translateY(1px);
+  transition: transform var(--aios-transition-press);
+}
+
+.aios-content-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.aios-content-panel-hidden {
+  display: none;
+}
+
+.aios-content-panel-active {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.aios-two-pane {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.aios-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aios-pane-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--aios-surface-muted) 54%, transparent);
+  padding: 12px;
+}
+
+.aios-pane-scroll > .empty-state {
+  width: min(100%, 560px);
+  min-height: 220px;
+  margin: auto;
+}
+
+.custom-scan-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  gap: var(--aios-card-gap, 10px);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.custom-scan-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--aios-section-gap, 14px);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--aios-surface-muted) 54%, transparent);
+  padding: 14px;
+}
+
+@media (max-width: 980px) {
+  .aios-two-pane,
+  .custom-scan-workspace {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .aios-section-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .aios-pane,
+  .aios-pane-scroll,
+  .custom-scan-pane {
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aios-segmented-button.MuiButtonBase-root,
+  .aios-section-rail-item.MuiButtonBase-root {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+.empty-state {
+  min-height: clamp(180px, 38%, 280px);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--aios-accent-soft) 68%, transparent), transparent 42%),
+    color-mix(in srgb, var(--aios-surface) 88%, var(--aios-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 38%, transparent);
+}
+
+.skills-module-scroll .skill-library-toolbar {
+  flex: 0 0 auto;
+}
+
+.skill-list-accordion.MuiAccordion-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: var(--aios-module-scroll-body-height, 100%);
+}
+
+.skill-list-accordion.MuiAccordion-root:has(.empty-state) {
+  flex: 0 0 auto;
+  max-height: none;
+}
+
+.skill-list-accordion .MuiCollapse-root,
+.skill-list-accordion .MuiCollapse-wrapper,
+.skill-list-accordion .MuiCollapse-wrapperInner,
+.skill-list-accordion .MuiAccordion-region,
+.skill-list-accordion .MuiAccordionDetails-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.compact-skill-list-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: var(--aios-module-scroll-body-height, 100%);
+  max-height: var(--aios-module-scroll-body-height, 100%);
+}
+
+.compact-skill-list-shell:has(.empty-state) {
+  display: grid;
+  place-items: center;
+  height: auto;
+  max-height: none;
+  min-height: 260px;
+}
+
+.compact-skill-list-shell .empty-state {
+  width: min(100%, 560px);
+  min-height: 220px;
+}
+
+.compact-skill-row-inner {
+  transition:
+    background-color var(--aios-transition-hover),
+    border-color var(--aios-transition-hover),
+    box-shadow var(--aios-transition-base),
+    color var(--aios-transition-hover);
+}
+
+.compact-skill-row-inner:focus-visible {
+  outline: 2px solid var(--aios-accent);
+  outline-offset: -2px;
+}
+
+.mcp-fixed-overview,
+.mcp-service-overview {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mcp-module-scroll {
+  gap: 14px;
+}
+
+.mcp-service-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.mcp-browser-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: var(--aios-module-scroll-body-height, 100%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mcp-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  align-content: start;
+}
+
+.mcp-content-panel:has(.empty-state) {
+  justify-content: center;
+}
+
+.mcp-content-panel > .empty-state {
+  width: min(100%, 560px);
+  min-height: 220px;
+  margin: auto;
+}
+
+.custom-scan-scroll {
+  gap: 14px;
+}
+
+.scan-footer-alerts {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scan-footer-alerts:empty {
+  display: none;
+}
+
+.scan-hero {
+  flex: 0 0 auto;
+  border-radius: 24px;
+  padding: 18px 22px;
+}
+
+.scan-source-list {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.scan-source-list > .empty-state {
+  min-height: 220px;
+}
+
+.scan-source-card,
+.scan-control-card,
+.scan-progress-card,
+.scan-empty-state,
+.scan-profile-detail,
+.scan-first-use-item,
+.scan-category-summary-item,
+.scan-skipped-summary-item,
+.scan-warning-row {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 28%, transparent);
+}
+
+.scan-source-card:hover,
+.scan-control-card:hover,
+.scan-progress-card:hover,
+.scan-empty-state:hover,
+.scan-mode-card.MuiButton-root:hover {
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border), 0 8px 18px color-mix(in srgb, var(--aios-text) 5%, transparent);
+}
+
+.scan-action-row {
+  justify-content: flex-start;
+}
+
+.scan-control-actions {
+  margin-left: auto;
+}
+
+@media (max-width: 980px) {
+  .module-workspace,
+  .module-transition-scope,
+  .module-surface,
+  .module-scroll,
+  .dashboard-scroll,
+  .mcp-module-scroll,
+  .skills-module-scroll,
+  .custom-scan-scroll {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .scan-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scan-hero-chips {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-aios-motion-surface],
+  [data-aios-hover-card],
+  .resource-scope-tab,
+  .skill-group-button.MuiButtonBase-root,
+  .skill-filter-toggle .MuiToggleButton-root,
+  .scan-profile-selector .MuiToggleButton-root,
+  .MuiButtonBase-root,
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .MuiChip-root,
+  .MuiOutlinedInput-root {
+    transition: none !important;
+    transform: none !important;
   }
 }

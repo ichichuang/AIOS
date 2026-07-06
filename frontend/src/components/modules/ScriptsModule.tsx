@@ -4,11 +4,12 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
+import { renderBackButton } from "./moduleBackButton";
 import { makeGroups, moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ScriptsModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function ScriptsModule({ resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(
     () =>
       makeGroups(
@@ -31,6 +32,7 @@ export function ScriptsModule({ resourceCorpus, resources, selectedId, onSelect 
       summary={zhCN.moduleSummaries.scripts}
       count={resources.length}
       ariaLabel={moduleAriaLabel("scripts")}
+      backButton={renderBackButton("scripts", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

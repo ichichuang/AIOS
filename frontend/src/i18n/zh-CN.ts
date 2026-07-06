@@ -12,9 +12,9 @@ export const zhCN = {
     generatedAt: "快照时间",
     aiosRoot: "AIOS 根目录",
     appSource: "应用源码",
-    commandPlaceholder: "搜索资源、路径、风险或中文说明",
-    commandLabel: "资源搜索",
-    activeModule: "当前模块",
+    commandPlaceholder: "搜索技能、MCP 和来源",
+    commandLabel: "搜索技能、MCP 和来源",
+    activeModule: "当前页面",
     selected: "已选择",
     shown: "项可见",
     total: "总计",
@@ -26,8 +26,8 @@ export const zhCN = {
     sourceSnapshot: "来源快照",
     preservedName: "原始技术名",
     pathPreview: "路径预览",
-    moduleOverview: "模块概览",
-    resourceList: "资源清单",
+    moduleOverview: "页面概览",
+    resourceList: "本机结果",
     detailPanel: "资源检查器",
     reportsTimeline: "报告时间线",
     copyPrompt: "复制提示词",
@@ -49,28 +49,30 @@ export const zhCN = {
     toggle: "切换深浅色主题"
   },
   views: {
-    dashboard: "总览",
-    "custom-scan": "扫描管理",
-    skills: "技能库",
+    dashboard: "首页",
+    "custom-scan": "查找位置",
+    skills: "技能",
     mcp: "MCP",
-    scripts: "脚本",
-    reports: "报告",
-    "project-packs": "项目包",
-    policies: "策略",
-    validators: "验证器",
-    legacy: "旧入口"
+    advanced: "高级",
+    scripts: "脚本说明",
+    reports: "历史报告",
+    "project-packs": "项目来源",
+    policies: "安全说明",
+    validators: "检查结果",
+    legacy: "历史入口"
   },
   moduleSummaries: {
-    dashboard: "汇总本地 AIOS 资源、基线守卫、只读边界与风险分布。",
-    "custom-scan": "管理用户授权的扫描来源，手动执行有界顺序扫描；结果仅保存元数据，高级发现需显式确认。",
-    skills: "探索本地可用 AI 技能，查看其功能并快速复制提示词进行使用。",
-    mcp: "按本地、远程、npx 拉取和凭据需求检查 MCP 元数据。",
-    scripts: "仅展示脚本与验证器元数据；执行需要显式命令。",
-    reports: "按时间线查看本地报告摘要，不写入全局状态。",
-    "project-packs": "展示项目本地技能包与资源包，避免复制到全局入口。",
-    policies: "展示策略守卫和哈希信息，不读取或修改策略内容。",
-    validators: "展示观察型验证器状态与已知 WARN 解释。",
-    legacy: "保留旧提示入口的可见性，但不恢复旧全局基线。"
+    dashboard: "本机 AI 技能和 MCP 工具的简单汇总。",
+    "custom-scan": "高级支持：管理查找位置、跳过项、问题摘要和应用自己的本地记录。",
+    skills: "查看本机已经识别出来的 AI 技能和它们的基本信息。",
+    mcp: "查看本机已经配置的 MCP 服务和工具摘要。",
+    advanced: "给需要排查的人查看查找位置、本地记录、开发者诊断和旧入口。",
+    scripts: "高级支持：只读查看与技能或 MCP 相关的脚本线索，不执行脚本。",
+    reports: "高级支持：查看历史报告摘要来源，帮助理解查找结果。",
+    "project-packs": "高级支持：查看项目文件夹里的技能、MCP 配置和相关来源线索。",
+    policies: "高级支持：查看安全说明和只读边界依据。",
+    validators: "高级支持：查看观察型检查结果和开发者诊断信息，不运行检查器。",
+    legacy: "高级支持：保留历史示例和迁移边界，不作为普通用户主流程。"
   },
   toolTypes: {
     "aios-root": "AIOS 根",
@@ -93,13 +95,13 @@ export const zhCN = {
     "mcp-client": "MCP 客户端",
     plugin: "插件",
     script: "脚本",
-    validator: "验证器",
+    validator: "检查项",
     report: "报告",
     "usage-prompt": "使用提示",
     "project-pack": "项目包",
-    "runtime-view": "运行时视图",
-    registry: "注册表",
-    policy: "策略",
+    "runtime-view": "入口视图",
+    registry: "技能目录",
+    policy: "安全策略",
     provider: "供应商"
   } satisfies Record<CapabilityType, string>,
   statuses: {
@@ -329,7 +331,7 @@ export const zhCN = {
   } as Record<string, string>
 };
 
-export type ResourceUiGroup = "dashboard" | "custom-scan" | "skills" | "mcp" | "scripts" | "reports" | "project-packs" | "policies" | "validators" | "legacy";
+export type ResourceUiGroup = "dashboard" | "custom-scan" | "skills" | "mcp" | "advanced" | "scripts" | "reports" | "project-packs" | "policies" | "validators" | "legacy";
 
 export function formatSnapshotDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {

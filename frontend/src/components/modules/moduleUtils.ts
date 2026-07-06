@@ -39,6 +39,7 @@ export interface AiosModuleProps {
   selectedId: string | null;
   skillCapabilityById: ReadonlyMap<string, SkillCapabilityClassification>;
   viewCounts: Record<ResourceView, number>;
+  onBack?: () => void;
   onClearSelection: () => void;
   onSelect: (resource: AiosResource, context?: ResourceSelectionContext) => void;
   onViewChange: (view: ResourceView) => void;
@@ -101,64 +102,70 @@ export function getMcpGroups(resources: AiosResource[]): ResourceGroupData[] {
 }
 
 export function moduleAriaLabel(view: ResourceView): string {
-  return `${VIEW_LABELS[view]}模块`;
+  return `${VIEW_LABELS[view]}页面`;
 }
 
 export function moduleEmptyStateCopy(view: ResourceView): { title: string; body: string; hints: string[] } {
   switch (view) {
     case "skills":
       return {
-        title: "尚未发现技能",
-        body: "尚未发现技能；请到扫描管理添加项目目录或运行智能发现。",
-        hints: ["技能库只读取本机资源库。", "旧入口示例不会计入技能数量。", "扫描不会自动开始。"]
+        title: "还没有找到 AI 技能",
+        body: "开始查找后，这里会显示技能名称、用途、来源和使用方法。",
+        hints: ["技能是一段给 AI 使用的说明和流程。", "可按来源和状态整理技能。", "查找不会自动开始。"]
       };
     case "mcp":
       return {
-        title: "尚未发现 MCP 元数据",
-        body: "尚未发现 MCP 元数据。",
-        hints: ["AIOS 不会启动或连接 MCP 服务。", "只显示用户扫描后的本机元数据。", "旧入口示例只在旧入口查看。"]
+        title: "还没有找到 MCP 工具",
+        body: "开始查找后，这里会显示本机已配置的 MCP 服务和工具。",
+        hints: ["MCP 是一种让 AI 应用连接外部工具的方式。", "AIOS Desktop 不会启动 MCP 服务。", "AIOS Desktop 不会调用 MCP 工具。"]
+      };
+    case "advanced":
+      return {
+        title: "还没有高级信息",
+        body: "高级页用于查看查找位置、来源分组、问题摘要和本地记录控制。",
+        hints: ["高级内容只用于排查。", "普通页面仍只展示技能和 MCP。", "这里不会执行脚本或启动 MCP 服务。"]
       };
     case "scripts":
       return {
-        title: "尚未发现脚本元数据",
-        body: "尚未发现脚本元数据；AIOS 不会执行脚本。",
-        hints: ["脚本只作为元数据资源展示。", "扫描结果来自本地 SQLite 资源库。", "执行仍需要用户在应用外显式命令。"]
+        title: "还没有脚本说明",
+        body: "这里仅作为高级支持，帮助解释技能或 MCP 相关脚本线索；AIOS Desktop 不执行脚本。",
+        hints: ["只读查看。", "不会运行脚本。", "普通用户不需要进入这里。"]
       };
     case "reports":
       return {
-        title: "尚未发现报告元数据",
-        body: "尚未发现报告元数据；请先在扫描管理中添加目录并手动扫描。",
-        hints: ["报告列表只展示扫描持久化的元数据。", "不会读取或展示文件正文。", "旧入口示例不参与当前模块计数。"]
+        title: "还没有历史报告摘要",
+        body: "这里仅作为高级支持，帮助追溯技能和 MCP 查找结果来源。",
+        hints: ["只显示摘要线索。", "不会读取私人文档正文。", "普通用户不需要进入这里。"]
       };
     case "project-packs":
       return {
-        title: "尚未发现项目包元数据",
-        body: "尚未发现项目包元数据；请扫描包含项目资源包的目录。",
-        hints: ["项目和来源范围只来自本机资源库。", "不会复制资源到全局入口。", "旧入口示例仅用于兼容查看。"]
+        title: "还没有项目来源线索",
+        body: "这里仅作为高级支持，查看项目文件夹里的技能、MCP 配置和相关来源。",
+        hints: ["不会复制项目文件。", "不会修改技能或 MCP 配置。", "建议选择具体项目文件夹。"]
       };
     case "policies":
       return {
-        title: "尚未发现策略元数据",
-        body: "尚未发现策略元数据；请扫描包含治理或策略资源的项目目录。",
-        hints: ["策略模块不会修改策略文件。", "当前列表只使用用户扫描后的 SQLite 元数据。", "旧入口示例不参与策略计数。"]
+        title: "还没有安全说明线索",
+        body: "这里仅作为高级支持，查看只读边界和安全说明。",
+        hints: ["不会修改安全配置。", "不会读取密钥值。", "普通用户可只看首页提醒。"]
       };
     case "validators":
       return {
-        title: "尚未发现验证器元数据",
-        body: "尚未发现验证器元数据；请扫描包含验证器或检查脚本的目录。",
-        hints: ["验证器状态卡是只读基线说明。", "验证器资源列表只来自动态资源库。", "AIOS 不会运行验证器。"]
+        title: "还没有检查结果",
+        body: "这里仅作为高级支持，查看观察型检查结果和开发者诊断信息。",
+        hints: ["不会运行检查器。", "不会执行命令。", "只用于排查技能和 MCP 体验。"]
       };
     case "legacy":
       return {
-        title: "旧入口示例不可用",
-        body: "未加载到内置示例/兼容快照。",
-        hints: ["旧入口只用于兼容查看。", "它不代表当前电脑扫描结果。", "不会写入 SQLite 动态资源库。"]
+        title: "历史入口不可用",
+        body: "这里仅作为高级支持，保留旧示例和迁移边界。",
+        hints: ["不作为普通用户入口。", "不代表当前电脑查找结果。", "不会修改本机文件。"]
       };
     default:
       return {
-        title: "尚未扫描任何目录",
-        body: "当前动态资源库为空；请到扫描管理添加项目目录或运行智能发现。",
-        hints: ["默认模块只读取 SQLite 动态资源库。", "旧入口示例不会计入默认数量。", "扫描必须由用户手动启动。"]
+        title: "还没有查找这台电脑上的 AI 技能",
+        body: "点击开始后，AIOS Desktop 会查找本机 AI 技能和 MCP 工具的基本信息。",
+        hints: ["结果只保存在这台电脑上。", "不会上传查找结果。", "查找必须由用户手动开始。"]
       };
   }
 }

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
-    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/customDirectoryScan.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceStore.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceCorpus.test.ts",
+    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/productShell.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/customDirectoryScan.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceStore.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceCorpus.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/layoutMetrics.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json",
     "preview": "vite preview --host 127.0.0.1"
   },

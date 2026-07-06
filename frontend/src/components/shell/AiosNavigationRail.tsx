@@ -6,7 +6,8 @@ import type { SvgIconComponent } from "@mui/icons-material";
 import { memo, useRef, useState, type MouseEvent } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
-import { useNavIndicatorMotion } from "../../lib/useAiosMotion";
+import { getPrimaryNavigationView } from "../../lib/productShell";
+import { useNavIndicatorMotion, useSmoothHoverSurfaceMotion } from "../../lib/useAiosMotion";
 import type { AiosThemePreference } from "../../theme/designTokens";
 import { useAiosThemeMode } from "../../theme/AiosThemeProvider";
 import { moduleIcons, navigationGroups } from "./moduleConfig";
@@ -18,32 +19,29 @@ interface AiosNavigationRailProps {
   onChange: (view: ResourceView) => void;
 }
 
-export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNavigationRailProps) {
+export function AiosNavigationRail({ activeView, onChange }: AiosNavigationRailProps) {
   const railRef = useRef<HTMLElement>(null);
-  useNavIndicatorMotion(railRef, activeView);
+  const activePrimaryView = getPrimaryNavigationView(activeView);
+  useNavIndicatorMotion(railRef, activePrimaryView);
+  useSmoothHoverSurfaceMotion(railRef, activePrimaryView, { selector: "[data-aios-nav-motion]" });
 
   return (
-    <Box className="aios-navigation-rail" component="nav" ref={railRef} aria-label="AIOS 模块导航">
+    <Box className="aios-navigation-rail" component="nav" ref={railRef} aria-label="AIOS 主导航">
       <Box className="rail-brand" aria-label="AIOS Desktop">
         <Box className="rail-brand-logo" component="img" src={labelIcon} alt="AIOS Logo" />
-        <Typography className="rail-brand-mark" component="strong" aria-hidden="true">
-          AIOS
-        </Typography>
       </Box>
       <Box className="rail-items" data-nav-track>
-        <Box className="rail-selected-pill" data-nav-indicator aria-hidden="true" />
-        {navigationGroups.map((group, groupIndex) => {
-          const activeInGroup = group.views.includes(activeView);
+        <Box className="rail-selected-pill" data-nav-indicator />
+        {navigationGroups.map((group) => {
+          const activeInGroup = group.views.includes(activePrimaryView);
           return (
             <Box className={activeInGroup ? "rail-group active" : "rail-group"} key={group.key} aria-label={`${group.title}：${group.summary}`}>
-              {groupIndex > 0 && <Box className="rail-group-marker" aria-hidden="true" />}
               <Box className="rail-group-items">
                 {group.views.map((view) => {
                   return (
                     <AiosNavigationItem
                       key={view}
-                      active={view === activeView}
-                      count={viewCounts[view]}
+                      active={view === activePrimaryView}
                       groupSummary={group.summary}
                       icon={moduleIcons[view]}
                       view={view}
@@ -63,30 +61,32 @@ export function AiosNavigationRail({ activeView, viewCounts, onChange }: AiosNav
 
 interface AiosNavigationItemProps {
   active: boolean;
-  count: number;
   groupSummary: string;
   icon: SvgIconComponent;
   view: ResourceView;
   onChange: (view: ResourceView) => void;
 }
 
-const AiosNavigationItem = memo(function AiosNavigationItem({ active, count, groupSummary, icon: Icon, view, onChange }: AiosNavigationItemProps) {
+const AiosNavigationItem = memo(function AiosNavigationItem({ active, groupSummary, icon: Icon, view, onChange }: AiosNavigationItemProps) {
   const moduleSummary = zhCN.moduleSummaries[view];
   const label = VIEW_LABELS[view];
-  const title = `${label} · ${moduleSummary} · ${groupSummary} · ${count} 项`;
   return (
     <ButtonBase
       className={active ? "rail-item active" : "rail-item"}
       aria-current={active ? "page" : undefined}
-      aria-label={`${label}，${moduleSummary}，${count} 项`}
+      aria-label={`${label}，${moduleSummary}`}
       aria-pressed={active}
+      data-aios-hover-card
+      data-aios-motion-surface
+      data-aios-nav-motion
+      data-aios-selected-surface={active ? "true" : undefined}
       data-nav-active={active ? "true" : undefined}
-      title={title}
+      title={`${label} · ${moduleSummary} · ${groupSummary}`}
       onClick={() => onChange(view)}
     >
       <Icon fontSize="small" />
-      <Typography className="rail-count" component="span">
-        {count}
+      <Typography className="rail-label" component="span">
+        {label}
       </Typography>
     </ButtonBase>
   );
@@ -120,6 +120,9 @@ function ThemeActionDock() {
         aria-expanded={open ? "true" : undefined}
         aria-haspopup="menu"
         aria-label={label}
+        data-aios-hover-card
+        data-aios-motion-surface
+        data-aios-nav-motion
         size="small"
         title={`${zhCN.theme.toggle} · ${modeLabel}`}
         type="button"

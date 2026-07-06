@@ -4,11 +4,12 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup, type ResourceGroupData } from "../resources/ResourceGroup";
 import { AiosModuleFrame } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
+import { renderBackButton } from "./moduleBackButton";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ProjectPacksModule({ resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function ProjectPacksModule({ resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => {
     const grouped = new Map<string, ResourceGroupData>();
     for (const resource of resources) {
@@ -26,6 +27,7 @@ export function ProjectPacksModule({ resourceCorpus, resources, selectedId, onSe
       summary={zhCN.moduleSummaries["project-packs"]}
       count={resources.length}
       ariaLabel={moduleAriaLabel("project-packs")}
+      backButton={renderBackButton("project-packs", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

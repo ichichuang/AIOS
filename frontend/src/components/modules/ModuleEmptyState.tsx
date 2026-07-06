@@ -7,11 +7,11 @@ interface ModuleEmptyStateProps {
   hints?: string[];
 }
 
-const defaultHints = ["当前筛选下没有可显示的本地资源。", "可清空搜索、切换分组或选择其他模块。", "不会触发扫描、脚本执行或配置写入。"];
+const defaultHints = ["当前筛选下没有可显示的本机结果。", "可清空搜索、切换分组或选择其他页面。", "不会触发查找、脚本执行或配置写入。"];
 
 export function ModuleEmptyState({ title = zhCN.app.emptyTitle, body = zhCN.app.emptyBody, hints = defaultHints }: ModuleEmptyStateProps) {
   return (
-    <Box className="empty-state">
+    <Box className="empty-state" data-aios-empty-state data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
       <Typography component="h3" variant="h3">
         {title}
       </Typography>

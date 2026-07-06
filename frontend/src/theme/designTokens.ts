@@ -167,11 +167,17 @@ export const designTokens = {
     selected: aiosThemePalettes.light.selectedSurface
   },
   motion: {
-    durationFast: 0.18,
-    durationBase: 0.22,
-    durationSlow: 0.26,
-    easeStandard: "power2.out",
-    easeEmphasis: "power3.out"
+    durationFast: 0.34,
+    durationBase: 0.42,
+    durationSlow: 0.6,
+    durationHover: 0.42,
+    durationHoverExit: 0.36,
+    durationSelected: 0.56,
+    durationReveal: 0.58,
+    durationPanel: 0.48,
+    durationPress: 0.15,
+    easeStandard: "power3.out",
+    easeEmphasis: "expo.out"
   },
   inspector: {
     width: 376,

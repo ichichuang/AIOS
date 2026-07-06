@@ -7,7 +7,6 @@ import { buildSkillDisplayEnrichment, getSkillQualityChipLabel, shouldShowSkillQ
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource } from "../../types/inventory";
 import type { ResourceSelectionContext } from "../modules/moduleUtils";
-import { AiosChipZone } from "../ui/AiosUiPrimitives";
 
 export interface CompactSkillRowProps {
   rows: SkillIdentityRow[];
@@ -36,31 +35,18 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
     [onSelect, resource, row]
   );
 
-  // Compute compact source summary badge
-  let sourceLabel = "本地";
-  if (sourceBadges.length > 1) {
-    sourceLabel = "多来源";
-  } else if (sourceBadges.length === 1) {
-    const key = sourceBadges[0].key;
-    if (["codex", "agents", "claude"].includes(key)) {
-      sourceLabel = "入口";
-    } else if (key === "filesystem") {
-      sourceLabel = "本地";
-    } else {
-      sourceLabel = sourceBadges[0].label;
-    }
-  }
-
+  const sourceLabel = sourceBadges.length > 1 ? "多来源" : sourceBadges[0]?.label ?? "本地";
   const secondaryChip = getSecondaryChip();
   const visibleChips = [{ label: sourceLabel, className: "source-chip" }, ...(secondaryChip ? [secondaryChip] : [])].slice(0, 2);
-  const boundaryLabel = resource.safetyProfile.readOnly && !resource.safetyProfile.writesGlobalState ? "本地只读" : "边界需复核";
 
   return (
-    <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties}>
+    <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties} data-aios-list-row>
       <Box
         aria-pressed={selected}
         className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"}
+        data-aios-hover-card
         data-resource-id={resource.id}
+        data-aios-selected-surface={selected ? "true" : undefined}
         role="button"
         tabIndex={0}
         onClick={handleSelect}
@@ -71,7 +57,11 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
             <Typography className="resource-title compact-skill-title" component="h3" title={enrichment.displayNameZh}>
               {enrichment.displayNameZh}
             </Typography>
-            <AiosChipZone chips={visibleChips} />
+            <Box className="compact-skill-chip-line">
+              {visibleChips.map((chip, i) => (
+                <Chip key={`${chip.label}-${i}`} className={chip.className} label={chip.label} size="small" variant={i === 0 ? "outlined" : "filled"} />
+              ))}
+            </Box>
           </Box>
           {display.technicalName && (
             <Box className="resource-secondary-row">
@@ -83,17 +73,6 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
           <Typography className="resource-description compact-skill-description" color="text.secondary" title={enrichment.shortPurposeZh || enrichment.displayDescriptionZh} variant="body2">
             {enrichment.shortPurposeZh || enrichment.displayDescriptionZh}
           </Typography>
-          <Box className="compact-skill-meta-line" aria-label="技能资源摘要">
-            <Typography component="span" title={`${display.zhToolType} / ${display.zhCapability}`}>
-              {display.zhToolType} / {display.zhCapability}
-            </Typography>
-            <Typography component="span" title={sourceLabel}>
-              {sourceLabel}
-            </Typography>
-            <Typography component="span" title={boundaryLabel}>
-              {boundaryLabel}
-            </Typography>
-          </Box>
         </Box>
       </Box>
     </Box>

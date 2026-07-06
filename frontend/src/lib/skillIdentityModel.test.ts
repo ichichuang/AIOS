@@ -33,7 +33,7 @@ assert.equal(googleMaterialRows.length, 1);
 assert.equal(googleMaterialRows[0].sources.length, 2);
 assert.deepEqual(
   googleMaterialRows[0].sourceBadges.map((badge) => badge.label),
-  ["文件系统", "项目包"]
+  ["文件系统", "项目"]
 );
 
 const polishRows = rowsByName("aios-ui-polish-react-gsap");
@@ -45,7 +45,7 @@ assert.equal(topUiRows.length, 1);
 assert.equal(topUiRows[0].sources.length, 2);
 assert.deepEqual(
   topUiRows[0].sourceBadges.map((badge) => badge.label),
-  ["索引", "Registry", "文件系统", "Claude"]
+  ["索引", "目录", "文件系统", "Claude"]
 );
 
 const frontendRows = rowsByName("frontend-skill");
@@ -53,7 +53,7 @@ assert.equal(frontendRows.length, 1);
 assert.equal(frontendRows[0].sources.length, 4);
 assert.deepEqual(
   frontendRows[0].sourceBadges.map((badge) => badge.label),
-  ["索引", "Registry", "文件系统", "Codex", "Agents", "Claude"]
+  ["索引", "目录", "文件系统", "Codex", "Agents", "Claude"]
 );
 
 const xMastery = resourcesByName("x-mastery-mentor")[0];

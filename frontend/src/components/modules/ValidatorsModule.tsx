@@ -5,11 +5,12 @@ import { zhCN } from "../../i18n/zh-CN";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageRow } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
+import { renderBackButton } from "./moduleBackButton";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 import { ResourceCorpusIndicator } from "./ResourceCorpusIndicator";
 
-export function ValidatorsModule({ baseline, resourceCorpus, resources, selectedId, onSelect }: AiosModuleProps) {
+export function ValidatorsModule({ baseline, resourceCorpus, resources, selectedId, onBack, onSelect }: AiosModuleProps) {
   const groups = useMemo(() => [{ title: "观察型验证器", summary: "验证器能力仅展示状态和用途；运行需要用户显式命令。", resources }], [resources]);
 
   return (
@@ -18,6 +19,7 @@ export function ValidatorsModule({ baseline, resourceCorpus, resources, selected
       summary={zhCN.moduleSummaries.validators}
       count={resources.length}
       ariaLabel={moduleAriaLabel("validators")}
+      backButton={renderBackButton("validators", onBack)}
       actions={
         <>
           <ResourceCorpusIndicator state={resourceCorpus} />

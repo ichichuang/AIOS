@@ -1,7 +1,17 @@
-import { Accordion, AccordionDetails, AccordionSummary, Box, ButtonBase, Chip, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Box, ButtonBase, Chip, Paper, Typography } from "@mui/material";
+import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
+import { useAiosLayoutModuleContentRef, useAiosLayoutModuleHeaderRef, useAiosLayoutRequestMeasure } from "../../lib/useAiosLayoutMetrics";
+import {
+  useAccordionRevealMotion,
+  useEmptyStateRevealMotion,
+  useHoverCardLiftMotion,
+  useListRowStaggerMotion,
+  useSegmentedIndicatorMotion,
+  useVisibleCardRevealMotion
+} from "../../lib/useAiosMotion";
 
 export interface AiosUsageChip {
   label: string;
@@ -15,47 +25,264 @@ export interface AiosTechnicalDetailRow {
   code?: boolean;
 }
 
+export function AiosBackHeader({ label, onBack }: { label: string; onBack: () => void }) {
+  return (
+    <ButtonBase className="aios-back-header" aria-label={label} data-aios-hover-card data-aios-motion-surface onClick={onBack}>
+      <ArrowBackRounded fontSize="small" />
+      <Typography component="span">{label}</Typography>
+    </ButtonBase>
+  );
+}
+
 interface AiosModuleFrameProps {
   view: ResourceView;
   summary: string;
-  count: number;
+  count?: number;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
   ariaLabel?: string;
+  backButton?: ReactNode;
+  motionKey?: unknown;
 }
 
-export function AiosModuleFrame({ view, summary, count, actions, children, className, contentClassName, ariaLabel }: AiosModuleFrameProps) {
+export function AiosModuleFrame({ view, summary, count, actions, children, className, contentClassName, ariaLabel, backButton, motionKey }: AiosModuleFrameProps) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const moduleHeaderRef = useAiosLayoutModuleHeaderRef();
+  const moduleContentRef = useAiosLayoutModuleContentRef();
+  const requestMeasure = useAiosLayoutRequestMeasure();
+  const setContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      moduleContentRef.current = node;
+      requestMeasure();
+    },
+    [moduleContentRef, requestMeasure]
+  );
+  useVisibleCardRevealMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
+  useListRowStaggerMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
+  useEmptyStateRevealMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
+  useHoverCardLiftMotion(contentRef, motionKey ?? view);
+
+  useEffect(() => {
+    requestMeasure();
+  }, [children, motionKey, requestMeasure]);
+
   return (
-    <Box className={["module-surface", "aios-module-frame", className].filter(Boolean).join(" ")} component="section" aria-label={ariaLabel ?? `${VIEW_LABELS[view]}模块`}>
-      <Box className="module-header">
+    <Box className={["module-surface", "aios-module-frame", className].filter(Boolean).join(" ")} component="section" aria-label={ariaLabel ?? `${VIEW_LABELS[view]}页面`} data-aios-motion-surface>
+      <Box className="module-header" ref={moduleHeaderRef}>
         <Box className="module-header-title">
-          <Typography component="h2" variant="h2">
-            {VIEW_LABELS[view]}
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            {summary}
-          </Typography>
+          {backButton}
+          <Box className="module-header-text">
+            <Typography component="h2" variant="h2">
+              {VIEW_LABELS[view]}
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              {summary}
+            </Typography>
+          </Box>
         </Box>
         <Box className="module-header-actions">
-          <Chip color="primary" label={`${count} 项可见`} />
+          {typeof count === "number" && <Chip label={`${count} 项`} variant="outlined" size="small" />}
           {actions}
         </Box>
       </Box>
-      <Box className={["module-scroll", "aios-module-content", contentClassName].filter(Boolean).join(" ")}>{children}</Box>
+      <Box className={["module-scroll", "aios-module-content", contentClassName].filter(Boolean).join(" ")} ref={setContentRef} data-aios-module-content>
+        {children}
+      </Box>
     </Box>
   );
 }
 
-export function AiosModuleControls({ children, className }: { children: ReactNode; className?: string }) {
-  return <Box className={["aios-module-controls", className].filter(Boolean).join(" ")}>{children}</Box>;
+export function AiosHeroPanel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <Paper className={["aios-hero-panel", className].filter(Boolean).join(" ")} component="section" elevation={0} data-aios-hover-card data-aios-layout-fixed data-aios-motion-surface data-motion="resource-card">
+      {children}
+    </Paper>
+  );
 }
 
-export function AiosPillRail({ children, className, label }: { children: ReactNode; className?: string; label: string }) {
+export interface AiosSegmentedOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
+export function AiosSegmentedSwitcher({
+  ariaLabel,
+  options,
+  value,
+  onChange,
+  className
+}: {
+  ariaLabel: string;
+  options: AiosSegmentedOption[];
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const scopeRef = useRef<HTMLDivElement | null>(null);
+  useSegmentedIndicatorMotion(scopeRef, value);
+  const handleClick = useCallback(
+    (nextValue: string) => () => {
+      if (nextValue !== value) onChange(nextValue);
+    },
+    [onChange, value]
+  );
+
   return (
-    <Box className={["aios-pill-rail", className].filter(Boolean).join(" ")} role="tablist" aria-label={label}>
+    <Box
+      ref={scopeRef}
+      className={["aios-segmented-switcher", className].filter(Boolean).join(" ")}
+      data-aios-layout-fixed
+      data-aios-motion-surface
+      role="tablist"
+      aria-label={ariaLabel}
+    >
+      <Box className="aios-segmented-track" data-segmented-track>
+        <Box className="aios-segmented-indicator" data-segmented-indicator />
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <ButtonBase
+              key={option.value}
+              className={["aios-segmented-button", active ? "active" : ""].filter(Boolean).join(" ")}
+              role="tab"
+              aria-selected={active}
+              data-aios-hover-card
+              data-aios-motion-surface
+              data-aios-selected-surface={active ? "true" : undefined}
+              data-segmented-active={active ? "true" : undefined}
+              onClick={handleClick(option.value)}
+            >
+              <Typography component="span">{option.label}</Typography>
+              {typeof option.count === "number" && <Chip label={`${option.count} 项`} size="small" />}
+            </ButtonBase>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+interface AiosContentPanelProps {
+  children: ReactNode;
+  active: boolean;
+  className?: string;
+  id?: string;
+  labelledBy?: string;
+}
+
+export function AiosContentPanel({ children, active, className, id, labelledBy }: AiosContentPanelProps) {
+  return (
+    <Box
+      className={["aios-content-panel", active ? "aios-content-panel-active" : "aios-content-panel-hidden", className].filter(Boolean).join(" ")}
+      role="tabpanel"
+      id={id}
+      aria-labelledby={labelledBy}
+      hidden={!active}
+      data-aios-internal-scroll={active ? "true" : undefined}
+      data-aios-content-panel={active ? "active" : "hidden"}
+    >
       {children}
+    </Box>
+  );
+}
+
+export function AiosAccordionPanel({
+  children,
+  className,
+  count,
+  defaultExpanded = true,
+  summary,
+  title
+}: {
+  children: ReactNode;
+  className?: string;
+  count?: number;
+  defaultExpanded?: boolean;
+  summary?: string;
+  title: string;
+}) {
+  const accordionRef = useRef<HTMLDivElement | null>(null);
+  useAccordionRevealMotion(accordionRef, `${title}:${count ?? "none"}`);
+
+  return (
+    <Accordion className={["aios-accordion-panel", className].filter(Boolean).join(" ")} defaultExpanded={defaultExpanded} disableGutters elevation={0} ref={accordionRef} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+      <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+        <Box className="aios-accordion-summary-copy">
+          <Typography component="h3">{title}</Typography>
+          {summary && (
+            <Typography color="text.secondary" variant="body2">
+              {summary}
+            </Typography>
+          )}
+        </Box>
+        {typeof count === "number" && <Chip label={`${count} 项`} variant="outlined" />}
+      </AccordionSummary>
+      <AccordionDetails>{children}</AccordionDetails>
+    </Accordion>
+  );
+}
+
+export function AiosModuleControls({ children, className }: { children: ReactNode; className?: string }) {
+  return <Box className={["aios-module-controls", className].filter(Boolean).join(" ")} data-aios-motion-surface>{children}</Box>;
+}
+
+export interface AiosSectionRailOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
+export function AiosSectionRail({
+  ariaLabel,
+  options,
+  value,
+  onChange,
+  className
+}: {
+  ariaLabel: string;
+  options: AiosSectionRailOption[];
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const handleClick = useCallback(
+    (nextValue: string) => () => {
+      if (nextValue !== value) onChange(nextValue);
+    },
+    [onChange, value]
+  );
+
+  return (
+    <Box
+      className={["aios-section-rail", className].filter(Boolean).join(" ")}
+      role="tablist"
+      aria-label={ariaLabel}
+      data-aios-layout-fixed
+      data-aios-motion-surface
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <ButtonBase
+            key={option.value}
+            className={["aios-section-rail-item", active ? "active" : ""].filter(Boolean).join(" ")}
+            role="tab"
+            aria-selected={active}
+            data-section-rail-active={active ? "true" : undefined}
+            data-aios-hover-card
+            data-aios-motion-surface
+            data-aios-selected-surface={active ? "true" : undefined}
+            onClick={handleClick(option.value)}
+          >
+            <Typography component="span">{option.label}</Typography>
+            {typeof option.count === "number" && <Chip label={`${option.count} 项`} size="small" />}
+          </ButtonBase>
+        );
+      })}
     </Box>
   );
 }
@@ -129,7 +356,7 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
           <Typography className="resource-title" component="h3" title={title}>
             {title}
           </Typography>
-          <AiosChipZone chips={chips} />
+          {chips.length > 0 && <AiosChipZone chips={chips.slice(0, 1)} />}
         </Box>
         {technicalName && (
           <Box className="resource-secondary-row">
@@ -147,7 +374,13 @@ export function AiosUsageCard({ title, purpose, chips = [], className, icon, met
   );
 
   return (
-    <Box className={["aios-usage-card", "material-card", selected ? "selected" : "", className].filter(Boolean).join(" ")} data-motion="resource-card">
+    <Box
+      className={["aios-usage-card", "material-card", selected ? "selected" : "", className].filter(Boolean).join(" ")}
+      data-aios-hover-card
+      data-aios-motion-surface
+      data-aios-selected-surface={selected ? "true" : undefined}
+      data-motion="resource-card"
+    >
       {onClick ? (
         <ButtonBase className="aios-usage-action" aria-current={selected ? "true" : undefined} aria-pressed={selected} onClick={onClick}>
           {body}
@@ -170,7 +403,7 @@ interface AiosCapabilityLauncherCardProps {
 
 export function AiosCapabilityLauncherCard({ title, description, actionLabel, icon, metaLabel, onClick }: AiosCapabilityLauncherCardProps) {
   return (
-    <Box className="aios-capability-launcher-card" data-motion="resource-card">
+    <Box className="aios-capability-launcher-card" data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
       <ButtonBase className="aios-capability-launcher-action" onClick={onClick}>
         <Box className="aios-capability-launcher-icon">{icon}</Box>
         <Box className="aios-capability-launcher-copy">
@@ -264,7 +497,13 @@ export function AiosTimelineRow({ title, filename, timestamp, summary, chips = [
   );
 
   return (
-    <Box className={["timeline-row", "aios-timeline-row", "resource-card", selected ? "selected" : "", className].filter(Boolean).join(" ")} data-motion="resource-card">
+    <Box
+      className={["timeline-row", "aios-timeline-row", "resource-card", selected ? "selected" : "", className].filter(Boolean).join(" ")}
+      data-aios-hover-card
+      data-aios-motion-surface
+      data-aios-selected-surface={selected ? "true" : undefined}
+      data-motion="resource-card"
+    >
       {onClick ? (
         <ButtonBase className="timeline-row-action" aria-current={selected ? "true" : undefined} aria-pressed={selected} onClick={onClick}>
           {body}
