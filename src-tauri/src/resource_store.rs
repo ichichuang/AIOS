@@ -1,6 +1,7 @@
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -468,6 +469,114 @@ pub struct ResourceCorpusDetail {
     pub content_storage_enabled: bool,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLibrarySummary {
+    pub generated_at_ms: u64,
+    pub latest_scan_at_ms: Option<u64>,
+    pub latest_successful_scan_at_ms: Option<u64>,
+    pub counts: SkillLibraryCounts,
+    pub metadata_only: bool,
+    pub content_storage_enabled: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLibraryCounts {
+    pub total_skill_candidates: u64,
+    pub deduped_skill_count: u64,
+    pub available_skill_count: u64,
+    pub needs_attention_count: u64,
+    pub duplicate_count: u64,
+    pub broken_count: u64,
+    pub source_unknown_count: u64,
+    pub unchecked_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillListItem {
+    pub id: String,
+    pub display_name: String,
+    pub original_name: String,
+    pub short_purpose: String,
+    pub status: SkillStatus,
+    pub source_label: String,
+    pub source_kind_label: String,
+    pub available_in_tools: Vec<String>,
+    pub usage_text: Option<String>,
+    pub attention_reasons: Vec<SkillAttentionReason>,
+    pub primary_path_hint: String,
+    pub source_count: u64,
+    pub updated_at: Option<String>,
+    pub last_seen_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDetail {
+    #[serde(flatten)]
+    pub item: SkillListItem,
+    pub what_it_does: String,
+    pub when_to_use: Option<String>,
+    pub how_to_use: Option<String>,
+    pub usage_summary: SkillUsageSummary,
+    pub source_summaries: Vec<SkillSourceSummary>,
+    pub related_duplicate_sources: Vec<SkillSourceSummary>,
+    pub safe_advanced_metadata_summary: Vec<SkillAdvancedMetadataRow>,
+    pub findings: Vec<SkillAttentionReason>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillSourceSummary {
+    pub id: String,
+    pub source_label: String,
+    pub source_kind_label: String,
+    pub available_in_tools: Vec<String>,
+    pub path_hint: String,
+    pub root_path_hint: Option<String>,
+    pub last_seen_at: Option<String>,
+    pub scan_status: Option<String>,
+    pub finding_count: u64,
+    pub duplicate: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUsageSummary {
+    pub usage_known: bool,
+    pub usage_text: String,
+    pub available_in_tools: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillAttentionReason {
+    pub code: String,
+    pub label: String,
+    pub detail: String,
+    pub severity: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillAdvancedMetadataRow {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SkillStatus {
+    Available,
+    NeedsAttention,
+    Duplicate,
+    Broken,
+    SourceUnknown,
+    Unchecked,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceCorpusQuery {
@@ -638,6 +747,28 @@ pub fn get_resource_counts_by_scope(
     state: State<'_, ResourceStoreState>,
 ) -> Result<Vec<ResourceScopeCount>, ResourceStoreCommandError> {
     get_resource_counts_by_scope_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_skill_library_summary(
+    state: State<'_, ResourceStoreState>,
+) -> Result<SkillLibrarySummary, ResourceStoreCommandError> {
+    get_skill_library_summary_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_skill_library_items(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<SkillListItem>, ResourceStoreCommandError> {
+    list_skill_library_items_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_skill_detail(
+    state: State<'_, ResourceStoreState>,
+    skill_id: String,
+) -> Result<SkillDetail, ResourceStoreCommandError> {
+    get_skill_detail_for_path(&state.db_path, &skill_id).map_err(ResourceStoreCommandError::from)
 }
 
 #[tauri::command]
@@ -1342,6 +1473,900 @@ pub fn get_resource_counts_by_scope_for_path(
 ) -> Result<Vec<ResourceScopeCount>, ResourceStoreError> {
     let conn = open_initialized_connection(db_path)?;
     get_resource_counts_by_scope_for_connection(&conn)
+}
+
+pub fn get_skill_library_summary_for_path(
+    db_path: &Path,
+) -> Result<SkillLibrarySummary, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_skill_library_groups(&conn)?;
+    let latest_scan = latest_scan_job(&conn)?;
+    let latest_successful_scan = latest_successful_scan_job(&conn)?;
+    let counts = skill_library_counts(&groups);
+
+    Ok(SkillLibrarySummary {
+        generated_at_ms: current_time_ms(),
+        latest_scan_at_ms: latest_scan
+            .as_ref()
+            .and_then(|job| job.finished_at_ms.or(Some(job.started_at_ms))),
+        latest_successful_scan_at_ms: latest_successful_scan
+            .as_ref()
+            .and_then(|job| job.finished_at_ms.or(Some(job.started_at_ms))),
+        counts,
+        metadata_only: true,
+        content_storage_enabled: false,
+    })
+}
+
+pub fn list_skill_library_items_for_path(
+    db_path: &Path,
+) -> Result<Vec<SkillListItem>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_skill_library_groups(&conn)?;
+    Ok(groups
+        .iter()
+        .map(skill_list_item_for_group)
+        .collect::<Vec<_>>())
+}
+
+pub fn get_skill_detail_for_path(
+    db_path: &Path,
+    skill_id: &str,
+) -> Result<SkillDetail, ResourceStoreError> {
+    let skill_id = normalized_required_text("技能 ID", skill_id)?;
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_skill_library_groups(&conn)?;
+    let group = groups
+        .iter()
+        .find(|group| group.id == skill_id)
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到技能详情。".to_string()))?;
+    Ok(skill_detail_for_group(group))
+}
+
+#[derive(Clone, Debug)]
+struct SkillCandidate {
+    resource: ResourceCorpusResource,
+    findings: Vec<ResourceCorpusFinding>,
+    identity_key: String,
+    original_name: String,
+    source_label: String,
+    source_kind_label: String,
+    available_in_tools: Vec<String>,
+    primary_path_hint: String,
+    source_unknown: bool,
+    unchecked: bool,
+    broken: bool,
+}
+
+#[derive(Clone, Debug)]
+struct SkillLibraryGroup {
+    id: String,
+    identity_key: String,
+    candidates: Vec<SkillCandidate>,
+}
+
+const UNKNOWN_SKILL_USAGE_TEXT: &str = "暂时无法判断使用方法。请在高级信息里查看来源。";
+
+fn build_skill_library_groups(
+    conn: &Connection,
+) -> Result<Vec<SkillLibraryGroup>, ResourceStoreError> {
+    let candidates = list_skill_candidates_for_connection(conn)?;
+    let mut groups: Vec<SkillLibraryGroup> = Vec::new();
+    let mut indexes_by_identity = HashMap::<String, usize>::new();
+
+    for candidate in candidates {
+        let index = if let Some(index) = indexes_by_identity.get(&candidate.identity_key) {
+            *index
+        } else {
+            let id = stable_id("skill", &[&candidate.identity_key]);
+            let index = groups.len();
+            groups.push(SkillLibraryGroup {
+                id,
+                identity_key: candidate.identity_key.clone(),
+                candidates: Vec::new(),
+            });
+            indexes_by_identity.insert(candidate.identity_key.clone(), index);
+            index
+        };
+        groups[index].candidates.push(candidate);
+    }
+
+    groups.sort_by(|left, right| {
+        let left_item = skill_list_item_for_group(left);
+        let right_item = skill_list_item_for_group(right);
+        skill_status_rank(&left_item.status)
+            .cmp(&skill_status_rank(&right_item.status))
+            .then_with(|| left_item.display_name.cmp(&right_item.display_name))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(groups)
+}
+
+fn list_skill_candidates_for_connection(
+    conn: &Connection,
+) -> Result<Vec<SkillCandidate>, ResourceStoreError> {
+    let mut sql = corpus_resource_base_sql();
+    sql.push_str(
+        " WHERE r.resource_kind = 'skill'
+        ORDER BY r.name ASC, COALESCE(l.relative_path, '') ASC",
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], row_to_corpus_resource)?;
+    let resources = collect_rows(rows)?;
+    let mut candidates = Vec::with_capacity(resources.len());
+
+    for resource in resources {
+        let findings = list_resource_findings_for_connection(conn, &resource.id)?;
+        let original_name = skill_original_name(&resource);
+        let identity_key = skill_identity_key(&resource, &original_name);
+        let available_in_tools = infer_available_tools(&resource);
+        let source_unknown = is_source_unknown(&resource);
+        let source_label = skill_source_label(&resource, &available_in_tools, source_unknown);
+        let source_kind_label = skill_source_kind_label(&resource, &source_label, source_unknown);
+        let primary_path_hint = safe_skill_path_hint(&resource);
+        let unchecked = skill_is_unchecked(&resource);
+        let broken = skill_is_broken(&resource, &findings);
+
+        candidates.push(SkillCandidate {
+            resource,
+            findings,
+            identity_key,
+            original_name,
+            source_label,
+            source_kind_label,
+            available_in_tools,
+            primary_path_hint,
+            source_unknown,
+            unchecked,
+            broken,
+        });
+    }
+
+    Ok(candidates)
+}
+
+fn skill_library_counts(groups: &[SkillLibraryGroup]) -> SkillLibraryCounts {
+    let total_skill_candidates = groups
+        .iter()
+        .map(|group| group.candidates.len() as u64)
+        .sum::<u64>();
+    let deduped_skill_count = groups.len() as u64;
+    let duplicate_count = total_skill_candidates.saturating_sub(deduped_skill_count);
+    let mut counts = SkillLibraryCounts {
+        total_skill_candidates,
+        deduped_skill_count,
+        duplicate_count,
+        ..SkillLibraryCounts::default()
+    };
+
+    for group in groups {
+        match skill_status_for_group(group) {
+            SkillStatus::Available => counts.available_skill_count += 1,
+            SkillStatus::Broken => {
+                counts.needs_attention_count += 1;
+                counts.broken_count += 1;
+            }
+            SkillStatus::SourceUnknown => {
+                counts.needs_attention_count += 1;
+                counts.source_unknown_count += 1;
+            }
+            SkillStatus::Unchecked => {
+                counts.needs_attention_count += 1;
+                counts.unchecked_count += 1;
+            }
+            SkillStatus::Duplicate | SkillStatus::NeedsAttention => {
+                counts.needs_attention_count += 1;
+            }
+        }
+    }
+
+    counts
+}
+
+fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
+    let primary = select_primary_skill_candidate(group);
+    let available_in_tools = merged_available_tools(group);
+    let status = skill_status_for_group(group);
+    let usage_text = Some(skill_usage_text(
+        &primary.original_name,
+        &available_in_tools,
+    ));
+    let short_purpose = skill_short_purpose(primary);
+    let attention_reasons = attention_reasons_for_group(group);
+
+    SkillListItem {
+        id: group.id.clone(),
+        display_name: skill_display_name(&primary.original_name),
+        original_name: primary.original_name.clone(),
+        short_purpose,
+        status,
+        source_label: merged_source_label(group, primary),
+        source_kind_label: merged_source_kind_label(group, primary),
+        available_in_tools,
+        usage_text,
+        attention_reasons,
+        primary_path_hint: primary.primary_path_hint.clone(),
+        source_count: group.candidates.len() as u64,
+        updated_at: primary
+            .resource
+            .modified_at_ms
+            .or(Some(primary.resource.updated_at_ms))
+            .map(|value| value.to_string()),
+        last_seen_at: primary
+            .resource
+            .scan_job_finished_at_ms
+            .or(primary.resource.scan_job_started_at_ms)
+            .map(|value| value.to_string()),
+    }
+}
+
+fn skill_detail_for_group(group: &SkillLibraryGroup) -> SkillDetail {
+    let item = skill_list_item_for_group(group);
+    let usage_text = item
+        .usage_text
+        .clone()
+        .unwrap_or_else(|| UNKNOWN_SKILL_USAGE_TEXT.to_string());
+    let source_summaries = group
+        .candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| skill_source_summary(candidate, index > 0))
+        .collect::<Vec<_>>();
+    let related_duplicate_sources = source_summaries
+        .iter()
+        .filter(|source| source.duplicate)
+        .cloned()
+        .collect::<Vec<_>>();
+    let findings = group
+        .candidates
+        .iter()
+        .flat_map(finding_attention_reasons)
+        .collect::<Vec<_>>();
+
+    SkillDetail {
+        what_it_does: item.short_purpose.clone(),
+        when_to_use: skill_when_to_use(&item.original_name, &item.short_purpose),
+        how_to_use: Some(usage_text.clone()),
+        usage_summary: SkillUsageSummary {
+            usage_known: usage_text != UNKNOWN_SKILL_USAGE_TEXT,
+            usage_text,
+            available_in_tools: item.available_in_tools.clone(),
+        },
+        source_summaries,
+        related_duplicate_sources,
+        safe_advanced_metadata_summary: skill_advanced_metadata_rows(group, &item),
+        findings,
+        item,
+    }
+}
+
+fn skill_source_summary(candidate: &SkillCandidate, duplicate: bool) -> SkillSourceSummary {
+    SkillSourceSummary {
+        id: candidate.resource.id.clone(),
+        source_label: candidate.source_label.clone(),
+        source_kind_label: candidate.source_kind_label.clone(),
+        available_in_tools: candidate.available_in_tools.clone(),
+        path_hint: candidate.primary_path_hint.clone(),
+        root_path_hint: candidate.resource.root_display_path.clone(),
+        last_seen_at: candidate
+            .resource
+            .scan_job_finished_at_ms
+            .or(candidate.resource.scan_job_started_at_ms)
+            .map(|value| value.to_string()),
+        scan_status: candidate.resource.scan_job_status.clone(),
+        finding_count: candidate.findings.len() as u64,
+        duplicate,
+    }
+}
+
+fn skill_advanced_metadata_rows(
+    group: &SkillLibraryGroup,
+    item: &SkillListItem,
+) -> Vec<SkillAdvancedMetadataRow> {
+    vec![
+        SkillAdvancedMetadataRow {
+            label: "产品状态".to_string(),
+            value: skill_status_label(&item.status).to_string(),
+        },
+        SkillAdvancedMetadataRow {
+            label: "去重键".to_string(),
+            value: group.identity_key.clone(),
+        },
+        SkillAdvancedMetadataRow {
+            label: "去重来源数".to_string(),
+            value: group.candidates.len().to_string(),
+        },
+        SkillAdvancedMetadataRow {
+            label: "本地记录边界".to_string(),
+            value: "仅使用 AIOS Desktop 已保存的基本信息，不读取技能正文。".to_string(),
+        },
+    ]
+}
+
+fn skill_status_for_group(group: &SkillLibraryGroup) -> SkillStatus {
+    if group.candidates.iter().any(|candidate| candidate.broken) {
+        return SkillStatus::Broken;
+    }
+    if group.candidates.len() > 1 {
+        return SkillStatus::Duplicate;
+    }
+    let primary = select_primary_skill_candidate(group);
+    if primary.source_unknown {
+        return SkillStatus::SourceUnknown;
+    }
+    if primary.unchecked {
+        return SkillStatus::Unchecked;
+    }
+    if !attention_reasons_for_group(group).is_empty() {
+        return SkillStatus::NeedsAttention;
+    }
+    SkillStatus::Available
+}
+
+fn select_primary_skill_candidate(group: &SkillLibraryGroup) -> &SkillCandidate {
+    group
+        .candidates
+        .iter()
+        .min_by(|left, right| compare_skill_candidates(left, right))
+        .expect("skill group must contain at least one candidate")
+}
+
+fn compare_skill_candidates(left: &SkillCandidate, right: &SkillCandidate) -> std::cmp::Ordering {
+    candidate_rank(left)
+        .cmp(&candidate_rank(right))
+        .then_with(|| {
+            right
+                .resource
+                .updated_at_ms
+                .cmp(&left.resource.updated_at_ms)
+        })
+        .then_with(|| left.primary_path_hint.cmp(&right.primary_path_hint))
+}
+
+fn candidate_rank(candidate: &SkillCandidate) -> u8 {
+    if candidate.broken {
+        return 6;
+    }
+    if candidate.source_unknown {
+        return 5;
+    }
+    if candidate
+        .available_in_tools
+        .iter()
+        .any(|tool| tool != "Unknown")
+    {
+        return 0;
+    }
+    if candidate.source_label == "项目来源" {
+        return 1;
+    }
+    2
+}
+
+fn attention_reasons_for_group(group: &SkillLibraryGroup) -> Vec<SkillAttentionReason> {
+    let mut reasons = Vec::new();
+    if group.candidates.len() > 1 {
+        reasons.push(skill_attention_reason(
+            "duplicate-sources",
+            "发现重复来源",
+            "找到了多个看起来相同的技能；默认只展示一个推荐项，其余在详情里查看。",
+            "medium",
+        ));
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.source_unknown)
+    {
+        reasons.push(skill_attention_reason(
+            "source-unknown",
+            "来源不明",
+            "AIOS Desktop 还不能判断这个技能来自哪个清楚来源。",
+            "medium",
+        ));
+    }
+    if group.candidates.iter().any(|candidate| candidate.unchecked) {
+        reasons.push(skill_attention_reason(
+            "unchecked-source",
+            "尚未确认",
+            "最近一次记录没有完成状态，只能显示为待确认。",
+            "low",
+        ));
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.resource.sensitive_path_redacted)
+    {
+        reasons.push(skill_attention_reason(
+            "sensitive-path-redacted",
+            "路径已隐藏",
+            "来源路径包含疑似敏感命名，AIOS Desktop 只显示隐藏后的路径提示。",
+            "high",
+        ));
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.resource.risk_level == "high")
+    {
+        reasons.push(skill_attention_reason(
+            "high-risk-metadata",
+            "需要人工查看",
+            "本地记录把该技能标记为高风险元数据。",
+            "high",
+        ));
+    }
+    for candidate in &group.candidates {
+        reasons.extend(finding_attention_reasons(candidate));
+    }
+    dedupe_attention_reasons(reasons)
+}
+
+fn finding_attention_reasons(candidate: &SkillCandidate) -> Vec<SkillAttentionReason> {
+    candidate
+        .findings
+        .iter()
+        .map(|finding| {
+            skill_attention_reason(
+                &finding.finding_kind,
+                &finding_label(&finding.finding_kind),
+                &finding.message,
+                &finding.severity,
+            )
+        })
+        .collect()
+}
+
+fn dedupe_attention_reasons(reasons: Vec<SkillAttentionReason>) -> Vec<SkillAttentionReason> {
+    let mut seen = HashMap::<String, bool>::new();
+    reasons
+        .into_iter()
+        .filter(|reason| {
+            if seen.contains_key(&reason.code) {
+                return false;
+            }
+            seen.insert(reason.code.clone(), true);
+            true
+        })
+        .collect()
+}
+
+fn skill_attention_reason(
+    code: &str,
+    label: &str,
+    detail: &str,
+    severity: &str,
+) -> SkillAttentionReason {
+    SkillAttentionReason {
+        code: code.to_string(),
+        label: label.to_string(),
+        detail: detail.to_string(),
+        severity: severity.to_string(),
+    }
+}
+
+fn finding_label(kind: &str) -> String {
+    match kind {
+        "sensitive-path-redacted" => "路径已隐藏".to_string(),
+        "execution-disabled" => "不会执行".to_string(),
+        "mcp-not-executed" => "不会启动 MCP".to_string(),
+        _ => "需要查看".to_string(),
+    }
+}
+
+fn skill_original_name(resource: &ResourceCorpusResource) -> String {
+    for value in [
+        resource.relative_path.as_deref(),
+        resource.display_path.as_deref(),
+    ] {
+        if let Some(name) = skill_name_from_manifest_path(value) {
+            return name;
+        }
+    }
+    let name = resource.name.trim();
+    if !name.is_empty() && !is_generic_skill_file_name(name) {
+        return name.to_string();
+    }
+    "未命名技能".to_string()
+}
+
+fn skill_identity_key(resource: &ResourceCorpusResource, original_name: &str) -> String {
+    for value in [
+        resource.relative_path.as_deref(),
+        resource.display_path.as_deref(),
+    ] {
+        if skill_name_from_manifest_path(value).is_some() {
+            return format!("skill-name:{}", normalize_skill_name(original_name));
+        }
+    }
+    if !original_name.is_empty() && original_name != "未命名技能" {
+        return format!("name:{}", normalize_skill_name(original_name));
+    }
+    format!("stable-key:{}", resource.stable_key.to_lowercase())
+}
+
+fn skill_name_from_manifest_path(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let normalized = value.replace('\\', "/");
+    if !normalized.to_lowercase().ends_with("/skill.md") && normalized.to_lowercase() != "skill.md"
+    {
+        return None;
+    }
+    let mut segments = normalized
+        .split('/')
+        .filter(|segment| !segment.trim().is_empty())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    segments.pop();
+    segments
+        .pop()
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .map(ToString::to_string)
+}
+
+fn is_generic_skill_file_name(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "skill.md" | "skills"
+    )
+}
+
+fn normalize_skill_name(value: &str) -> String {
+    value
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_ascii_lowercase()
+}
+
+fn skill_display_name(original_name: &str) -> String {
+    if original_name == "未命名技能" {
+        return original_name.to_string();
+    }
+    original_name.trim().to_string()
+}
+
+fn infer_available_tools(resource: &ResourceCorpusResource) -> Vec<String> {
+    let text = [
+        resource.relative_path.as_deref(),
+        resource.display_path.as_deref(),
+        resource.root_display_path.as_deref(),
+        resource.scan_source_name.as_deref(),
+        resource.source_kind.as_deref(),
+        resource.project_label.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .replace('\\', "/")
+    .to_ascii_lowercase();
+
+    let mut tools = Vec::new();
+    if text.contains(".codex/skills")
+        || text.contains(".codex/plugins")
+        || text.contains("/codex/")
+        || text.contains("codex")
+    {
+        tools.push("Codex".to_string());
+    }
+    if text.contains(".claude/skills") || text.contains("/claude/") || text.contains("claude") {
+        tools.push("Claude".to_string());
+    }
+    if text.contains(".agents/skills") || text.contains("/agents/") || text.contains("agents") {
+        tools.push("Agents".to_string());
+    }
+    if tools.is_empty() {
+        tools.push("Unknown".to_string());
+    }
+    unique_tool_labels(tools)
+}
+
+fn unique_tool_labels(values: Vec<String>) -> Vec<String> {
+    let mut output = Vec::new();
+    for value in values {
+        if !output.contains(&value) {
+            output.push(value);
+        }
+    }
+    output
+}
+
+fn is_source_unknown(resource: &ResourceCorpusResource) -> bool {
+    let source_kind = resource
+        .source_kind
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let source_name = resource
+        .scan_source_name
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let root = resource
+        .root_display_path
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    source_kind.is_empty()
+        || source_kind == "unknown"
+        || source_kind == "source-unknown"
+        || (resource.project_label.is_none()
+            && (source_name.is_empty()
+                || source_name == "unknown"
+                || root.is_empty()
+                || root == "未记录"))
+}
+
+fn skill_source_label(
+    resource: &ResourceCorpusResource,
+    available_in_tools: &[String],
+    source_unknown: bool,
+) -> String {
+    if source_unknown {
+        return "来源不明".to_string();
+    }
+    if available_in_tools.len() == 1 && available_in_tools[0] != "Unknown" {
+        return available_in_tools[0].clone();
+    }
+    let path_text = [
+        resource.relative_path.as_deref(),
+        resource.display_path.as_deref(),
+        resource.root_display_path.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .replace('\\', "/")
+    .to_ascii_lowercase();
+    if path_text.contains(".codex/plugins") {
+        return "插件".to_string();
+    }
+    if path_text.contains(".ai/skill-modules") {
+        return "本地共享".to_string();
+    }
+    if resource.project_label.is_some() {
+        return "项目来源".to_string();
+    }
+    match resource.source_kind.as_deref().unwrap_or_default() {
+        "custom-directory" => "手动添加".to_string(),
+        "intelligent-discovery" => "全局来源".to_string(),
+        "advanced-full-disk" => "全局来源".to_string(),
+        _ => resource
+            .scan_source_name
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "来源不明".to_string()),
+    }
+}
+
+fn skill_source_kind_label(
+    resource: &ResourceCorpusResource,
+    source_label: &str,
+    source_unknown: bool,
+) -> String {
+    if source_unknown {
+        return "来源不明".to_string();
+    }
+    if matches!(
+        source_label,
+        "Codex" | "Claude" | "Agents" | "插件" | "本地共享" | "项目来源"
+    ) {
+        return source_label.to_string();
+    }
+    match resource.source_kind.as_deref().unwrap_or_default() {
+        "custom-directory" => "手动添加".to_string(),
+        "intelligent-discovery" => "全局来源".to_string(),
+        "advanced-full-disk" => "全局来源".to_string(),
+        _ => "来源不明".to_string(),
+    }
+}
+
+fn safe_skill_path_hint(resource: &ResourceCorpusResource) -> String {
+    let path = resource
+        .display_path
+        .as_deref()
+        .or(resource.relative_path.as_deref())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(resource.name.as_str());
+    let root = resource
+        .root_display_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty() && *value != "未记录");
+    if let Some(root) = root {
+        if path.starts_with("~/") || path.starts_with('/') {
+            return path.to_string();
+        }
+        return format!(
+            "{}/{}",
+            root.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
+    }
+    path.to_string()
+}
+
+fn skill_is_unchecked(resource: &ResourceCorpusResource) -> bool {
+    resource
+        .scan_job_status
+        .as_deref()
+        .is_some_and(|status| status != "completed")
+        || resource.scan_job_status.is_none()
+}
+
+fn skill_is_broken(resource: &ResourceCorpusResource, findings: &[ResourceCorpusFinding]) -> bool {
+    resource.sensitive_path_redacted
+        || resource.risk_level == "high"
+        || findings.iter().any(|finding| finding.severity == "high")
+}
+
+fn merged_available_tools(group: &SkillLibraryGroup) -> Vec<String> {
+    let mut tools = group
+        .candidates
+        .iter()
+        .flat_map(|candidate| candidate.available_in_tools.clone())
+        .filter(|tool| tool != "Unknown")
+        .collect::<Vec<_>>();
+    tools = unique_tool_labels(tools);
+    if tools.is_empty() {
+        vec!["Unknown".to_string()]
+    } else {
+        tools
+    }
+}
+
+fn merged_source_label(group: &SkillLibraryGroup, primary: &SkillCandidate) -> String {
+    let labels = group
+        .candidates
+        .iter()
+        .map(|candidate| candidate.source_label.clone())
+        .filter(|label| label != "来源不明")
+        .collect::<Vec<_>>();
+    let labels = unique_tool_labels(labels);
+    if labels.len() > 1 {
+        "多来源".to_string()
+    } else {
+        labels
+            .first()
+            .cloned()
+            .unwrap_or_else(|| primary.source_label.clone())
+    }
+}
+
+fn merged_source_kind_label(group: &SkillLibraryGroup, primary: &SkillCandidate) -> String {
+    let labels = group
+        .candidates
+        .iter()
+        .map(|candidate| candidate.source_kind_label.clone())
+        .filter(|label| label != "来源不明")
+        .collect::<Vec<_>>();
+    let labels = unique_tool_labels(labels);
+    if labels.len() > 1 {
+        "多来源".to_string()
+    } else {
+        labels
+            .first()
+            .cloned()
+            .unwrap_or_else(|| primary.source_kind_label.clone())
+    }
+}
+
+fn skill_usage_text(original_name: &str, available_in_tools: &[String]) -> String {
+    let invocation = skill_invocation_name(original_name);
+    if available_in_tools.iter().any(|tool| tool == "Codex") {
+        return format!("在 Codex 中输入 `${invocation}`。");
+    }
+    if available_in_tools.iter().any(|tool| tool == "Claude") {
+        return format!("在 Claude 中使用 `{invocation}`。");
+    }
+    if available_in_tools.iter().any(|tool| tool == "Agents") {
+        return format!("在 Agents 中使用 `{invocation}`。");
+    }
+    UNKNOWN_SKILL_USAGE_TEXT.to_string()
+}
+
+fn skill_invocation_name(original_name: &str) -> String {
+    let trimmed = original_name.trim();
+    if trimmed.starts_with('$') {
+        trimmed.to_string()
+    } else {
+        format!("${trimmed}")
+    }
+}
+
+fn skill_short_purpose(candidate: &SkillCandidate) -> String {
+    let description = candidate.resource.description.trim();
+    if is_meaningful_skill_description(description) {
+        return description.to_string();
+    }
+    infer_skill_purpose_from_name(&candidate.original_name)
+        .unwrap_or_else(|| "暂时无法判断用途。请在高级信息里查看来源。".to_string())
+}
+
+fn is_meaningful_skill_description(value: &str) -> bool {
+    if value.trim().is_empty() {
+        return false;
+    }
+    let normalized = value.to_ascii_lowercase();
+    ![
+        "路径或文件名匹配技能资源",
+        "filesystem-discovered skill metadata",
+        "canonical skill metadata",
+        "registry skill metadata",
+        "metadata",
+    ]
+    .iter()
+    .any(|pattern| normalized.contains(pattern))
+}
+
+fn infer_skill_purpose_from_name(name: &str) -> Option<String> {
+    let normalized = name.to_ascii_lowercase();
+    if normalized.contains("writer")
+        || normalized.contains("writing")
+        || normalized.contains("copy")
+        || normalized.contains("draft")
+    {
+        return Some("用于撰写、改写或整理文本。".to_string());
+    }
+    if normalized.contains("frontend")
+        || normalized.contains("ui")
+        || normalized.contains("react")
+        || normalized.contains("vue")
+    {
+        return Some("用于前端界面、组件或样式相关任务。".to_string());
+    }
+    if normalized.contains("docs") || normalized.contains("doc") || normalized.contains("markdown")
+    {
+        return Some("用于文档、说明或知识整理相关任务。".to_string());
+    }
+    if normalized.contains("security") || normalized.contains("audit") {
+        return Some("用于安全检查或风险排查相关任务。".to_string());
+    }
+    None
+}
+
+fn skill_when_to_use(original_name: &str, short_purpose: &str) -> Option<String> {
+    if short_purpose.starts_with("暂时无法判断用途") {
+        return None;
+    }
+    Some(format!(
+        "当任务需要{}时使用 `{}`。",
+        short_purpose.trim_end_matches('。'),
+        skill_invocation_name(original_name)
+    ))
+}
+
+fn skill_status_rank(status: &SkillStatus) -> u8 {
+    match status {
+        SkillStatus::Available => 0,
+        SkillStatus::Duplicate => 1,
+        SkillStatus::NeedsAttention => 2,
+        SkillStatus::SourceUnknown => 3,
+        SkillStatus::Broken => 4,
+        SkillStatus::Unchecked => 5,
+    }
+}
+
+fn skill_status_label(status: &SkillStatus) -> &'static str {
+    match status {
+        SkillStatus::Available => "可用",
+        SkillStatus::NeedsAttention => "需要处理",
+        SkillStatus::Duplicate => "重复",
+        SkillStatus::Broken => "已损坏",
+        SkillStatus::SourceUnknown => "来源不明",
+        SkillStatus::Unchecked => "未检查",
+    }
 }
 
 pub fn get_scan_source_for_path(
@@ -2809,15 +3834,17 @@ mod tests {
         get_active_resource_corpus_summary_for_path, get_app_setting_for_path,
         get_library_summary_for_path, get_project_resource_map_for_path,
         get_resource_counts_by_scope_for_path, get_resource_detail_for_path,
-        get_scan_source_resource_map_for_path, initialize_database,
+        get_scan_source_resource_map_for_path, get_skill_detail_for_path,
+        get_skill_library_summary_for_path, initialize_database,
         list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
         list_project_scopes_for_path, list_resource_corpus_scopes_for_path,
         list_resources_by_kind_for_path, list_resources_by_scope_for_path, list_scan_jobs_for_path,
-        list_scan_sources_for_path, persist_scan_job_for_path, remove_scan_source_for_path,
-        set_app_setting_for_path, store_status_for_path, update_scan_source_for_path,
-        upsert_scan_source_for_path, PersistScanErrorInput, PersistScanJobInput,
-        PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
-        ResourceCorpusQuery, ResourceStoreError, UpdateScanSourceInput, UpsertScanSourceInput,
+        list_scan_sources_for_path, list_skill_library_items_for_path, persist_scan_job_for_path,
+        remove_scan_source_for_path, set_app_setting_for_path, store_status_for_path,
+        update_scan_source_for_path, upsert_scan_source_for_path, PersistScanErrorInput,
+        PersistScanJobInput, PersistScanResourceInput, PersistScanSkipInput,
+        PersistScanSourceInput, ResourceCorpusQuery, ResourceStoreError, SkillStatus,
+        UpdateScanSourceInput, UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -3347,6 +4374,329 @@ mod tests {
             .all(|resource| resource.project_label.is_none()));
 
         cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_summary_dedupes_skills_and_keeps_attention_counts_separate() {
+        let db_path = temp_db_path("skill-library-summary");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_skill_library_fixture(&db_path);
+
+        let summary =
+            get_skill_library_summary_for_path(&db_path).expect("skill summary should load");
+        assert_eq!(summary.counts.total_skill_candidates, 5);
+        assert_eq!(summary.counts.deduped_skill_count, 4);
+        assert_eq!(summary.counts.available_skill_count, 1);
+        assert_eq!(summary.counts.needs_attention_count, 3);
+        assert_eq!(summary.counts.duplicate_count, 1);
+        assert_eq!(summary.counts.broken_count, 1);
+        assert_eq!(summary.counts.source_unknown_count, 1);
+        assert_eq!(summary.latest_scan_at_ms, Some(1_725_100_003_000));
+        assert_eq!(
+            summary.latest_successful_scan_at_ms,
+            Some(1_725_100_003_000)
+        );
+        assert!(summary.metadata_only);
+        assert!(!summary.content_storage_enabled);
+
+        let serialized =
+            serde_json::to_string(&summary).expect("summary should serialize to product JSON");
+        assert!(!serialized.contains("super-secret-token"));
+        assert!(!serialized.contains("/Users/example/secret"));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_items_expose_product_fields_without_promoting_unknowns() {
+        let db_path = temp_db_path("skill-library-items");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_skill_library_fixture(&db_path);
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 4);
+
+        let writer = items
+            .iter()
+            .find(|item| item.original_name == "writer")
+            .expect("writer item should exist");
+        assert_eq!(writer.display_name, "writer");
+        assert_eq!(writer.status, SkillStatus::Duplicate);
+        assert_eq!(writer.source_label, "Codex");
+        assert_eq!(writer.source_kind_label, "Codex");
+        assert_eq!(writer.available_in_tools, vec!["Codex".to_string()]);
+        assert_eq!(writer.source_count, 2);
+        assert!(writer
+            .usage_text
+            .as_deref()
+            .is_some_and(|text| text.contains("$writer")));
+        assert!(writer
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "duplicate-sources"));
+        assert!(!writer.primary_path_hint.starts_with("/Users/example"));
+
+        let local = items
+            .iter()
+            .find(|item| item.original_name == "local-helper")
+            .expect("local helper should exist");
+        assert_eq!(local.status, SkillStatus::Available);
+        assert_eq!(local.source_label, "项目来源");
+        assert_eq!(local.available_in_tools, vec!["Unknown".to_string()]);
+        assert_eq!(
+            local.usage_text.as_deref(),
+            Some("暂时无法判断使用方法。请在高级信息里查看来源。")
+        );
+
+        let unknown = items
+            .iter()
+            .find(|item| item.original_name == "mystery")
+            .expect("source unknown skill should exist");
+        assert_eq!(unknown.status, SkillStatus::SourceUnknown);
+        assert_eq!(unknown.source_label, "来源不明");
+        assert_eq!(unknown.available_in_tools, vec!["Unknown".to_string()]);
+
+        let broken = items
+            .iter()
+            .find(|item| item.original_name == "[sensitive]")
+            .expect("broken skill should exist");
+        assert_eq!(broken.status, SkillStatus::Broken);
+        assert!(broken
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "sensitive-path-redacted"));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_detail_includes_sources_duplicates_findings_and_safe_advanced_metadata() {
+        let db_path = temp_db_path("skill-library-detail");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_skill_library_fixture(&db_path);
+        let writer = list_skill_library_items_for_path(&db_path)
+            .expect("items should load")
+            .into_iter()
+            .find(|item| item.original_name == "writer")
+            .expect("writer item should exist");
+
+        let detail = get_skill_detail_for_path(&db_path, &writer.id).expect("detail should load");
+        assert_eq!(detail.item.id, writer.id);
+        assert_eq!(detail.what_it_does, writer.short_purpose);
+        assert!(detail.when_to_use.is_some());
+        assert_eq!(detail.how_to_use.as_deref(), writer.usage_text.as_deref());
+        assert_eq!(detail.source_summaries.len(), 2);
+        assert_eq!(detail.related_duplicate_sources.len(), 1);
+        assert!(detail
+            .safe_advanced_metadata_summary
+            .iter()
+            .any(|row| row.label == "去重来源数" && row.value == "2"));
+        assert!(detail
+            .findings
+            .iter()
+            .all(|finding| !finding.detail.contains("secret")));
+
+        let serialized =
+            serde_json::to_string(&detail).expect("detail should serialize to product JSON");
+        assert!(!serialized.contains("super-secret-token"));
+        assert!(!serialized.contains("/Users/example/secret"));
+
+        cleanup_db(db_path);
+    }
+
+    fn persist_skill_library_fixture(db_path: &PathBuf) {
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-skill-codex",
+                1,
+                codex_source(),
+                vec![
+                    PersistScanResourceInput {
+                        name: "SKILL.md".to_string(),
+                        resource_kind: "skill".to_string(),
+                        description: "路径或文件名匹配技能资源。".to_string(),
+                        primary_type: "file".to_string(),
+                        risk_level: "low".to_string(),
+                        boundary_labels: vec![
+                            "read-only".to_string(),
+                            "no-content-read".to_string(),
+                        ],
+                        relative_path: "skills/writer/SKILL.md".to_string(),
+                        display_path: "skills/writer/SKILL.md".to_string(),
+                        extension: Some("md".to_string()),
+                        entry_type: "file".to_string(),
+                        size_bytes: Some(58),
+                        modified_at_ms: Some(1_725_100_000_000),
+                        classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                        sensitive_path_redacted: false,
+                        risk_labels: vec!["metadata-only".to_string()],
+                    },
+                    PersistScanResourceInput {
+                        name: "SKILL.md".to_string(),
+                        resource_kind: "skill".to_string(),
+                        description: "路径或文件名匹配技能资源。".to_string(),
+                        primary_type: "file".to_string(),
+                        risk_level: "low".to_string(),
+                        boundary_labels: vec![
+                            "read-only".to_string(),
+                            "no-content-read".to_string(),
+                        ],
+                        relative_path: "plugins/cache/openai/skills/writer/SKILL.md".to_string(),
+                        display_path: "plugins/cache/openai/skills/writer/SKILL.md".to_string(),
+                        extension: Some("md".to_string()),
+                        entry_type: "file".to_string(),
+                        size_bytes: Some(64),
+                        modified_at_ms: Some(1_725_100_000_500),
+                        classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                        sensitive_path_redacted: false,
+                        risk_labels: vec!["metadata-only".to_string()],
+                    },
+                    PersistScanResourceInput {
+                        name: "[sensitive]".to_string(),
+                        resource_kind: "skill".to_string(),
+                        description: "路径或文件名匹配技能资源。".to_string(),
+                        primary_type: "file".to_string(),
+                        risk_level: "high".to_string(),
+                        boundary_labels: vec![
+                            "read-only".to_string(),
+                            "no-content-read".to_string(),
+                            "redacted".to_string(),
+                        ],
+                        relative_path: "[sensitive]/SKILL.md".to_string(),
+                        display_path: "[sensitive]/SKILL.md".to_string(),
+                        extension: Some("md".to_string()),
+                        entry_type: "file".to_string(),
+                        size_bytes: Some(72),
+                        modified_at_ms: Some(1_725_100_000_700),
+                        classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                        sensitive_path_redacted: true,
+                        risk_labels: vec![
+                            "metadata-only".to_string(),
+                            "sensitive-path-redacted".to_string(),
+                        ],
+                    },
+                ],
+            ),
+        )
+        .expect("codex skills should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-skill-project",
+                2,
+                project_source(),
+                vec![PersistScanResourceInput {
+                    name: "local-helper".to_string(),
+                    resource_kind: "skill".to_string(),
+                    description: "路径或文件名匹配技能资源。".to_string(),
+                    primary_type: "file".to_string(),
+                    risk_level: "low".to_string(),
+                    boundary_labels: vec!["read-only".to_string(), "no-content-read".to_string()],
+                    relative_path: "local-skills/local-helper/SKILL.md".to_string(),
+                    display_path: "local-skills/local-helper/SKILL.md".to_string(),
+                    extension: Some("md".to_string()),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(96),
+                    modified_at_ms: Some(1_725_100_002_000),
+                    classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                    sensitive_path_redacted: false,
+                    risk_labels: vec!["metadata-only".to_string()],
+                }],
+            ),
+        )
+        .expect("project skill should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-skill-unknown",
+                3,
+                unknown_source(),
+                vec![PersistScanResourceInput {
+                    name: "mystery".to_string(),
+                    resource_kind: "skill".to_string(),
+                    description: "路径或文件名匹配技能资源。".to_string(),
+                    primary_type: "file".to_string(),
+                    risk_level: "low".to_string(),
+                    boundary_labels: vec!["read-only".to_string(), "no-content-read".to_string()],
+                    relative_path: "mystery/SKILL.md".to_string(),
+                    display_path: "mystery/SKILL.md".to_string(),
+                    extension: Some("md".to_string()),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(48),
+                    modified_at_ms: Some(1_725_100_003_000),
+                    classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                    sensitive_path_redacted: false,
+                    risk_labels: vec!["metadata-only".to_string()],
+                }],
+            ),
+        )
+        .expect("unknown skill should persist");
+    }
+
+    fn skill_library_job(
+        job_id: &str,
+        sequence: u64,
+        source: PersistScanSourceInput,
+        resources: Vec<PersistScanResourceInput>,
+    ) -> PersistScanJobInput {
+        PersistScanJobInput {
+            id: job_id.to_string(),
+            status: "completed".to_string(),
+            profile_id: source.profile_id.clone(),
+            started_at_ms: 1_725_100_000_000 + sequence,
+            finished_at_ms: Some(1_725_100_000_000 + sequence * 1_000),
+            elapsed_ms: 1_000,
+            requested_by: "custom-directory-scan".to_string(),
+            total_entries: resources.len() as u64,
+            matched_resources: resources.len() as u64,
+            skipped_entries: 0,
+            error_count: 0,
+            cancelled: false,
+            summary_json: "{\"metadataOnly\":true,\"contentStored\":false,\"note\":\"super-secret-token must not appear outside this fixture helper\"}".to_string(),
+            source,
+            resources,
+            skips: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn codex_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-codex-skills".to_string()),
+            display_name: "Codex Skills".to_string(),
+            root_path: "/Users/example/.codex".to_string(),
+            root_display_path: "~/.codex".to_string(),
+            profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn project_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-project-skills".to_string()),
+            display_name: "Project Alpha".to_string(),
+            root_path: "/Users/example/project-alpha".to_string(),
+            root_display_path: "~/project-alpha".to_string(),
+            profile_id: "project-root".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: Some("Project Alpha".to_string()),
+        }
+    }
+
+    fn unknown_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-unknown-skills".to_string()),
+            display_name: "unknown".to_string(),
+            root_path: "/Users/example/unknown".to_string(),
+            root_display_path: "未记录".to_string(),
+            profile_id: "custom-folder".to_string(),
+            source_kind: "unknown".to_string(),
+            project_label: None,
+        }
     }
 
     fn sample_completed_job(job_id: &str, sequence: u64) -> PersistScanJobInput {

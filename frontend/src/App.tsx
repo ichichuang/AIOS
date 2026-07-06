@@ -40,6 +40,7 @@ import {
   type ScanSourceResourceMapEntry
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
+import { getSkillLibrarySummary, listSkillLibraryItems, mapSkillListItemToResource, type SkillLibrarySummary, type SkillListItem } from "./lib/skillLibrary";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
 import { getAdvancedSubviewParent } from "./lib/productShell";
 import { useModuleSwapMotion, useSelectedCardEmphasisMotion } from "./lib/useAiosMotion";
@@ -63,6 +64,10 @@ export default function App() {
   const [corpusError, setCorpusError] = useState<string | null>(null);
   const [corpusRefreshToken, setCorpusRefreshToken] = useState(0);
   const [firstRunOnboardingDismissed, setFirstRunOnboardingDismissedState] = useState(false);
+  const [skillLibrarySummary, setSkillLibrarySummary] = useState<SkillLibrarySummary | null>(null);
+  const [skillLibraryItems, setSkillLibraryItems] = useState<SkillListItem[]>([]);
+  const [skillLibraryLoading, setSkillLibraryLoading] = useState(false);
+  const [skillLibraryError, setSkillLibraryError] = useState<string | null>(null);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -121,6 +126,30 @@ export default function App() {
     };
   }, [corpusRefreshToken]);
 
+  useEffect(() => {
+    let active = true;
+    setSkillLibraryLoading(true);
+    Promise.all([getSkillLibrarySummary(), listSkillLibraryItems()])
+      .then(([summary, items]) => {
+        if (!active) return;
+        setSkillLibrarySummary(summary);
+        setSkillLibraryItems(items);
+        setSkillLibraryError(null);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setSkillLibrarySummary(null);
+        setSkillLibraryItems([]);
+        setSkillLibraryError(formatAsyncError(loadError));
+      })
+      .finally(() => {
+        if (active) setSkillLibraryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [corpusRefreshToken]);
+
   const legacySnapshotResources = useMemo(() => (inventory ? inventory.resources.map((resource) => markLegacySnapshotResource(resource, inventory.generatedAt)) : []), [inventory]);
   const corpusDataSource = useMemo(() => buildResourceDataSourceState(corpusSummary, legacySnapshotResources.length), [corpusSummary, legacySnapshotResources.length]);
   const legacySnapshotDataSource = useMemo(() => asLegacySnapshotDataSource(corpusDataSource), [corpusDataSource]);
@@ -158,7 +187,8 @@ export default function App() {
   }, [activeCorpusScope, corpusMode, corpusRefreshToken]);
 
   const activeResources = useMemo(() => getDefaultResourcesForDataSource(corpusDataSource, corpusResources), [corpusDataSource, corpusResources]);
-  const selectableResources = useMemo(() => [...activeResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources]);
+  const skillLibraryResources = useMemo(() => skillLibraryItems.map(mapSkillListItemToResource), [skillLibraryItems]);
+  const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, skillLibraryResources]);
   const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
   const displayById = useMemo(() => buildResourceDisplayMap(selectableResources), [selectableResources]);
   const skillCapabilityById = useMemo(
@@ -285,10 +315,18 @@ export default function App() {
           mode: "legacy-snapshot" as const
         }
       : defaultResourceCorpusState;
+  const skillLibraryState = {
+    available: skillLibrarySummary !== null,
+    error: skillLibraryError,
+    items: skillLibraryItems,
+    loading: skillLibraryLoading,
+    summary: skillLibrarySummary
+  };
   const moduleProps: AiosModuleProps = {
     allResources: activeResources,
     baseline: inventory.baseline,
     resourceCorpus: moduleResourceCorpusState,
+    skillLibrary: skillLibraryState,
     displayById,
     query: deferredQuery,
     resources: filteredResources,
@@ -301,6 +339,7 @@ export default function App() {
     onViewChange: handleViewChange,
     onQueryChange: handleQueryChange
   };
+  const shellShownCount = renderedView === "skills" && skillLibrarySummary ? skillLibrarySummary.counts.dedupedSkillCount : filteredResources.length;
 
   return (
     <AiosConsoleShell
@@ -316,8 +355,8 @@ export default function App() {
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
-      shownCount={filteredResources.length}
-      inspectorVisibleCount={filteredResources.length}
+      shownCount={shellShownCount}
+      inspectorVisibleCount={shellShownCount}
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}
       onQueryChange={handleQueryChange}

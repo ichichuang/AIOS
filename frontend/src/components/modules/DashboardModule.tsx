@@ -3,14 +3,16 @@ import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import { formatCount } from "../../i18n/zh-CN";
 import { homeCopy } from "../../lib/productShell";
+import { buildHomeSkillLibraryStats } from "../../lib/skillLibrary";
 import { AiosHeroPanel, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageCard } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 
-export function DashboardModule({ allResources, resourceCorpus, viewCounts, onViewChange }: AiosModuleProps) {
-  const attentionCount = allResources.filter((resource) => resource.risk !== "low" || resource.status === "warn" || resource.status === "missing" || resource.status === "unknown").length;
-  const latestScan = resourceCorpus.summary.latestSuccessfulScan ?? resourceCorpus.summary.latestScan;
-  const latestScanLabel = latestScan ? formatScanTime(latestScan.finishedAtMs ?? latestScan.startedAtMs) : "还没有查找记录";
-  const hasResults = resourceCorpus.summary.resourceCount > 0;
+export function DashboardModule({ allResources, resourceCorpus, skillLibrary, viewCounts, onViewChange }: AiosModuleProps) {
+  const legacyAttentionCount = allResources.filter((resource) => resource.risk !== "low" || resource.status === "warn" || resource.status === "missing" || resource.status === "unknown").length;
+  const homeSkillStats = buildHomeSkillLibraryStats(skillLibrary.summary, resourceCorpus.summary, viewCounts);
+  const attentionCount = homeSkillStats.usingProductSummary ? homeSkillStats.needsAttentionCount : legacyAttentionCount;
+  const latestScanLabel = homeSkillStats.latestScanLabel;
+  const hasResults = homeSkillStats.usingProductSummary ? skillLibrary.summary?.counts.totalSkillCandidates !== 0 || resourceCorpus.summary.resourceCount > 0 : resourceCorpus.summary.resourceCount > 0;
 
   return (
     <AiosModuleFrame
@@ -19,7 +21,7 @@ export function DashboardModule({ allResources, resourceCorpus, viewCounts, onVi
       view="dashboard"
       summary={homeCopy.summary}
       ariaLabel="AIOS Desktop 首页"
-      motionKey={`dashboard:${viewCounts.skills}:${viewCounts.mcp}:${attentionCount}`}
+      motionKey={`dashboard:${homeSkillStats.skillCount}:${viewCounts.mcp}:${attentionCount}`}
     >
       <AiosHeroPanel className="dashboard-hero">
         <Box className="dashboard-hero-copy">
@@ -41,7 +43,7 @@ export function DashboardModule({ allResources, resourceCorpus, viewCounts, onVi
         </Box>
         <Box className="dashboard-hero-status" aria-label="首页摘要">
           <Box className="dashboard-hero-stat">
-            <Typography component="strong">{formatCount(viewCounts.skills)}</Typography>
+            <Typography component="strong">{formatCount(homeSkillStats.skillCount)}</Typography>
             <Typography color="text.secondary" variant="body2">
               AI 技能
             </Typography>
@@ -69,7 +71,7 @@ export function DashboardModule({ allResources, resourceCorpus, viewCounts, onVi
             icon={null}
             purpose="已识别或可使用的 AI 技能线索。"
             selected={false}
-            technicalName={formatCount(viewCounts.skills)}
+            technicalName={formatCount(homeSkillStats.skillCount)}
             title="AI 技能"
           />
           <AiosUsageCard
@@ -111,13 +113,4 @@ export function DashboardModule({ allResources, resourceCorpus, viewCounts, onVi
       </AiosSection>
     </AiosModuleFrame>
   );
-}
-
-function formatScanTime(value: number | null | undefined): string {
-  if (!value || !Number.isFinite(value)) return "未记录时间";
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    hour12: false
-  }).format(new Date(value));
 }

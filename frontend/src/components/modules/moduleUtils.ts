@@ -4,6 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
 import type { ProjectResourceMapEntry, ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary, ResourceDataSourceState, ScanSourceResourceMapEntry } from "../../lib/resourceCorpus";
+import type { SkillLibraryModuleState } from "../../lib/skillLibrary";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, BaselineSummary, McpServerRecord, RiskLevel } from "../../types/inventory";
@@ -33,6 +34,7 @@ export interface AiosModuleProps {
   allResources: AiosResource[];
   baseline: BaselineSummary;
   resourceCorpus: ResourceCorpusModuleState;
+  skillLibrary: SkillLibraryModuleState;
   displayById: ReadonlyMap<string, ResourceDisplay>;
   query: string;
   resources: AiosResource[];
