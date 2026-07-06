@@ -2909,6 +2909,64 @@
   -webkit-line-clamp: 2;
 }
 
+.inspector-description.muted {
+  color: var(--aios-muted);
+}
+
+.skill-detail-inspector .inspector-description {
+  -webkit-line-clamp: 4;
+}
+
+.skill-detail-section {
+  min-width: 0;
+}
+
+.skill-detail-secondary-panel {
+  gap: 12px;
+}
+
+.skill-detail-reason-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.skill-detail-reason-list li {
+  min-width: 0;
+}
+
+.skill-detail-reason-list strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--aios-text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.skill-detail-source-list,
+.skill-detail-advanced-duplicates {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-detail-source-line {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-detail-source-line strong {
+  overflow: hidden;
+  color: var(--aios-text);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .inspector-primary-actions,
 .inspector-use-cases,
 .inspector-copy-actions {

@@ -40,7 +40,17 @@ import {
   type ScanSourceResourceMapEntry
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
-import { getSkillLibrarySummary, listSkillLibraryItems, mapSkillListItemToResource, type SkillLibrarySummary, type SkillListItem } from "./lib/skillLibrary";
+import {
+  getSkillDetail,
+  getSkillLibraryItemIdFromResource,
+  getSkillLibrarySummary,
+  listSkillLibraryItems,
+  mapSkillListItemToResource,
+  sanitizeSkillDetailLoadError,
+  type SkillDetailRuntimeState,
+  type SkillLibrarySummary,
+  type SkillListItem
+} from "./lib/skillLibrary";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
 import { getAdvancedSubviewParent } from "./lib/productShell";
 import { useModuleSwapMotion, useSelectedCardEmphasisMotion } from "./lib/useAiosMotion";
@@ -68,6 +78,7 @@ export default function App() {
   const [skillLibraryItems, setSkillLibraryItems] = useState<SkillListItem[]>([]);
   const [skillLibraryLoading, setSkillLibraryLoading] = useState(false);
   const [skillLibraryError, setSkillLibraryError] = useState<string | null>(null);
+  const [skillDetailState, setSkillDetailState] = useState<SkillDetailRuntimeState | null>(null);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -188,6 +199,7 @@ export default function App() {
 
   const activeResources = useMemo(() => getDefaultResourcesForDataSource(corpusDataSource, corpusResources), [corpusDataSource, corpusResources]);
   const skillLibraryResources = useMemo(() => skillLibraryItems.map(mapSkillListItemToResource), [skillLibraryItems]);
+  const skillLibraryItemById = useMemo(() => new Map(skillLibraryItems.map((item) => [item.id, item])), [skillLibraryItems]);
   const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, skillLibraryResources]);
   const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
   const displayById = useMemo(() => buildResourceDisplayMap(selectableResources), [selectableResources]);
@@ -220,6 +232,7 @@ export default function App() {
     markAiosPerf("module-nav-request", { from: activeView, to: view });
     setActiveView(view);
     setSelection(null);
+    setSkillDetailState(null);
     startRouteTransition(() => {
       setRenderedView(view);
     });
@@ -233,10 +246,44 @@ export default function App() {
   const handleScopeChange = useCallback((scope: ResourceCorpusScope) => {
     setActiveCorpusScope(scope);
     setSelection(null);
+    setSkillDetailState(null);
   }, []);
 
   const selectResource = useCallback((resource: AiosResource, context?: ResourceSelectionContext) => {
     setSelection({ resource, context });
+    const productSkillId = getSkillLibraryItemIdFromResource(resource);
+    if (productSkillId) {
+      const fallbackItem = context?.skillListItem ?? skillLibraryItemById.get(productSkillId) ?? null;
+      setSkillDetailState({
+        resourceId: resource.id,
+        skillId: productSkillId,
+        fallbackItem,
+        detail: null,
+        loading: true,
+        error: null
+      });
+      getSkillDetail(productSkillId)
+        .then((detail) => {
+          setSkillDetailState((current) => {
+            if (!current || current.resourceId !== resource.id || current.skillId !== productSkillId) return current;
+            return { ...current, detail, fallbackItem: current.fallbackItem ?? fallbackItem, loading: false, error: null };
+          });
+        })
+        .catch((detailError: unknown) => {
+          setSkillDetailState((current) => {
+            if (!current || current.resourceId !== resource.id || current.skillId !== productSkillId) return current;
+            return {
+              ...current,
+              detail: null,
+              fallbackItem: current.fallbackItem ?? fallbackItem,
+              loading: false,
+              error: sanitizeSkillDetailLoadError(detailError)
+            };
+          });
+        });
+      return;
+    }
+    setSkillDetailState(null);
     if (!isDynamicCorpusResource(resource) || resource.metadata?.corpusDetailLoaded === true) return;
     const resourceId = getDynamicCorpusResourceId(resource);
     if (!resourceId) return;
@@ -248,11 +295,12 @@ export default function App() {
         });
       })
       .catch((detailError: unknown) => setCorpusError(formatAsyncError(detailError)));
-  }, []);
+  }, [skillLibraryItemById]);
 
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
   const clearSelection = useCallback(() => {
     setSelection(null);
+    setSkillDetailState(null);
   }, []);
 
   useEffect(() => {
@@ -267,6 +315,7 @@ export default function App() {
     if (!selection) return;
     if (!selectableResources.some((resource) => resource.id === selection.resource.id)) {
       setSelection(null);
+      setSkillDetailState(null);
     }
   }, [selectableResources, selection]);
 
@@ -355,6 +404,7 @@ export default function App() {
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
+      skillDetailState={skillDetailState}
       shownCount={shellShownCount}
       inspectorVisibleCount={shellShownCount}
       viewCounts={moduleProps.viewCounts}

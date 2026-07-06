@@ -4,6 +4,7 @@ import { getResourceDisplay, translateSafetyNote, translateTokenReason } from ".
 import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
 import { getResourceInspectorProvenanceSummary } from "../../lib/resourceCorpus";
+import { getSkillLibraryItemIdFromResource, type SkillDetailRuntimeState } from "../../lib/skillLibrary";
 import { getSkillCapabilityConfidenceLabel, type SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import {
   buildSkillDisplayEnrichment,
@@ -17,19 +18,34 @@ import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import type { AiosResource, McpServerRecord } from "../../types/inventory";
 import { PromptCopyButton } from "../PromptCopyButton";
 import { AiosInspectorEmptyGuide, AiosInspectorSection, AiosInspectorUsagePanel, AiosTechnicalDetails, type AiosTechnicalDetailRow } from "../ui/AiosUiPrimitives";
+import { SkillDetailInspector } from "./SkillDetailInspector";
 
 interface ResourceInspectorProps {
   activeView: ResourceView;
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  skillDetailState: SkillDetailRuntimeState | null;
   visibleCount: number;
 }
 
-export const ResourceInspector = memo(function ResourceInspector({ activeView, resource, skillIdentity, skillCapability, visibleCount }: ResourceInspectorProps) {
+export const ResourceInspector = memo(function ResourceInspector({ activeView, resource, skillIdentity, skillCapability, skillDetailState, visibleCount }: ResourceInspectorProps) {
   if (!resource) {
     const guide = getEmptyInspectorGuide(activeView, visibleCount);
     return <AiosInspectorEmptyGuide badge={guide.badge} hints={guide.hints} summary={guide.summary} title={guide.title} />;
+  }
+
+  const productSkillId = getSkillLibraryItemIdFromResource(resource);
+  if (productSkillId) {
+    const matchingDetailState = skillDetailState?.resourceId === resource.id && skillDetailState.skillId === productSkillId ? skillDetailState : null;
+    return (
+      <SkillDetailInspector
+        detail={matchingDetailState?.detail ?? null}
+        error={matchingDetailState?.error ?? null}
+        fallbackItem={matchingDetailState?.fallbackItem ?? null}
+        loading={matchingDetailState?.loading ?? false}
+      />
+    );
   }
 
   const display = getResourceDisplay(resource);

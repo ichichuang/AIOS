@@ -1685,7 +1685,7 @@ fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
         available_in_tools,
         usage_text,
         attention_reasons,
-        primary_path_hint: primary.primary_path_hint.clone(),
+        primary_path_hint: safe_product_path_hint(&primary.primary_path_hint),
         source_count: group.candidates.len() as u64,
         updated_at: primary
             .resource
@@ -1746,8 +1746,12 @@ fn skill_source_summary(candidate: &SkillCandidate, duplicate: bool) -> SkillSou
         source_label: candidate.source_label.clone(),
         source_kind_label: candidate.source_kind_label.clone(),
         available_in_tools: candidate.available_in_tools.clone(),
-        path_hint: candidate.primary_path_hint.clone(),
-        root_path_hint: candidate.resource.root_display_path.clone(),
+        path_hint: safe_product_path_hint(&candidate.primary_path_hint),
+        root_path_hint: candidate
+            .resource
+            .root_display_path
+            .as_deref()
+            .map(safe_product_path_hint),
         last_seen_at: candidate
             .resource
             .scan_job_finished_at_ms
@@ -1911,7 +1915,7 @@ fn finding_attention_reasons(candidate: &SkillCandidate) -> Vec<SkillAttentionRe
             skill_attention_reason(
                 &finding.finding_kind,
                 &finding_label(&finding.finding_kind),
-                &finding.message,
+                &safe_finding_detail(&finding.message),
                 &finding.severity,
             )
         })
@@ -2195,6 +2199,70 @@ fn safe_skill_path_hint(resource: &ResourceCorpusResource) -> String {
         );
     }
     path.to_string()
+}
+
+fn safe_product_path_hint(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "未记录".to_string();
+    }
+
+    trimmed
+        .replace('\\', "/")
+        .split('/')
+        .map(|segment| {
+            if is_secret_like_product_segment(segment) {
+                "[sensitive]"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn safe_finding_detail(value: &str) -> String {
+    if contains_secret_like_product_text(value) {
+        "已隐藏敏感内容。".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn contains_secret_like_product_text(value: &str) -> bool {
+    value
+        .replace('\\', "/")
+        .split('/')
+        .any(is_secret_like_product_segment)
+        || value
+            .split(|character: char| {
+                character.is_whitespace()
+                    || matches!(
+                        character,
+                        '"' | '\'' | '=' | ':' | ';' | ',' | '{' | '}' | '[' | ']' | '(' | ')'
+                    )
+            })
+            .any(is_secret_like_product_segment)
+}
+
+fn is_secret_like_product_segment(segment: &str) -> bool {
+    let lower = segment.trim().to_ascii_lowercase();
+    if lower.is_empty() || lower == "[sensitive]" {
+        return false;
+    }
+    lower == ".env"
+        || lower.ends_with(".env")
+        || lower.contains("secret")
+        || lower.contains("token")
+        || lower.contains("credential")
+        || lower.contains("password")
+        || lower.contains("passwd")
+        || lower.contains("private_key")
+        || lower.contains("api_key")
+        || lower.contains("apikey")
+        || lower.contains("auth")
+        || lower.contains("session")
+        || lower.contains("cookie")
 }
 
 fn skill_is_unchecked(resource: &ResourceCorpusResource) -> bool {
@@ -4500,6 +4568,60 @@ mod tests {
             serde_json::to_string(&detail).expect("detail should serialize to product JSON");
         assert!(!serialized.contains("super-secret-token"));
         assert!(!serialized.contains("/Users/example/secret"));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_detail_redacts_secret_like_finding_text_and_root_hints() {
+        let db_path = temp_db_path("skill-library-detail-safe-output");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_skill_library_fixture(&db_path);
+        let broken = list_skill_library_items_for_path(&db_path)
+            .expect("items should load")
+            .into_iter()
+            .find(|item| item.original_name == "[sensitive]")
+            .expect("sensitive item should exist");
+
+        let conn = rusqlite::Connection::open(&db_path).expect("db should open");
+        conn.execute(
+            "UPDATE scan_sources
+            SET root_display_path = '/Users/example/secret-token-root'
+            WHERE id = 'source-codex-skills'",
+            [],
+        )
+        .expect("source root should update");
+        conn.execute(
+            "UPDATE resource_findings
+            SET message = 'token=super-secret-token at /Users/example/secret-token-root/.env',
+                safe_detail_json = '{\"token\":\"super-secret-token\",\"path\":\"/Users/example/secret-token-root/.env\"}'
+            WHERE finding_kind = 'sensitive-path-redacted'",
+            [],
+        )
+        .expect("finding should update");
+        drop(conn);
+
+        let detail =
+            get_skill_detail_for_path(&db_path, &broken.id).expect("detail should still load");
+        let serialized =
+            serde_json::to_string(&detail).expect("detail should serialize to product JSON");
+
+        assert!(detail.source_summaries.iter().all(|source| !source
+            .path_hint
+            .contains("secret-token-root")
+            && !source
+                .root_path_hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("secret-token-root")));
+        assert!(detail
+            .findings
+            .iter()
+            .all(|finding| finding.detail == "已隐藏敏感内容。"));
+        assert!(!serialized.contains("super-secret-token"));
+        assert!(!serialized.contains("token="));
+        assert!(!serialized.contains("/Users/example/secret-token-root"));
+        assert!(serialized.contains("[sensitive]"));
 
         cleanup_db(db_path);
     }

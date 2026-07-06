@@ -338,13 +338,13 @@ function ProductSkillRowComponent({ ariaAttributes, index, style, rows, selected
   ];
 
   function handleSelect() {
-    onSelect(resource);
+    onSelect(resource, { skillListItem: item });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    onSelect(resource);
+    onSelect(resource, { skillListItem: item });
   }
 
   return (

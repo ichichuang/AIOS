@@ -85,6 +85,42 @@ export interface SkillDetail extends SkillListItem {
   findings: SkillAttentionReason[];
 }
 
+export type SkillDetailViewMode = "ready" | "loading" | "unavailable";
+
+export interface SkillDetailRuntimeState {
+  resourceId: string;
+  skillId: string;
+  fallbackItem: SkillListItem | null;
+  detail: SkillDetail | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface SkillDetailViewInput {
+  detail: SkillDetail | null;
+  fallbackItem: SkillListItem | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface SkillDetailViewModel {
+  mode: SkillDetailViewMode;
+  title: string;
+  originalName: string;
+  whatItDoes: string;
+  whenToUse: string;
+  availableInToolsText: string;
+  howToUse: string;
+  sourceText: string;
+  statusText: string;
+  usageKnown: boolean;
+  attentionReasons: SkillAttentionReason[];
+  sourceSummaries: SkillSourceSummary[];
+  duplicateSources: SkillSourceSummary[];
+  advancedRows: SkillAdvancedMetadataRow[];
+  notice: string | null;
+}
+
 export interface SkillLibraryModuleState {
   summary: SkillLibrarySummary | null;
   items: SkillListItem[];
@@ -118,6 +154,48 @@ export async function getSkillDetail(skillId: string): Promise<SkillDetail> {
     throw new Error("当前页面不在 Tauri 桌面运行时中，无法读取技能详情。");
   }
   return invoke<SkillDetail>("get_skill_detail", { skillId });
+}
+
+export function getSkillLibraryItemIdFromResource(resource: AiosResource): string | null {
+  if (resource.metadata?.corpusSource !== "skill-library-product") return null;
+  const itemId = resource.metadata.skillLibraryItemId;
+  return typeof itemId === "string" && itemId.trim().length > 0 ? itemId : null;
+}
+
+export function sanitizeSkillDetailLoadError(_error: unknown): string {
+  return "无法读取技能详情。请在高级信息里查看来源。";
+}
+
+export function buildSkillDetailViewModel(input: SkillDetailViewInput): SkillDetailViewModel {
+  const item = input.detail ?? input.fallbackItem;
+  const mode: SkillDetailViewMode = input.detail ? "ready" : input.loading ? "loading" : "unavailable";
+  const usageText = input.detail
+    ? input.detail.howToUse ?? input.detail.usageSummary.usageText ?? fallbackSkillUsageText
+    : mode === "loading"
+      ? "正在读取使用方法。"
+      : fallbackSkillUsageText;
+  const usageKnown = input.detail?.usageSummary.usageKnown ?? false;
+  const availableInTools = input.detail?.usageSummary.availableInTools ?? item?.availableInTools ?? [];
+  const attentionReasons = dedupeSkillAttentionReasons([...(item?.attentionReasons ?? []), ...(input.detail?.findings ?? [])]);
+  const title = item?.displayName?.trim() || item?.originalName?.trim() || "未命名技能";
+
+  return {
+    mode,
+    title,
+    originalName: item?.originalName?.trim() || title,
+    whatItDoes: input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || "暂时无法判断它能做什么。请在高级信息里查看来源。",
+    whenToUse: input.detail?.whenToUse?.trim() || (mode === "loading" ? "正在读取适用场景。" : "暂时无法判断适合什么时候用。请在高级信息里查看来源。"),
+    availableInToolsText: formatSkillTools(availableInTools),
+    howToUse: usageText?.trim() || fallbackSkillUsageText,
+    sourceText: item?.sourceLabel?.trim() || "来源不明",
+    statusText: item?.status ? skillStatusLabels[item.status] : "未检查",
+    usageKnown,
+    attentionReasons,
+    sourceSummaries: input.detail?.sourceSummaries ?? [],
+    duplicateSources: input.detail?.relatedDuplicateSources ?? [],
+    advancedRows: input.detail?.safeAdvancedMetadataSummary ?? [],
+    notice: getSkillDetailNotice(mode, input.error)
+  };
 }
 
 export function buildHomeSkillLibraryStats(
@@ -226,6 +304,27 @@ function skillItemSearchText(item: SkillListItem): string {
   ]
     .join(" ")
     .toLowerCase();
+}
+
+function formatSkillTools(tools: readonly string[]): string {
+  const visible = tools.filter((tool) => tool && tool !== "Unknown");
+  return visible.length > 0 ? visible.join("、") : "暂时无法判断";
+}
+
+function dedupeSkillAttentionReasons(reasons: readonly SkillAttentionReason[]): SkillAttentionReason[] {
+  const seen = new Set<string>();
+  return reasons.filter((reason) => {
+    const key = reason.code || `${reason.label}:${reason.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getSkillDetailNotice(mode: SkillDetailViewMode, error: string | null): string | null {
+  if (mode === "loading") return "正在读取 AIOS Desktop 已保存的技能基本信息。";
+  if (mode === "unavailable") return error ?? "暂时无法读取完整技能详情。请在高级信息里查看来源。";
+  return null;
 }
 
 function buildUsagePrompts(item: SkillListItem, usageText: string): UsagePrompt[] {

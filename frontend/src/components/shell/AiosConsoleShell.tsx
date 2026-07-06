@@ -4,6 +4,7 @@ import { AiosInventory, AiosResource } from "../../types/inventory";
 import type { ResourceView } from "../../lib/filtering";
 import { isAdvancedView } from "../../lib/productShell";
 import { getCorpusSourceLabel, type ResourceCorpusScope, type ResourceCorpusSourceMode, type ResourceCorpusSummary } from "../../lib/resourceCorpus";
+import type { SkillDetailRuntimeState } from "../../lib/skillLibrary";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { AiosLayoutProvider, useAiosLayoutMetrics } from "../../lib/useAiosLayoutMetrics";
@@ -26,6 +27,7 @@ interface AiosConsoleShellProps {
   selectedResource: AiosResource | null;
   selectedSkillIdentity: SkillIdentityRow | null;
   selectedSkillCapability: SkillCapabilityClassification | null;
+  skillDetailState: SkillDetailRuntimeState | null;
   shownCount: number;
   inspectorVisibleCount?: number;
   viewCounts: Record<ResourceView, number>;
@@ -49,6 +51,7 @@ export function AiosConsoleShell({
   selectedResource,
   selectedSkillIdentity,
   selectedSkillCapability,
+  skillDetailState,
   shownCount,
   inspectorVisibleCount,
   viewCounts,
@@ -98,6 +101,7 @@ export function AiosConsoleShell({
             resource={selectedResource}
             skillIdentity={selectedSkillIdentity}
             skillCapability={selectedSkillCapability}
+            skillDetailState={skillDetailState}
             visibleCount={inspectorVisibleCount ?? shownCount}
             onMobileClose={onClearSelection}
           />
