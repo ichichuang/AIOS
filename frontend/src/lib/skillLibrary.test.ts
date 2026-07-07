@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildSkillDetailViewModel,
   buildHomeSkillLibraryStats,
   fallbackSkillUsageText,
+  filterSkillLibraryItems,
   getSkillDetail,
   getSkillLibraryItemIdFromResource,
   getSkillLibrarySummary,
@@ -58,6 +60,7 @@ assert.equal(homeStats.skillCount, 4);
 assert.equal(homeStats.needsAttentionCount, 3);
 assert.ok(homeStats.latestScanLabel.includes("2024"));
 assert.equal(homeStats.usingProductSummary, true);
+assert.notEqual(homeStats.skillCount, homeStats.viewCounts.skills, "product summary count must win over loaded or filtered view counts");
 
 const fallbackHomeStats = buildHomeSkillLibraryStats(null, fallbackResourceCorpusSummary, {
   ...homeStats.viewCounts,
@@ -67,6 +70,7 @@ assert.equal(fallbackHomeStats.skillCount, 2);
 assert.equal(fallbackHomeStats.needsAttentionCount, 0);
 assert.equal(fallbackHomeStats.latestScanLabel, "还没有查找记录");
 assert.equal(fallbackHomeStats.usingProductSummary, false);
+assert.notEqual(fallbackHomeStats.skillCount, productSummary.counts.dedupedSkillCount, "non-Tauri fallback must not fake authoritative product totals");
 
 const item: SkillListItem = {
   id: "skill:writer",
@@ -105,6 +109,35 @@ assert.equal(mapped.prompts[0]?.target, "codex");
 assert.match(mapped.prompts[0]?.prompt ?? "", /\$writer/);
 assert.equal(mapped.paths[0], "~/.codex/skills/writer/SKILL.md");
 assert.equal(getSkillLibraryItemIdFromResource(mapped), "skill:writer");
+
+const sourceUnknownItem: SkillListItem = {
+  ...item,
+  id: "skill:mystery",
+  displayName: "mystery",
+  originalName: "mystery",
+  shortPurpose: "暂时无法判断用途。请在高级信息里查看来源。",
+  status: "sourceUnknown",
+  sourceLabel: "来源不明",
+  sourceKindLabel: "来源不明",
+  availableInTools: ["Unknown"],
+  usageText: null,
+  attentionReasons: [
+    {
+      code: "source-unknown",
+      label: "来源不明",
+      detail: "AIOS Desktop 还不能判断这个技能来自哪个清楚来源。",
+      severity: "medium"
+    }
+  ],
+  primaryPathHint: "[sensitive]/SKILL.md",
+  sourceCount: 1
+};
+const mappedUnknown = mapSkillListItemToResource(sourceUnknownItem);
+assert.equal(mappedUnknown.zhStatus, "来源不明");
+assert.equal(mappedUnknown.zhCategory, "来源不明 / 技能");
+assert.equal(mappedUnknown.metadata?.sourceLabel, "来源不明");
+assert.equal(mappedUnknown.metadata?.usageText, fallbackSkillUsageText);
+assert.deepEqual(mappedUnknown.prompts, [], "unknown usage must not create copyable invocation prompts");
 
 const detail: SkillDetail = {
   ...item,
@@ -152,6 +185,17 @@ assert.equal(detailModel.sourceText, "Codex");
 assert.equal(detailModel.statusText, "重复");
 assert.equal(detailModel.advancedRows[0]?.label, "本地记录边界");
 
+const detailOnlyModel = buildSkillDetailViewModel({
+  detail,
+  error: null,
+  fallbackItem: null,
+  loading: false
+});
+assert.equal(detailOnlyModel.mode, "ready");
+assert.equal(detailOnlyModel.title, "writer");
+assert.equal(detailOnlyModel.howToUse, "在 Codex 中输入 `$writer`。");
+assert.equal(detailOnlyModel.sourceSummaries.length, 1);
+
 const fallbackDetailModel = buildSkillDetailViewModel({
   detail: null,
   error: sanitizeSkillDetailLoadError(new Error("/Users/example/secret-token-root token=super-secret-token")),
@@ -166,4 +210,41 @@ assert(!JSON.stringify(fallbackDetailModel).includes("/Users/example"));
 assert(!JSON.stringify(fallbackDetailModel).includes("super-secret-token"));
 assert(!Object.keys(detailModel).includes("visibleCount"));
 
+const searchableItems: SkillListItem[] = [
+  item,
+  sourceUnknownItem,
+  {
+    ...item,
+    id: "skill:project-helper",
+    displayName: "project-helper",
+    originalName: "project-helper",
+    shortPurpose: "用于项目内技能整理。",
+    status: "available",
+    sourceLabel: "项目来源",
+    sourceKindLabel: "项目来源",
+    availableInTools: ["Unknown"],
+    usageText: fallbackSkillUsageText,
+    attentionReasons: [],
+    primaryPathHint: "~/workspace/project-helper/SKILL.md",
+    sourceCount: 1
+  }
+];
+const filteredBySource = filterSkillLibraryItems(searchableItems, "来源不明");
+assert.deepEqual(filteredBySource.map((row) => row.id), ["skill:mystery"]);
+assert.equal(productSummary.counts.dedupedSkillCount, 4, "product totals remain separate from search result length");
+assert.equal(filteredBySource.length, 1);
+
+const ordinarySurfaceText = [
+  readFrontendFile("components/modules/DashboardModule.tsx"),
+  readFrontendFile("components/modules/SkillsModule.tsx"),
+  readFrontendFile("components/inspector/SkillDetailInspector.tsx")
+].join("\n");
+for (const forbidden of ["resource corpus", "SQLite state", "raw scan diagnostics", "模块切换", "注册表", "运行时视图"]) {
+  assert(!ordinarySurfaceText.includes(forbidden), `ordinary Home/Skills skill surfaces must not expose ${forbidden}`);
+}
+
 console.log("skillLibrary client tests passed");
+
+function readFrontendFile(relativePath: string): string {
+  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}

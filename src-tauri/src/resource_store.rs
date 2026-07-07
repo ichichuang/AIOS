@@ -1961,16 +1961,16 @@ fn finding_label(kind: &str) -> String {
 
 fn skill_original_name(resource: &ResourceCorpusResource) -> String {
     for value in [
-        resource.relative_path.as_deref(),
         resource.display_path.as_deref(),
+        resource.relative_path.as_deref(),
     ] {
         if let Some(name) = skill_name_from_manifest_path(value) {
-            return name;
+            return safe_skill_name(&name);
         }
     }
     let name = resource.name.trim();
     if !name.is_empty() && !is_generic_skill_file_name(name) {
-        return name.to_string();
+        return safe_skill_name(name);
     }
     "未命名技能".to_string()
 }
@@ -1987,7 +1987,10 @@ fn skill_identity_key(resource: &ResourceCorpusResource, original_name: &str) ->
     if !original_name.is_empty() && original_name != "未命名技能" {
         return format!("name:{}", normalize_skill_name(original_name));
     }
-    format!("stable-key:{}", resource.stable_key.to_lowercase())
+    format!(
+        "stable-key:{}",
+        safe_product_path_hint(&resource.stable_key).to_lowercase()
+    )
 }
 
 fn skill_name_from_manifest_path(value: Option<&str>) -> Option<String> {
@@ -2028,6 +2031,14 @@ fn normalize_skill_name(value: &str) -> String {
         .replace('\\', "/")
         .trim_matches('/')
         .to_ascii_lowercase()
+}
+
+fn safe_skill_name(value: &str) -> String {
+    if contains_secret_like_product_text(value) {
+        "[sensitive]".to_string()
+    } else {
+        value.trim().to_string()
+    }
 }
 
 fn skill_display_name(original_name: &str) -> String {
@@ -2222,11 +2233,19 @@ fn safe_product_path_hint(value: &str) -> String {
 }
 
 fn safe_finding_detail(value: &str) -> String {
-    if contains_secret_like_product_text(value) {
+    if contains_secret_like_product_text(value) || contains_raw_log_hint(value) {
         "已隐藏敏感内容。".to_string()
     } else {
         value.to_string()
     }
+}
+
+fn contains_raw_log_hint(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("raw log")
+        || lower.contains("stdout")
+        || lower.contains("stderr")
+        || lower.contains("stack trace")
 }
 
 fn contains_secret_like_product_text(value: &str) -> bool {
@@ -4626,6 +4645,250 @@ mod tests {
         cleanup_db(db_path);
     }
 
+    #[test]
+    fn skill_library_fixture_scale_counts_extra_duplicate_sources_not_duplicate_groups() {
+        let db_path = temp_db_path("skill-library-scale-counts");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_large_skill_library_fixture(&db_path);
+
+        let summary =
+            get_skill_library_summary_for_path(&db_path).expect("skill summary should load");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+
+        // P1C duplicate_count counts extra duplicate sources, not duplicate groups.
+        // Three duplicate groups have 2 + 1 + 1 extra sources, so duplicate_count is 4.
+        assert_eq!(summary.counts.total_skill_candidates, 210);
+        assert_eq!(summary.counts.deduped_skill_count, 206);
+        assert_eq!(summary.counts.available_skill_count, 191);
+        assert_eq!(summary.counts.needs_attention_count, 15);
+        assert_eq!(summary.counts.duplicate_count, 4);
+        assert_eq!(summary.counts.broken_count, 4);
+        assert_eq!(summary.counts.source_unknown_count, 5);
+        assert_eq!(summary.counts.unchecked_count, 3);
+        assert_eq!(items.len() as u64, summary.counts.deduped_skill_count);
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status == SkillStatus::Available)
+                .count() as u64,
+            summary.counts.available_skill_count
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status != SkillStatus::Available)
+                .count() as u64,
+            summary.counts.needs_attention_count
+        );
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.source_count.saturating_sub(1))
+                .sum::<u64>(),
+            summary.counts.duplicate_count
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status == SkillStatus::Duplicate)
+                .count(),
+            3
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status == SkillStatus::SourceUnknown)
+                .count(),
+            5
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status == SkillStatus::Broken)
+                .count(),
+            4
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.status == SkillStatus::Unchecked)
+                .count(),
+            3
+        );
+        assert!(
+            items
+                .iter()
+                .all(|item| !item.original_name.starts_with("unknown-local-skill-like")),
+            "unknown-local-resource rows must not be promoted into the product skill list"
+        );
+
+        let manifest_duplicate = items
+            .iter()
+            .find(|item| item.original_name == "duplicate-manifest")
+            .expect("manifest duplicate group should exist");
+        assert_eq!(manifest_duplicate.status, SkillStatus::Duplicate);
+        assert_eq!(manifest_duplicate.source_count, 3);
+
+        let canonical_duplicate = items
+            .iter()
+            .find(|item| item.original_name == "canonical-dupe")
+            .expect("canonical display path duplicate group should exist");
+        assert_eq!(canonical_duplicate.status, SkillStatus::Duplicate);
+        assert_eq!(canonical_duplicate.source_count, 2);
+
+        let normalized_name_duplicate = items
+            .iter()
+            .find(|item| item.original_name.eq_ignore_ascii_case("name based skill"))
+            .expect("normalized name duplicate group should exist");
+        assert_eq!(normalized_name_duplicate.status, SkillStatus::Duplicate);
+        assert_eq!(normalized_name_duplicate.source_count, 2);
+
+        let stable_key_item = items
+            .iter()
+            .find(|item| item.original_name == "stable-key-update")
+            .expect("stable key update should keep one product item");
+        assert_eq!(stable_key_item.status, SkillStatus::Available);
+        assert_eq!(stable_key_item.source_count, 1);
+        assert_eq!(
+            stable_key_item.short_purpose,
+            "updated stable key update verifier"
+        );
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_summary_matches_full_product_list_not_corpus_pages_or_filters() {
+        let db_path = temp_db_path("skill-library-scale-summary-list-match");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_large_skill_library_fixture(&db_path);
+
+        let first_corpus_page = list_resources_by_scope_for_path(
+            &db_path,
+            ResourceCorpusQuery {
+                scope_kind: None,
+                scope_id: None,
+                project_label: None,
+                scan_source_id: None,
+                resource_kind: Some("skill".to_string()),
+                limit: Some(5),
+                offset: Some(0),
+            },
+        )
+        .expect("paged corpus resources should load");
+        assert_eq!(first_corpus_page.len(), 5);
+
+        let summary =
+            get_skill_library_summary_for_path(&db_path).expect("skill summary should load");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        let filtered_available = items
+            .iter()
+            .filter(|item| item.status == SkillStatus::Available)
+            .collect::<Vec<_>>();
+
+        assert_eq!(summary.counts.deduped_skill_count, items.len() as u64);
+        assert_eq!(
+            summary.counts.available_skill_count,
+            filtered_available.len() as u64
+        );
+        assert_eq!(summary.counts.total_skill_candidates, 210);
+        assert_eq!(
+            first_corpus_page.len() as u64,
+            5,
+            "corpus paging must not define product summary counts"
+        );
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_detail_for_scale_duplicate_includes_safe_duplicate_and_source_summaries() {
+        let db_path = temp_db_path("skill-library-scale-detail");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_large_skill_library_fixture(&db_path);
+
+        let duplicate = list_skill_library_items_for_path(&db_path)
+            .expect("items should load")
+            .into_iter()
+            .find(|item| item.original_name == "canonical-dupe")
+            .expect("canonical duplicate should exist");
+        let detail =
+            get_skill_detail_for_path(&db_path, &duplicate.id).expect("detail should load");
+
+        assert_eq!(detail.item.status, SkillStatus::Duplicate);
+        assert_eq!(detail.source_summaries.len(), 2);
+        assert_eq!(detail.related_duplicate_sources.len(), 1);
+        assert!(detail
+            .source_summaries
+            .iter()
+            .all(|source| !source.path_hint.contains("/Users/example")));
+        assert!(detail
+            .source_summaries
+            .iter()
+            .flat_map(|source| [
+                source.source_label.as_str(),
+                source.source_kind_label.as_str()
+            ])
+            .all(|label| matches!(
+                label,
+                "Codex"
+                    | "Claude"
+                    | "Agents"
+                    | "项目来源"
+                    | "手动添加"
+                    | "全局来源"
+                    | "来源不明"
+                    | "多来源"
+                    | "本地共享"
+                    | "插件"
+            )));
+
+        let serialized =
+            serde_json::to_string(&detail).expect("detail should serialize to product JSON");
+        assert_no_large_fixture_secrets(&serialized);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_product_output_redacts_secret_like_segments_env_values_and_raw_logs() {
+        let db_path = temp_db_path("skill-library-scale-redaction");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_large_skill_library_fixture(&db_path);
+
+        let summary =
+            get_skill_library_summary_for_path(&db_path).expect("skill summary should load");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        let sensitive_item = items
+            .iter()
+            .find(|item| {
+                item.status == SkillStatus::Broken && item.primary_path_hint.contains("[sensitive]")
+            })
+            .expect("sensitive broken item should exist");
+        let detail =
+            get_skill_detail_for_path(&db_path, &sensitive_item.id).expect("detail should load");
+
+        assert_eq!(sensitive_item.original_name, "[sensitive]");
+        assert!(detail
+            .safe_advanced_metadata_summary
+            .iter()
+            .all(|row| !row.value.contains("super-secret-token")));
+        assert!(detail
+            .findings
+            .iter()
+            .all(|finding| finding.detail == "已隐藏敏感内容。"));
+
+        let serialized_summary = serde_json::to_string(&summary).expect("summary should serialize");
+        let serialized_items = serde_json::to_string(&items).expect("items should serialize");
+        let serialized_detail = serde_json::to_string(&detail).expect("detail should serialize");
+
+        assert_no_large_fixture_secrets(&serialized_summary);
+        assert_no_large_fixture_secrets(&serialized_items);
+        assert_no_large_fixture_secrets(&serialized_detail);
+
+        cleanup_db(db_path);
+    }
+
     fn persist_skill_library_fixture(db_path: &PathBuf) {
         persist_scan_job_for_path(
             db_path,
@@ -4758,18 +5021,368 @@ mod tests {
         .expect("unknown skill should persist");
     }
 
+    fn persist_large_skill_library_fixture(db_path: &PathBuf) {
+        let mut codex_resources = Vec::new();
+        for index in 0..180 {
+            codex_resources.push(skill_resource(
+                "SKILL.md",
+                "skill",
+                &format!("skills/codex-available-{index:03}/SKILL.md"),
+                &format!("skills/codex-available-{index:03}/SKILL.md"),
+                "usable Codex skill metadata",
+                "low",
+                1_725_200_000_000 + index,
+                false,
+                vec!["metadata-only"],
+            ));
+        }
+        codex_resources.push(skill_resource(
+            "SKILL.md",
+            "skill",
+            "skills/duplicate-manifest/SKILL.md",
+            "skills/duplicate-manifest/SKILL.md",
+            "manifest duplicate skill metadata",
+            "low",
+            1_725_200_001_000,
+            false,
+            vec!["metadata-only"],
+        ));
+        codex_resources.push(skill_resource(
+            "SKILL.md",
+            "skill",
+            "aliases/temporary-canonical-name/SKILL.md",
+            "skills/canonical-dupe/SKILL.md",
+            "canonical path duplicate skill metadata",
+            "low",
+            1_725_200_001_100,
+            false,
+            vec!["metadata-only"],
+        ));
+        codex_resources.push(skill_resource(
+            "Name Based Skill",
+            "skill",
+            "metadata/name-based-skill.codex.json",
+            "metadata/name-based-skill.codex.json",
+            "normalized name duplicate skill metadata",
+            "low",
+            1_725_200_001_200,
+            false,
+            vec!["metadata-only"],
+        ));
+        codex_resources.push(skill_resource(
+            "stable-key-update",
+            "skill",
+            "skills/stable-key-update/SKILL.md",
+            "skills/stable-key-update/SKILL.md",
+            "initial stable key update verifier",
+            "low",
+            1_725_200_001_300,
+            false,
+            vec!["metadata-only"],
+        ));
+        for index in 0..8 {
+            codex_resources.push(skill_resource(
+                &format!("unknown-local-skill-like-{index:02}"),
+                "unknown-local-resource",
+                &format!("unknown-local-skill-like-{index:02}/SKILL.md"),
+                &format!("unknown-local-skill-like-{index:02}/SKILL.md"),
+                "unknown local resource that looks skill-like by path only",
+                "low",
+                1_725_200_002_000 + index,
+                false,
+                vec!["metadata-only"],
+            ));
+        }
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job("job-large-codex", 20, codex_source(), codex_resources),
+        )
+        .expect("large codex fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-large-codex-update",
+                21,
+                codex_source(),
+                vec![skill_resource(
+                    "stable-key-update",
+                    "skill",
+                    "skills/stable-key-update/SKILL.md",
+                    "skills/stable-key-update/SKILL.md",
+                    "updated stable key update verifier",
+                    "low",
+                    1_725_200_010_000,
+                    false,
+                    vec!["metadata-only"],
+                )],
+            ),
+        )
+        .expect("stable key update fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-large-claude",
+                22,
+                claude_source(),
+                vec![
+                    skill_resource(
+                        "SKILL.md",
+                        "skill",
+                        "skills/duplicate-manifest/SKILL.md",
+                        "skills/duplicate-manifest/SKILL.md",
+                        "manifest duplicate skill metadata",
+                        "low",
+                        1_725_200_011_000,
+                        false,
+                        vec!["metadata-only"],
+                    ),
+                    skill_resource(
+                        "SKILL.md",
+                        "skill",
+                        "skills/canonical-dupe/SKILL.md",
+                        "skills/canonical-dupe/SKILL.md",
+                        "canonical path duplicate skill metadata",
+                        "low",
+                        1_725_200_011_100,
+                        false,
+                        vec!["metadata-only"],
+                    ),
+                    skill_resource(
+                        "name based skill",
+                        "skill",
+                        "metadata/name-based-skill.claude.json",
+                        "metadata/name-based-skill.claude.json",
+                        "normalized name duplicate skill metadata",
+                        "low",
+                        1_725_200_011_200,
+                        false,
+                        vec!["metadata-only"],
+                    ),
+                ],
+            ),
+        )
+        .expect("large claude fixture should persist");
+
+        let mut project_resources = Vec::new();
+        for index in 0..10 {
+            project_resources.push(skill_resource(
+                "SKILL.md",
+                "skill",
+                &format!("project-skills/project-available-{index:02}/SKILL.md"),
+                &format!("project-skills/project-available-{index:02}/SKILL.md"),
+                "usable project skill metadata",
+                "low",
+                1_725_200_020_000 + index,
+                false,
+                vec!["metadata-only"],
+            ));
+        }
+        project_resources.push(skill_resource(
+            "SKILL.md",
+            "skill",
+            "project-skills/duplicate-manifest/SKILL.md",
+            "project-skills/duplicate-manifest/SKILL.md",
+            "manifest duplicate skill metadata",
+            "low",
+            1_725_200_020_900,
+            false,
+            vec!["metadata-only"],
+        ));
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job("job-large-project", 23, project_source(), project_resources),
+        )
+        .expect("large project fixture should persist");
+
+        let unknown_resources = (0..5)
+            .map(|index| {
+                skill_resource(
+                    "SKILL.md",
+                    "skill",
+                    &format!("unknown-source/source-unknown-{index:02}/SKILL.md"),
+                    &format!("unknown-source/source-unknown-{index:02}/SKILL.md"),
+                    "source unknown skill metadata",
+                    "low",
+                    1_725_200_030_000 + index,
+                    false,
+                    vec!["metadata-only"],
+                )
+            })
+            .collect::<Vec<_>>();
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job("job-large-unknown", 24, unknown_source(), unknown_resources),
+        )
+        .expect("large unknown fixture should persist");
+
+        let broken_resources = vec![
+            skill_resource(
+                "SKILL.md",
+                "skill",
+                "broken/broken-risk-00/SKILL.md",
+                "broken/broken-risk-00/SKILL.md",
+                "broken skill metadata",
+                "high",
+                1_725_200_040_000,
+                false,
+                vec!["metadata-only"],
+            ),
+            skill_resource(
+                "SKILL.md",
+                "skill",
+                "broken/broken-risk-01/SKILL.md",
+                "broken/broken-risk-01/SKILL.md",
+                "broken skill metadata",
+                "high",
+                1_725_200_040_001,
+                false,
+                vec!["metadata-only"],
+            ),
+            skill_resource(
+                "SKILL.md",
+                "skill",
+                "broken/broken-redacted-02/SKILL.md",
+                "broken/broken-redacted-02/SKILL.md",
+                "broken skill metadata",
+                "medium",
+                1_725_200_040_002,
+                true,
+                vec!["metadata-only", "sensitive-path-redacted"],
+            ),
+            skill_resource(
+                "SKILL.md",
+                "skill",
+                "leaks/super-secret-token/SKILL.md",
+                "leaks/super-secret-token/SKILL.md",
+                "broken skill metadata with unsafe persisted path",
+                "low",
+                1_725_200_040_003,
+                false,
+                vec!["metadata-only"],
+            ),
+        ];
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job("job-large-broken", 25, manual_source(), broken_resources),
+        )
+        .expect("large broken fixture should persist");
+        insert_large_fixture_raw_findings(db_path);
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job_with_status(
+                "job-large-unchecked",
+                "running",
+                26,
+                agents_source(),
+                (0..3)
+                    .map(|index| {
+                        skill_resource(
+                            "SKILL.md",
+                            "skill",
+                            &format!("agents/unchecked-{index:02}/SKILL.md"),
+                            &format!("agents/unchecked-{index:02}/SKILL.md"),
+                            "unchecked skill metadata",
+                            "low",
+                            1_725_200_050_000 + index,
+                            false,
+                            vec!["metadata-only"],
+                        )
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("large unchecked fixture should persist");
+    }
+
+    fn insert_large_fixture_raw_findings(db_path: &PathBuf) {
+        let conn = rusqlite::Connection::open(db_path).expect("db should open");
+        let resource_id: String = conn
+            .query_row(
+                "SELECT resource_id FROM resource_locations WHERE relative_path = ?1 LIMIT 1",
+                ["leaks/super-secret-token/SKILL.md"],
+                |row| row.get(0),
+            )
+            .expect("sensitive fixture resource should exist");
+        conn.execute(
+            "INSERT INTO resource_findings (
+                id, resource_id, scan_job_id, finding_kind, severity, message, safe_detail_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "finding:large-raw-log",
+                resource_id,
+                "job-large-broken",
+                "raw-log",
+                "high",
+                "raw log: permission denied from worker stdout",
+                "{\"log\":\"raw log: permission denied from worker stdout\"}",
+            ],
+        )
+        .expect("raw log finding should persist");
+        conn.execute(
+            "INSERT INTO resource_findings (
+                id, resource_id, scan_job_id, finding_kind, severity, message, safe_detail_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "finding:large-env-value",
+                resource_id,
+                "job-large-broken",
+                "env-value",
+                "high",
+                "OPENAI_API_KEY=sk-live-secret and token=super-secret-token",
+                "{\"OPENAI_API_KEY\":\"sk-live-secret\",\"token\":\"super-secret-token\"}",
+            ],
+        )
+        .expect("env value finding should persist");
+    }
+
+    fn assert_no_large_fixture_secrets(serialized: &str) {
+        for forbidden in [
+            "super-secret-token",
+            "sk-live-secret",
+            "OPENAI_API_KEY",
+            "token=",
+            "raw log",
+            "worker stdout",
+            "/Users/example",
+            "secret-token-root",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "product output must not serialize forbidden fixture text: {forbidden}"
+            );
+        }
+    }
+
     fn skill_library_job(
         job_id: &str,
         sequence: u64,
         source: PersistScanSourceInput,
         resources: Vec<PersistScanResourceInput>,
     ) -> PersistScanJobInput {
+        skill_library_job_with_status(job_id, "completed", sequence, source, resources)
+    }
+
+    fn skill_library_job_with_status(
+        job_id: &str,
+        status: &str,
+        sequence: u64,
+        source: PersistScanSourceInput,
+        resources: Vec<PersistScanResourceInput>,
+    ) -> PersistScanJobInput {
         PersistScanJobInput {
             id: job_id.to_string(),
-            status: "completed".to_string(),
+            status: status.to_string(),
             profile_id: source.profile_id.clone(),
             started_at_ms: 1_725_100_000_000 + sequence,
-            finished_at_ms: Some(1_725_100_000_000 + sequence * 1_000),
+            finished_at_ms: if status == "completed" {
+                Some(1_725_100_000_000 + sequence * 1_000)
+            } else {
+                None
+            },
             elapsed_ms: 1_000,
             requested_by: "custom-directory-scan".to_string(),
             total_entries: resources.len() as u64,
@@ -4785,6 +5398,36 @@ mod tests {
         }
     }
 
+    fn skill_resource(
+        name: &str,
+        resource_kind: &str,
+        relative_path: &str,
+        display_path: &str,
+        description: &str,
+        risk_level: &str,
+        modified_at_ms: u64,
+        sensitive_path_redacted: bool,
+        risk_labels: Vec<&str>,
+    ) -> PersistScanResourceInput {
+        PersistScanResourceInput {
+            name: name.to_string(),
+            resource_kind: resource_kind.to_string(),
+            description: description.to_string(),
+            primary_type: "file".to_string(),
+            risk_level: risk_level.to_string(),
+            boundary_labels: vec!["read-only".to_string(), "no-content-read".to_string()],
+            relative_path: relative_path.to_string(),
+            display_path: display_path.to_string(),
+            extension: Some("md".to_string()),
+            entry_type: "file".to_string(),
+            size_bytes: Some(128),
+            modified_at_ms: Some(modified_at_ms),
+            classification_reason: "路径或文件名匹配技能资源。".to_string(),
+            sensitive_path_redacted,
+            risk_labels: risk_labels.into_iter().map(ToString::to_string).collect(),
+        }
+    }
+
     fn codex_source() -> PersistScanSourceInput {
         PersistScanSourceInput {
             id: Some("source-codex-skills".to_string()),
@@ -4792,6 +5435,42 @@ mod tests {
             root_path: "/Users/example/.codex".to_string(),
             root_display_path: "~/.codex".to_string(),
             profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn claude_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-claude-skills".to_string()),
+            display_name: "Claude Skills".to_string(),
+            root_path: "/Users/example/.claude".to_string(),
+            root_display_path: "~/.claude".to_string(),
+            profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn agents_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-agents-skills".to_string()),
+            display_name: "Agents Skills".to_string(),
+            root_path: "/Users/example/.agents".to_string(),
+            root_display_path: "~/.agents".to_string(),
+            profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn manual_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-manual-skills".to_string()),
+            display_name: "Manual Skills".to_string(),
+            root_path: "/Users/example/manual-skills".to_string(),
+            root_display_path: "~/manual-skills".to_string(),
+            profile_id: "custom-folder".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
         }
