@@ -11,6 +11,14 @@ export interface AdvancedSupportCard {
   section: "search" | "records" | "diagnostics" | "compatibility";
 }
 
+export type HomePrimaryAction = "open-first-run-guide" | "open-folder-selection-guide";
+
+export interface HomeFirstRunGuideStep {
+  id: "choose-folder" | "review-location";
+  title: string;
+  summary: string;
+}
+
 export const primaryNavigationViews: PrimaryNavigationView[] = ["dashboard", "skills", "mcp", "advanced"];
 export const advancedSupportViews: AdvancedSupportView[] = ["custom-scan", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 
@@ -88,15 +96,44 @@ export const homeCopy = {
   title: "查看这台电脑上的 AI 技能和 MCP 工具",
   summary: "AIOS Desktop 把本机已经安装或配置的 AI 技能和 MCP 工具整理成简单清单。",
   primaryActions: [
-    { label: "开始查找", targetView: "advanced" as const },
-    { label: "手动选择文件夹", targetView: "advanced" as const }
-  ] satisfies Array<{ label: string; targetView: PrimaryNavigationView }>,
+    { label: "开始查找", action: "open-first-run-guide" },
+    { label: "手动选择文件夹", action: "open-folder-selection-guide" }
+  ] satisfies Array<{ label: string; action: HomePrimaryAction }>,
   safetyReminders: [
     "结果只保存在这台电脑上。",
     "不会上传查找结果。",
     "不会读取密钥、令牌、密码、浏览器 Cookie 或登录会话。",
     "不会运行本机命令，也不会启动 MCP 服务或调用 MCP 工具。"
   ]
+};
+
+export const homeFirstRunGuideCopy = {
+  title: "开始查找本机 AI 技能",
+  intro: "AIOS 会查找这台电脑上的 AI 技能和 MCP 工具的基本信息。",
+  mcpExplanation: "MCP 是 AI 应用连接外部工具的一种方式；这里仅整理本机已配置服务和工具名称线索。",
+  safetyLine: "只保存基本信息，不读取密钥或文件正文。",
+  steps: [
+    {
+      id: "choose-folder",
+      title: "选择一个文件夹",
+      summary: "建议选择包含技能或 MCP 配置的项目、工具或工作文件夹。添加文件夹不会自动扫描，用户仍需明确点击开始。"
+    },
+    {
+      id: "review-location",
+      title: "查看查找位置",
+      summary: "确认来源后，在查找位置里手动开始。AIOS 不会自动查找整台电脑。"
+    }
+  ] satisfies HomeFirstRunGuideStep[],
+  safetyCommitments: [
+    "查找结果只保存在这台电脑上。",
+    "AIOS 不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值。",
+    "AIOS 不执行脚本，也不启动或调用 MCP 工具。",
+    "添加文件夹不会自动扫描，用户仍需明确点击开始。"
+  ],
+  chooseFolderAction: "选择一个文件夹",
+  reviewLocationAction: "查看查找位置",
+  nextStepAction: "继续到查找位置并开始扫描",
+  closeAction: "稍后"
 };
 
 export function isAdvancedSupportView(view: ResourceView): view is AdvancedSupportView {

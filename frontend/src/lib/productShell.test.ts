@@ -72,7 +72,10 @@ assert.match(ordinaryHomeText, /开始查找/);
 assert.match(ordinaryHomeText, /手动选择文件夹/);
 assert.match(ordinaryHomeText, /结果只保存在这台电脑上/);
 assert.equal(homeCopy.primaryActions.length, 2);
-assert(homeCopy.primaryActions.every((action) => action.targetView === "advanced"), "Home actions should enter the guided Advanced support page");
+assert.equal(homeCopy.primaryActions[0].action, "open-first-run-guide", "Home primary action must open the first-run guide instead of raw Advanced navigation");
+assert.equal(homeCopy.primaryActions[1].action, "open-folder-selection-guide", "Home folder action must open the guided folder-selection step");
+assert(!("targetView" in homeCopy.primaryActions[0]), "Home primary action must not encode raw Advanced routing");
+assert(!("targetView" in homeCopy.primaryActions[1]), "Home folder action must not encode raw Advanced routing");
 for (const label of oldFirstClassLabels) {
   assert(!ordinaryHomeText.includes(label), `Home copy must not expose ${label} as ordinary UI`);
 }
@@ -122,6 +125,7 @@ assert.deepEqual(layoutCssVariableNames, [
 ]);
 
 const customScanModuleSource = readFile("components/modules/CustomScanModule.tsx");
+const dashboardModuleSource = readFile("components/modules/DashboardModule.tsx");
 const skillsModuleSource = readFile("components/modules/SkillsModule.tsx");
 const mcpModuleSource = readFile("components/modules/McpModule.tsx");
 const advancedModuleSource = readFile("components/modules/AdvancedModule.tsx");
@@ -138,6 +142,7 @@ const advancedOnlyModuleSources = new Map(
   oldFirstLevelViews.map((view) => [view, readFile(`components/modules/${advancedOnlyModuleFilenames[view]}`)])
 );
 const primitivesSource = readFile("components/ui/AiosUiPrimitives.tsx");
+const productShellSource = readFile("lib/productShell.ts");
 const motionSource = readFile("lib/useAiosMotion.ts");
 const stylesSource = readFile("styles.css");
 const themeSource = readFile("theme/materialTheme.ts");
@@ -150,6 +155,21 @@ assert(customScanModuleSource.includes("custom-scan-workspace"), "custom-scan mu
 assert(customScanModuleSource.includes("AiosAccordionPanel"), "custom-scan must keep accordion sections");
 assert(customScanModuleSource.includes("data-aios-internal-scroll=\"true\""), "custom-scan must expose an internal scroll container");
 assert(!customScanModuleSource.includes("contentHeight - 140"), "custom-scan must not use magic height subtraction");
+
+assert(productShellSource.includes("homeFirstRunGuideCopy"), "productShell must expose testable Home first-run guide copy");
+assert(productShellSource.includes("开始查找本机 AI 技能"), "Home guide title must be ordinary-user oriented");
+assert(productShellSource.includes("AIOS 会查找这台电脑上的 AI 技能和 MCP 工具的基本信息"), "Home guide must say what AIOS will find");
+assert(productShellSource.includes("查找结果只保存在这台电脑上"), "Home guide must state local-only results");
+assert(productShellSource.includes("不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值"), "Home guide must state sensitive values are not read");
+assert(productShellSource.includes("不执行脚本，也不启动或调用 MCP 工具"), "Home guide must state scripts and MCP tools are not run");
+assert(productShellSource.includes("添加文件夹不会自动扫描"), "Home guide must state folder adding does not auto-scan");
+assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery/i.test(productShellSource.match(/homeFirstRunGuideCopy[\s\S]*?};/)?.[0] ?? ""), "Home guide copy must not expose banned first-class technical terms");
+
+assert(dashboardModuleSource.includes("Dialog"), "Home start action must render a first-run guide dialog");
+assert(!dashboardModuleSource.includes("onClick={() => onViewChange(\"advanced\")}"), "Home CTA buttons must not route directly to raw Advanced");
+assert(dashboardModuleSource.includes("addScanSources("), "Home folder-selection step must reuse the existing addScanSources client");
+assert(!dashboardModuleSource.includes("startScanSourcesBatch"), "Home guide must not start scanning automatically");
+assert(dashboardModuleSource.includes("onViewChange(\"custom-scan\")"), "Home guide must offer a next-step route to 查找位置");
 
 assert(skillsModuleSource.includes("contentClassName=\"skills-module-scroll\""), "Skills must use a measured module content class");
 assert(!skillsModuleSource.includes("AiosTabBar"), "Skills must not use the rejected AiosTabBar");
