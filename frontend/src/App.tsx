@@ -41,9 +41,13 @@ import {
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
 import {
+  getMcpLibraryItemIdFromResource,
   getMcpLibrarySummary,
+  getMcpServiceDetail,
   listMcpServiceItems,
   mapMcpServiceItemToResource,
+  sanitizeMcpDetailLoadError,
+  type McpServiceDetailRuntimeState,
   type McpLibrarySummary,
   type McpServiceItem
 } from "./lib/mcpLibrary";
@@ -90,6 +94,7 @@ export default function App() {
   const [mcpLibraryLoading, setMcpLibraryLoading] = useState(false);
   const [mcpLibraryError, setMcpLibraryError] = useState<string | null>(null);
   const [skillDetailState, setSkillDetailState] = useState<SkillDetailRuntimeState | null>(null);
+  const [mcpDetailState, setMcpDetailState] = useState<McpServiceDetailRuntimeState | null>(null);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -236,6 +241,7 @@ export default function App() {
   const skillLibraryResources = useMemo(() => skillLibraryItems.map(mapSkillListItemToResource), [skillLibraryItems]);
   const mcpLibraryResources = useMemo(() => mcpServiceItems.map(mapMcpServiceItemToResource), [mcpServiceItems]);
   const skillLibraryItemById = useMemo(() => new Map(skillLibraryItems.map((item) => [item.id, item])), [skillLibraryItems]);
+  const mcpServiceItemById = useMemo(() => new Map(mcpServiceItems.map((item) => [item.id, item])), [mcpServiceItems]);
   const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...mcpLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, mcpLibraryResources, skillLibraryResources]);
   const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
   const displayById = useMemo(() => buildResourceDisplayMap(selectableResources), [selectableResources]);
@@ -279,6 +285,7 @@ export default function App() {
     setActiveView(view);
     setSelection(null);
     setSkillDetailState(null);
+    setMcpDetailState(null);
     startRouteTransition(() => {
       setRenderedView(view);
     });
@@ -293,6 +300,7 @@ export default function App() {
     setActiveCorpusScope(scope);
     setSelection(null);
     setSkillDetailState(null);
+    setMcpDetailState(null);
   }, []);
 
   const selectResource = useCallback((resource: AiosResource, context?: ResourceSelectionContext) => {
@@ -300,6 +308,7 @@ export default function App() {
     const productSkillId = getSkillLibraryItemIdFromResource(resource);
     if (productSkillId) {
       const fallbackItem = context?.skillListItem ?? skillLibraryItemById.get(productSkillId) ?? null;
+      setMcpDetailState(null);
       setSkillDetailState({
         resourceId: resource.id,
         skillId: productSkillId,
@@ -330,6 +339,39 @@ export default function App() {
       return;
     }
     setSkillDetailState(null);
+    const productMcpServiceId = getMcpLibraryItemIdFromResource(resource);
+    if (productMcpServiceId) {
+      const fallbackItem = mcpServiceItemById.get(productMcpServiceId) ?? null;
+      setMcpDetailState({
+        resourceId: resource.id,
+        serviceId: productMcpServiceId,
+        fallbackItem,
+        detail: null,
+        loading: true,
+        error: null
+      });
+      getMcpServiceDetail(productMcpServiceId)
+        .then((detail) => {
+          setMcpDetailState((current) => {
+            if (!current || current.resourceId !== resource.id || current.serviceId !== productMcpServiceId) return current;
+            return { ...current, detail, fallbackItem: current.fallbackItem ?? fallbackItem, loading: false, error: null };
+          });
+        })
+        .catch((detailError: unknown) => {
+          setMcpDetailState((current) => {
+            if (!current || current.resourceId !== resource.id || current.serviceId !== productMcpServiceId) return current;
+            return {
+              ...current,
+              detail: null,
+              fallbackItem: current.fallbackItem ?? fallbackItem,
+              loading: false,
+              error: sanitizeMcpDetailLoadError(detailError)
+            };
+          });
+        });
+      return;
+    }
+    setMcpDetailState(null);
     if (!isDynamicCorpusResource(resource) || resource.metadata?.corpusDetailLoaded === true) return;
     const resourceId = getDynamicCorpusResourceId(resource);
     if (!resourceId) return;
@@ -341,12 +383,13 @@ export default function App() {
         });
       })
       .catch((detailError: unknown) => setCorpusError(formatAsyncError(detailError)));
-  }, [skillLibraryItemById]);
+  }, [mcpServiceItemById, skillLibraryItemById]);
 
   const handleQueryChange = useCallback((value: string) => setQuery(value), []);
   const clearSelection = useCallback(() => {
     setSelection(null);
     setSkillDetailState(null);
+    setMcpDetailState(null);
   }, []);
 
   useEffect(() => {
@@ -362,6 +405,7 @@ export default function App() {
     if (!selectableResources.some((resource) => resource.id === selection.resource.id)) {
       setSelection(null);
       setSkillDetailState(null);
+      setMcpDetailState(null);
     }
   }, [selectableResources, selection]);
 
@@ -463,6 +507,7 @@ export default function App() {
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
       selectedSkillCapability={selectedSkillCapability}
+      mcpDetailState={mcpDetailState}
       skillDetailState={skillDetailState}
       shownCount={shellShownCount}
       inspectorVisibleCount={shellShownCount}

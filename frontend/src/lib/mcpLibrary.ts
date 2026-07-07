@@ -96,6 +96,46 @@ export interface McpServiceDetail extends McpServiceItem {
   safeAdvancedMetadataSummary: McpAdvancedMetadataRow[];
 }
 
+export type McpServiceDetailViewMode = "ready" | "loading" | "unavailable";
+
+export interface McpServiceDetailRuntimeState {
+  resourceId: string;
+  serviceId: string;
+  fallbackItem: McpServiceItem | null;
+  detail: McpServiceDetail | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface McpServiceDetailViewInput {
+  detail: McpServiceDetail | null;
+  fallbackItem: McpServiceItem | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface McpServiceDetailViewModel {
+  mode: McpServiceDetailViewMode;
+  title: string;
+  whatItDoes: string;
+  statusText: string;
+  sourceText: string;
+  sourceKindText: string;
+  configLocationText: string;
+  toolHintsText: string;
+  safetyText: string;
+  commandNameText: string;
+  transportText: string;
+  requiredEnvNamesText: string;
+  remoteHostText: string;
+  attentionReasons: McpAttentionReason[];
+  manualCheckSuggestions: string[];
+  configSources: McpConfigSourceSummary[];
+  findings: McpAttentionReason[];
+  advancedRows: McpAdvancedMetadataRow[];
+  notice: string | null;
+}
+
 export interface McpLibraryModuleState {
   summary: McpLibrarySummary | null;
   items: McpServiceItem[];
@@ -131,6 +171,40 @@ export async function getMcpServiceDetail(serviceId: string): Promise<McpService
     throw new Error("当前页面不在 Tauri 桌面运行时中，无法读取 MCP 服务详情。");
   }
   return invoke<McpServiceDetail>("get_mcp_service_detail", { serviceId });
+}
+
+export function sanitizeMcpDetailLoadError(_error: unknown): string {
+  return "无法读取 MCP 服务详情。请在高级信息里查看来源。";
+}
+
+export function buildMcpServiceDetailViewModel(input: McpServiceDetailViewInput): McpServiceDetailViewModel {
+  const item = input.detail ?? input.fallbackItem;
+  const mode: McpServiceDetailViewMode = input.detail ? "ready" : input.loading ? "loading" : "unavailable";
+  const title = item?.displayName?.trim() || "未命名 MCP 服务";
+  const toolHints = input.detail?.toolHints ?? item?.toolHints ?? [];
+  const attentionReasons = dedupeMcpAttentionReasons([...(item?.attentionReasons ?? []), ...(input.detail?.findings ?? [])]);
+
+  return {
+    mode,
+    title,
+    whatItDoes: input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || (mode === "loading" ? "正在读取服务详情。" : "暂时无法判断这个服务具体提供哪些工具。"),
+    statusText: item?.status ? mcpStatusLabels[item.status] : "未检查",
+    sourceText: item?.sourceLabel?.trim() || "来源不明",
+    sourceKindText: item?.sourceKindLabel?.trim() || "来源不明",
+    configLocationText: item?.configLocationHint?.trim() || "暂时无法判断",
+    toolHintsText: formatMcpToolHints(toolHints, input.detail?.toolHintsUnavailableExplanation),
+    safetyText: input.detail?.safetySummary.text?.trim() || item?.safetyText?.trim() || mcpSafetyText,
+    commandNameText: item?.commandName?.trim() || "暂时无法判断",
+    transportText: item?.transport && item.transport !== "unknown" ? item.transport : "暂时无法判断",
+    requiredEnvNamesText: item?.requiredEnvNames?.length ? item.requiredEnvNames.join("、") : "暂时无法判断",
+    remoteHostText: item?.remoteHostHint?.trim() || "暂时无法判断",
+    attentionReasons,
+    manualCheckSuggestions: input.detail?.manualCheckSuggestions ?? [],
+    configSources: input.detail?.configSources ?? [],
+    findings: input.detail?.findings ?? [],
+    advancedRows: input.detail?.safeAdvancedMetadataSummary ?? [],
+    notice: getMcpDetailNotice(mode, input.error)
+  };
 }
 
 export function buildHomeMcpLibraryStats(summary: McpLibrarySummary | null, viewCounts: Record<ResourceView, number>): HomeMcpLibraryStats {
@@ -228,6 +302,27 @@ export function filterMcpServiceItems(items: readonly McpServiceItem[], query: s
 
 export function mcpServiceNeedsAttention(item: McpServiceItem): boolean {
   return item.status !== "visible" && item.status !== "likelyAvailable";
+}
+
+function formatMcpToolHints(toolHints: readonly McpToolHint[], unavailableExplanation?: string): string {
+  if (toolHints.length > 0) return toolHints.map((tool) => tool.name).join("、");
+  return unavailableExplanation?.trim() || fallbackMcpToolHintsUnavailableText;
+}
+
+function dedupeMcpAttentionReasons(reasons: readonly McpAttentionReason[]): McpAttentionReason[] {
+  const seen = new Set<string>();
+  return reasons.filter((reason) => {
+    const key = reason.code || `${reason.label}:${reason.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getMcpDetailNotice(mode: McpServiceDetailViewMode, error: string | null): string | null {
+  if (mode === "loading") return "正在读取 AIOS Desktop 已保存的 MCP 基本信息。";
+  if (mode === "unavailable") return error ?? "暂时无法读取完整 MCP 服务详情。请在高级信息里查看来源。";
+  return null;
 }
 
 function mcpItemSearchText(item: McpServiceItem): string {

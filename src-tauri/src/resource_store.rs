@@ -2458,7 +2458,14 @@ fn mcp_detail_what_it_does(item: &McpServiceItem) -> String {
     if item.tool_hints.is_empty() {
         "暂时无法判断这个服务具体提供哪些工具。".to_string()
     } else {
-        item.short_purpose.clone()
+        format!(
+            "显示已保存的工具名称线索：{}。",
+            item.tool_hints
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect::<Vec<_>>()
+                .join("、")
+        )
     }
 }
 
@@ -6299,6 +6306,69 @@ mod tests {
             serde_json::to_string(&remote_detail).expect("remote detail should serialize");
         assert_no_mcp_fixture_secrets(&serialized_detail);
         assert_no_mcp_fixture_secrets(&serialized_remote);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn mcp_service_detail_uses_safe_static_tool_hints_without_claiming_runtime_discovery() {
+        let db_path = temp_db_path("mcp-library-detail-tool-hints");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-mcp-tool-hints",
+                38,
+                codex_mcp_source(),
+                vec![mcp_resource(
+                    "filesystem-tools",
+                    "mcp-server",
+                    "mcp/filesystem-tools.server.json",
+                    "mcp/filesystem-tools.server.json",
+                    "Codex MCP metadata for filesystem-tools. Command=node; transport=stdio; env names=FILESYSTEM_ROOT; tools=read_file write_file super-secret-token.",
+                    "low",
+                    1_725_300_008_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("tool hint mcp fixture should persist");
+
+        let items = list_mcp_service_items_for_path(&db_path).expect("mcp items should load");
+        let service = items
+            .iter()
+            .find(|item| item.display_name == "filesystem-tools")
+            .expect("tool hint service should exist");
+        assert_eq!(service.tool_hint_count, 2);
+        assert_eq!(
+            service
+                .tool_hints
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["read_file", "write_file"]
+        );
+
+        let detail = get_mcp_service_detail_for_path(&db_path, &service.id)
+            .expect("tool hint detail should load");
+        assert!(detail.what_it_does.contains("read_file"));
+        assert!(detail.what_it_does.contains("write_file"));
+        assert!(detail.tool_hints_unavailable_explanation.is_empty());
+        assert!(detail
+            .safety_summary
+            .text
+            .contains("不会启动服务、不会连接端点、不会调用 MCP 工具"));
+        assert!(detail
+            .manual_check_suggestions
+            .iter()
+            .any(|suggestion| suggestion.contains("环境变量")));
+        assert_eq!(detail.config_sources.len(), 1);
+
+        let serialized = serde_json::to_string(&detail).expect("mcp detail should serialize");
+        assert_no_mcp_fixture_secrets(&serialized);
+        assert!(!serialized.contains("已启动"));
+        assert!(!serialized.contains("已连接"));
 
         cleanup_db(db_path);
     }

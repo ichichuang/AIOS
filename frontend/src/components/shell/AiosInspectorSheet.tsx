@@ -4,6 +4,7 @@ import CloseRounded from "@mui/icons-material/CloseRounded";
 import { useRef } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
+import type { McpServiceDetailRuntimeState } from "../../lib/mcpLibrary";
 import type { SkillDetailRuntimeState } from "../../lib/skillLibrary";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
@@ -16,16 +17,17 @@ interface AiosInspectorSheetProps {
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  mcpDetailState: McpServiceDetailRuntimeState | null;
   skillDetailState: SkillDetailRuntimeState | null;
   visibleCount: number;
   onMobileClose: () => void;
 }
 
-export function AiosInspectorSheet({ activeView, resource, skillIdentity, skillCapability, skillDetailState, visibleCount, onMobileClose }: AiosInspectorSheetProps) {
+export function AiosInspectorSheet({ activeView, resource, skillIdentity, skillCapability, mcpDetailState, skillDetailState, visibleCount, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
   const isPersistent = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const body = <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} skillDetailState={skillDetailState} visibleCount={visibleCount} />;
+  const body = <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} />;
 
   if (isPersistent) {
     return (
@@ -43,7 +45,7 @@ export function AiosInspectorSheet({ activeView, resource, skillIdentity, skillC
       slotProps={{ paper: { className: isMobile ? "inspector-drawer-paper bottom" : "inspector-drawer-paper" } }}
       onClose={onMobileClose}
     >
-      <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} skillDetailState={skillDetailState} visibleCount={visibleCount} onClose={onMobileClose} showClose />
+      <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} onClose={onMobileClose} showClose />
     </Drawer>
   );
 }
@@ -53,13 +55,14 @@ interface InspectorBodyProps {
   resource: AiosResource | null;
   skillIdentity: SkillIdentityRow | null;
   skillCapability: SkillCapabilityClassification | null;
+  mcpDetailState: McpServiceDetailRuntimeState | null;
   skillDetailState: SkillDetailRuntimeState | null;
   visibleCount: number;
   showClose?: boolean;
   onClose?: () => void;
 }
 
-function InspectorBody({ activeView, resource, skillIdentity, skillCapability, skillDetailState, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
+function InspectorBody({ activeView, resource, skillIdentity, skillCapability, mcpDetailState, skillDetailState, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
   useSmoothHoverSurfaceMotion(bodyRef, resource?.id ?? "empty", { selector: ".inspector-panel, .aios-inspector-section, .copy-button", scale: 1.006, y: -1 });
@@ -78,7 +81,7 @@ function InspectorBody({ activeView, resource, skillIdentity, skillCapability, s
       </Box>
       <Divider />
       <Box className="inspector-scroll">
-        <ResourceInspector activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} skillDetailState={skillDetailState} visibleCount={visibleCount} />
+        <ResourceInspector activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} />
       </Box>
     </Box>
   );

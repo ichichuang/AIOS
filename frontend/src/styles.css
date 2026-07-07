@@ -2913,7 +2913,8 @@
   color: var(--aios-muted);
 }
 
-.skill-detail-inspector .inspector-description {
+.skill-detail-inspector .inspector-description,
+.mcp-detail-inspector .inspector-description {
   -webkit-line-clamp: 4;
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildMcpServiceDetailViewModel,
   buildHomeMcpLibraryStats,
   fallbackMcpToolHintsUnavailableText,
   filterMcpServiceItems,
@@ -10,6 +11,7 @@ import {
   listMcpServiceItems,
   mapMcpServiceItemToResource,
   mcpServiceNeedsAttention,
+  sanitizeMcpDetailLoadError,
   type McpLibrarySummary,
   type McpServiceDetail,
   type McpServiceItem
@@ -175,6 +177,60 @@ assert.equal(detail.toolHintsUnavailableExplanation, fallbackMcpToolHintsUnavail
 assert.equal(detail.safetySummary.startsServices, false);
 assert.equal(detail.safetySummary.callsTools, false);
 
+const detailModel = buildMcpServiceDetailViewModel({
+  detail,
+  error: null,
+  fallbackItem: serviceItem,
+  loading: false
+});
+assert.equal(detailModel.mode, "ready");
+assert.equal(detailModel.title, "filesystem");
+assert.equal(detailModel.whatItDoes, "暂时无法判断这个服务具体提供哪些工具。");
+assert.equal(detailModel.statusText, "需要处理");
+assert.equal(detailModel.sourceText, "多来源");
+assert.equal(detailModel.configLocationText, "~/.codex/mcp/filesystem.server.json");
+assert.equal(detailModel.toolHintsText, fallbackMcpToolHintsUnavailableText);
+assert.equal(detailModel.safetyText, serviceItem.safetyText);
+assert.equal(detailModel.commandNameText, "npx");
+assert.equal(detailModel.requiredEnvNamesText, "FILESYSTEM_ROOT");
+assert.equal(detailModel.remoteHostText, "暂时无法判断");
+assert.equal(detailModel.manualCheckSuggestions[0], "请确认相关工具已经安装。");
+assert.equal(detailModel.configSources.length, 1);
+assert.equal(detailModel.advancedRows[0]?.label, "本地记录边界");
+assert(!Object.keys(detailModel).includes("visibleCount"));
+assert(!JSON.stringify(detailModel).includes("super-secret-token"));
+
+const toolHintDetailModel = buildMcpServiceDetailViewModel({
+  detail: {
+    ...detail,
+    toolHintCount: 2,
+    toolHints: [
+      { name: "read_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" },
+      { name: "write_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" }
+    ],
+    toolHintsUnavailableExplanation: "",
+    whatItDoes: "显示已保存的工具名称线索：read_file、write_file。"
+  },
+  error: null,
+  fallbackItem: null,
+  loading: false
+});
+assert.equal(toolHintDetailModel.toolHintsText, "read_file、write_file");
+assert(!toolHintDetailModel.toolHintsText.includes("2 个"), "tool detail must show names, not fake counts");
+
+const fallbackDetailModel = buildMcpServiceDetailViewModel({
+  detail: null,
+  error: sanitizeMcpDetailLoadError(new Error("/Users/example/secret-token-root token=super-secret-token")),
+  fallbackItem: serviceItem,
+  loading: false
+});
+assert.equal(fallbackDetailModel.mode, "unavailable");
+assert.equal(fallbackDetailModel.title, "filesystem");
+assert.equal(fallbackDetailModel.toolHintsText, fallbackMcpToolHintsUnavailableText);
+assert.equal(fallbackDetailModel.notice, "无法读取 MCP 服务详情。请在高级信息里查看来源。");
+assert(!JSON.stringify(fallbackDetailModel).includes("/Users/example"));
+assert(!JSON.stringify(fallbackDetailModel).includes("super-secret-token"));
+
 const filteredBySource = filterMcpServiceItems([serviceItem, remoteItem], "Codex 配置");
 assert.deepEqual(filteredBySource.map((item) => item.id), ["mcp:remote-api"]);
 assert.equal(productSummary.counts.serviceCount, 6, "product totals remain separate from search result length");
@@ -182,11 +238,19 @@ assert.equal(filteredBySource.length, 1);
 
 const mcpModuleSource = readFrontendFile("components/modules/McpModule.tsx");
 const mcpLibrarySource = readFrontendFile("lib/mcpLibrary.ts");
+const mcpDetailInspectorSource = readFrontendFile("components/inspector/McpServiceDetailInspector.tsx");
+const appSource = readFrontendFile("App.tsx");
+const resourceInspectorSource = readFrontendFile("components/inspector/ResourceInspector.tsx");
 for (const forbidden of ["已启动", "已连接", "调用了 MCP 工具", "resource corpus", "SQLite state", "raw scan diagnostics"]) {
-  assert(!`${mcpModuleSource}\n${mcpLibrarySource}`.includes(forbidden), `ordinary MCP copy must not claim unsafe behavior or expose ${forbidden}`);
+  assert(!`${mcpModuleSource}\n${mcpLibrarySource}\n${mcpDetailInspectorSource}`.includes(forbidden), `ordinary MCP copy must not claim unsafe behavior or expose ${forbidden}`);
 }
 for (const required of ["不启动服务", "不连接端点", "不调用 MCP 工具"]) {
-  assert(mcpModuleSource.includes(required) || mcpLibrarySource.includes(required), `ordinary MCP copy must include ${required}`);
+  assert(mcpModuleSource.includes(required) || mcpLibrarySource.includes(required) || mcpDetailInspectorSource.includes(required), `ordinary MCP copy must include ${required}`);
+}
+assert(appSource.includes("getMcpServiceDetail(productMcpServiceId)"), "product MCP selection must fetch detail from the product API");
+assert(resourceInspectorSource.includes("McpServiceDetailInspector"), "product MCP resources must use the dedicated MCP detail inspector");
+for (const forbiddenDependency of ["getResourceDisplay", "buildSkillDisplayEnrichment", "filteredResources.length", "visibleCount"]) {
+  assert(!`${mcpDetailInspectorSource}\n${mcpLibrarySource}`.includes(forbiddenDependency), `MCP product detail must not rely on generic resource enrichment or ${forbiddenDependency}`);
 }
 
 console.log("mcpLibrary client tests passed");
