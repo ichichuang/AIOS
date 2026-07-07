@@ -1,6 +1,7 @@
 import { Alert, Box, Chip } from "@mui/material";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
+import { fallbackMcpToolHintsUnavailableText } from "../../lib/mcpLibrary";
 import { useContentPanelSwapMotion } from "../../lib/useAiosMotion";
 import { ResourceGroup } from "../resources/ResourceGroup";
 import { AiosContentPanel, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosSectionRail, AiosUsageCard } from "../ui/AiosUiPrimitives";
@@ -10,19 +11,24 @@ import { ModuleEmptyState } from "./ModuleEmptyState";
 
 type McpSection = "services" | "tools" | "attention";
 
-export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) {
+export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosModuleProps) {
   const [activeSection, setActiveSection] = useState<McpSection>("services");
   const panelRef = useRef<HTMLDivElement>(null);
+  const useProductLibrary = mcpLibrary.summary !== null;
+  const productCounts = mcpLibrary.summary?.counts ?? null;
   const attentionCount = resources.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available")).length;
   const serviceResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-server"), [resources]);
   const toolResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-client"), [resources]);
   const attentionResources = useMemo(() => resources.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available")), [resources]);
+  const serviceCount = productCounts ? productCounts.serviceCount : serviceResources.length || resources.length;
+  const toolHintCount = productCounts ? productCounts.toolHintCount : toolResources.length;
+  const needsAttentionCount = productCounts ? productCounts.needsAttentionCount : attentionCount;
   const sections = useMemo(
     () => [
       {
         value: "services",
         label: "服务",
-        count: serviceResources.length || resources.length,
+        count: serviceCount,
         title: "MCP 服务",
         summary: "本机已配置的服务摘要；这里只展示用途、来源和边界，不启动服务。",
         resources: serviceResources.length > 0 ? serviceResources : resources
@@ -30,21 +36,21 @@ export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) 
       {
         value: "tools",
         label: "工具",
-        count: toolResources.length,
+        count: toolHintCount,
         title: "工具能力",
-        summary: "服务暴露的工具线索；AIOS Desktop 只展示配置摘要，不调用工具。",
+        summary: useProductLibrary ? "只统计已经安全保存的工具名称线索；无法判断时不会启动服务补全。" : "服务暴露的工具线索；AIOS Desktop 只展示配置摘要，不调用工具。",
         resources: toolResources
       },
       {
         value: "attention",
         label: "需关注",
-        count: attentionCount,
+        count: needsAttentionCount,
         title: "需要复核",
         summary: "权限、状态或边界需要人工查看的 MCP 条目。",
         resources: attentionResources
       }
     ],
-    [attentionCount, attentionResources, resources, serviceResources, toolResources]
+    [attentionResources, needsAttentionCount, resources, serviceCount, serviceResources, toolHintCount, toolResources, useProductLibrary]
   );
   const active = sections.find((section) => section.value === activeSection) ?? sections[0];
   const sectionResources = active.resources;
@@ -59,12 +65,13 @@ export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) 
       contentClassName="mcp-module-scroll"
       view="mcp"
       summary={zhCN.moduleSummaries.mcp}
-      count={sectionResources.length}
+      count={active.count}
       ariaLabel={moduleAriaLabel("mcp")}
       motionKey={`mcp:${activeSection}:${sectionResources.length}`}
       actions={
         <>
           <Chip label="不启动服务" variant="outlined" size="small" />
+          <Chip label="不连接端点" variant="outlined" size="small" />
           <Chip label="不调用工具" variant="outlined" size="small" />
         </>
       }
@@ -83,16 +90,25 @@ export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) 
               icon={null}
               purpose="本机已配置的 MCP 服务数量。"
               selected={activeSection === "services"}
-              technicalName={`${resources.length} 个`}
+              technicalName={`${serviceCount} 个`}
               title="MCP 服务"
               onClick={() => setActiveSection("services")}
             />
             <AiosUsageCard
               className="mcp-summary-card"
               icon={null}
+              purpose="可安全识别的工具名称数量；无法判断时不会启动服务补全。"
+              selected={activeSection === "tools"}
+              technicalName={`${toolHintCount} 个`}
+              title="MCP 工具"
+              onClick={() => setActiveSection("tools")}
+            />
+            <AiosUsageCard
+              className="mcp-summary-card"
+              icon={null}
               purpose="来源、权限或风险需要再确认的服务。"
               selected={activeSection === "attention"}
-              technicalName={`${attentionCount} 个`}
+              technicalName={`${needsAttentionCount} 个`}
               title="需要复核"
               onClick={() => setActiveSection("attention")}
             />
@@ -104,7 +120,12 @@ export function McpModule({ resources, selectedId, onSelect }: AiosModuleProps) 
         <AiosSectionRail ariaLabel="MCP 浏览分类" options={sectionOptions} value={activeSection} onChange={handleSectionChange} />
         <Box className="aios-pane aios-pane-scroll mcp-browser-panel" ref={panelRef} data-aios-internal-scroll="true">
           <AiosContentPanel className="mcp-content-panel" active>
-            <AiosSectionHeader title={active.title} summary={active.summary} count={sectionResources.length} />
+            <AiosSectionHeader title={active.title} summary={active.summary} count={active.count} />
+            {useProductLibrary && activeSection === "tools" && toolHintCount === 0 && (
+              <Alert className="mcp-local-reminder" severity="info" variant="outlined">
+                {fallbackMcpToolHintsUnavailableText}
+              </Alert>
+            )}
             {groups.length === 0 ? (
               <ModuleEmptyState {...moduleEmptyStateCopy("mcp")} />
             ) : (

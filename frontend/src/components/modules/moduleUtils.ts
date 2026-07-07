@@ -4,6 +4,7 @@ import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import { VIEW_LABELS } from "../../lib/filtering";
 import type { ProjectResourceMapEntry, ResourceCorpusScope, ResourceCorpusSourceMode, ResourceCorpusSummary, ResourceDataSourceState, ScanSourceResourceMapEntry } from "../../lib/resourceCorpus";
+import type { McpLibraryModuleState } from "../../lib/mcpLibrary";
 import type { SkillLibraryModuleState, SkillListItem } from "../../lib/skillLibrary";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
@@ -35,6 +36,7 @@ export interface AiosModuleProps {
   allResources: AiosResource[];
   baseline: BaselineSummary;
   resourceCorpus: ResourceCorpusModuleState;
+  mcpLibrary: McpLibraryModuleState;
   skillLibrary: SkillLibraryModuleState;
   displayById: ReadonlyMap<string, ResourceDisplay>;
   query: string;
@@ -91,6 +93,47 @@ export function getMcpServer(resource: AiosResource): McpServerRecord | null {
 }
 
 export function getMcpGroups(resources: AiosResource[]): ResourceGroupData[] {
+  if (resources.some(isProductMcpResource)) {
+    const productResources = resources.filter(isProductMcpResource);
+    const definitions = [
+      {
+        title: "需要处理",
+        summary: "环境变量、远程主机、依赖或安全边界需要人工确认的 MCP 服务。",
+        statuses: ["needsAttention", "unreadable"] as const
+      },
+      {
+        title: "来源不明",
+        summary: "AIOS Desktop 还不能判断来源的 MCP 配置线索。",
+        statuses: ["sourceUnknown"] as const
+      },
+      {
+        title: "可能可用",
+        summary: "找到了服务配置和基本信息，但 AIOS Desktop 没有启动验证。",
+        statuses: ["likelyAvailable"] as const
+      },
+      {
+        title: "已找到配置",
+        summary: "找到了本机 MCP 配置线索；工具列表可能仍需人工查看。",
+        statuses: ["visible"] as const
+      },
+      {
+        title: "未检查",
+        summary: "最近记录尚未完成，只能作为待确认线索展示。",
+        statuses: ["unchecked"] as const
+      }
+    ];
+    return definitions
+      .map((definition) => ({
+        title: definition.title,
+        summary: definition.summary,
+        resources: productResources.filter((resource) => {
+          const status = getProductMcpStatus(resource);
+          return Boolean(status && definition.statuses.some((allowedStatus) => allowedStatus === status));
+        })
+      }))
+      .filter((group) => group.resources.length > 0);
+  }
+
   const order = ["credential", "npx", "remote", "local", "unknown"] as const;
   return order
     .map((group) => ({
@@ -102,6 +145,15 @@ export function getMcpGroups(resources: AiosResource[]): ResourceGroupData[] {
       })
     }))
     .filter((group) => group.resources.length > 0);
+}
+
+function isProductMcpResource(resource: AiosResource): boolean {
+  return resource.metadata?.corpusSource === "mcp-library-product";
+}
+
+function getProductMcpStatus(resource: AiosResource): string | null {
+  const status = resource.metadata?.mcpStatus;
+  return typeof status === "string" ? status : null;
 }
 
 export function moduleAriaLabel(view: ResourceView): string {

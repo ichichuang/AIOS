@@ -2,17 +2,21 @@ import { Alert, Box, Button, Chip, Stack, Typography } from "@mui/material";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import { formatCount } from "../../i18n/zh-CN";
+import { buildHomeMcpLibraryStats } from "../../lib/mcpLibrary";
 import { homeCopy } from "../../lib/productShell";
 import { buildHomeSkillLibraryStats } from "../../lib/skillLibrary";
 import { AiosHeroPanel, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosUsageCard } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 
-export function DashboardModule({ allResources, resourceCorpus, skillLibrary, viewCounts, onViewChange }: AiosModuleProps) {
+export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skillLibrary, viewCounts, onViewChange }: AiosModuleProps) {
   const legacyAttentionCount = allResources.filter((resource) => resource.risk !== "low" || resource.status === "warn" || resource.status === "missing" || resource.status === "unknown").length;
   const homeSkillStats = buildHomeSkillLibraryStats(skillLibrary.summary, resourceCorpus.summary, viewCounts);
-  const attentionCount = homeSkillStats.usingProductSummary ? homeSkillStats.needsAttentionCount : legacyAttentionCount;
-  const latestScanLabel = homeSkillStats.latestScanLabel;
-  const hasResults = homeSkillStats.usingProductSummary ? skillLibrary.summary?.counts.totalSkillCandidates !== 0 || resourceCorpus.summary.resourceCount > 0 : resourceCorpus.summary.resourceCount > 0;
+  const homeMcpStats = buildHomeMcpLibraryStats(mcpLibrary.summary, viewCounts);
+  const usingProductAttention = homeSkillStats.usingProductSummary || homeMcpStats.usingProductSummary;
+  const attentionCount = usingProductAttention ? homeSkillStats.needsAttentionCount + homeMcpStats.needsAttentionCount : legacyAttentionCount;
+  const latestScanLabel = homeSkillStats.latestScanLabel !== "还没有查找记录" ? homeSkillStats.latestScanLabel : homeMcpStats.latestSearchOrScanLabel;
+  const hasResults = homeSkillStats.usingProductSummary || homeMcpStats.usingProductSummary ? (skillLibrary.summary?.counts.totalSkillCandidates ?? 0) > 0 || homeMcpStats.serviceCount > 0 || resourceCorpus.summary.resourceCount > 0 : resourceCorpus.summary.resourceCount > 0;
+  const mcpCountLabel = `${formatCount(homeMcpStats.serviceCount)} / ${formatCount(homeMcpStats.toolHintCount)}`;
 
   return (
     <AiosModuleFrame
@@ -49,9 +53,9 @@ export function DashboardModule({ allResources, resourceCorpus, skillLibrary, vi
             </Typography>
           </Box>
           <Box className="dashboard-hero-stat">
-            <Typography component="strong">{formatCount(viewCounts.mcp)}</Typography>
+            <Typography component="strong">{mcpCountLabel}</Typography>
             <Typography color="text.secondary" variant="body2">
-              MCP 服务
+              MCP 服务 / 工具
             </Typography>
           </Box>
           <Box className="dashboard-hero-stat">
@@ -77,10 +81,10 @@ export function DashboardModule({ allResources, resourceCorpus, skillLibrary, vi
           <AiosUsageCard
             className="dashboard-summary-card"
             icon={null}
-            purpose="本机已配置的 MCP 服务和工具线索。"
+            purpose="本机已配置的 MCP 服务，以及可安全识别的工具名称线索。"
             selected={false}
-            technicalName={formatCount(viewCounts.mcp)}
-            title="MCP 服务"
+            technicalName={mcpCountLabel}
+            title="MCP 服务 / 工具"
           />
           <AiosUsageCard
             className="dashboard-summary-card"

@@ -577,6 +577,128 @@ pub enum SkillStatus {
     Unchecked,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpLibrarySummary {
+    pub generated_at_ms: u64,
+    pub latest_search_or_scan_time: Option<u64>,
+    pub counts: McpLibraryCounts,
+    pub metadata_only: bool,
+    pub content_storage_enabled: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpLibraryCounts {
+    pub mcp_config_count: u64,
+    pub service_count: u64,
+    pub verified_service_count: u64,
+    pub unverified_service_count: u64,
+    pub tool_hint_count: u64,
+    pub needs_attention_count: u64,
+    pub source_unknown_count: u64,
+    pub config_unreadable_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServiceItem {
+    pub id: String,
+    pub display_name: String,
+    pub short_purpose: String,
+    pub status: McpServiceStatus,
+    pub source_label: String,
+    pub source_kind_label: String,
+    pub config_location_hint: String,
+    pub tool_hint_count: u64,
+    pub tool_hints: Vec<McpToolHint>,
+    pub safety_text: String,
+    pub attention_reasons: Vec<McpAttentionReason>,
+    pub command_name: Option<String>,
+    pub transport: String,
+    pub required_env_names: Vec<String>,
+    pub remote_host_hint: Option<String>,
+    pub updated_at: Option<String>,
+    pub last_seen_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServiceDetail {
+    #[serde(flatten)]
+    pub item: McpServiceItem,
+    pub what_it_does: String,
+    pub config_sources: Vec<McpConfigSourceSummary>,
+    pub tool_hints_unavailable_explanation: String,
+    pub manual_check_suggestions: Vec<String>,
+    pub safety_summary: McpSafetySummary,
+    pub findings: Vec<McpAttentionReason>,
+    pub safe_advanced_metadata_summary: Vec<McpAdvancedMetadataRow>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolHint {
+    pub name: String,
+    pub purpose: String,
+    pub service_label: String,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigSourceSummary {
+    pub id: String,
+    pub source_label: String,
+    pub source_kind_label: String,
+    pub path_hint: String,
+    pub root_path_hint: Option<String>,
+    pub last_seen_at: Option<String>,
+    pub scan_status: Option<String>,
+    pub finding_count: u64,
+    pub verified: bool,
+    pub config_unreadable: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAttentionReason {
+    pub code: String,
+    pub label: String,
+    pub detail: String,
+    pub severity: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpSafetySummary {
+    pub read_only: bool,
+    pub starts_services: bool,
+    pub connects_endpoints: bool,
+    pub calls_tools: bool,
+    pub reads_env_values: bool,
+    pub stores_env_values: bool,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAdvancedMetadataRow {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum McpServiceStatus {
+    Visible,
+    LikelyAvailable,
+    NeedsAttention,
+    SourceUnknown,
+    Unreadable,
+    Unchecked,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceCorpusQuery {
@@ -769,6 +891,29 @@ pub fn get_skill_detail(
     skill_id: String,
 ) -> Result<SkillDetail, ResourceStoreCommandError> {
     get_skill_detail_for_path(&state.db_path, &skill_id).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_mcp_library_summary(
+    state: State<'_, ResourceStoreState>,
+) -> Result<McpLibrarySummary, ResourceStoreCommandError> {
+    get_mcp_library_summary_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_mcp_service_items(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<McpServiceItem>, ResourceStoreCommandError> {
+    list_mcp_service_items_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn get_mcp_service_detail(
+    state: State<'_, ResourceStoreState>,
+    service_id: String,
+) -> Result<McpServiceDetail, ResourceStoreCommandError> {
+    get_mcp_service_detail_for_path(&state.db_path, &service_id)
+        .map_err(ResourceStoreCommandError::from)
 }
 
 #[tauri::command]
@@ -1521,6 +1666,1126 @@ pub fn get_skill_detail_for_path(
         .find(|group| group.id == skill_id)
         .ok_or_else(|| ResourceStoreError::InvalidInput("未找到技能详情。".to_string()))?;
     Ok(skill_detail_for_group(group))
+}
+
+pub fn get_mcp_library_summary_for_path(
+    db_path: &Path,
+) -> Result<McpLibrarySummary, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_mcp_library_groups(&conn)?;
+    let latest_scan = latest_scan_job(&conn)?;
+    let latest_successful_scan = latest_successful_scan_job(&conn)?;
+    let counts = mcp_library_counts(&groups);
+
+    Ok(McpLibrarySummary {
+        generated_at_ms: current_time_ms(),
+        latest_search_or_scan_time: latest_successful_scan
+            .as_ref()
+            .or(latest_scan.as_ref())
+            .and_then(|job| job.finished_at_ms.or(Some(job.started_at_ms))),
+        counts,
+        metadata_only: true,
+        content_storage_enabled: false,
+    })
+}
+
+pub fn list_mcp_service_items_for_path(
+    db_path: &Path,
+) -> Result<Vec<McpServiceItem>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_mcp_library_groups(&conn)?;
+    Ok(groups
+        .iter()
+        .map(mcp_service_item_for_group)
+        .collect::<Vec<_>>())
+}
+
+pub fn get_mcp_service_detail_for_path(
+    db_path: &Path,
+    service_id: &str,
+) -> Result<McpServiceDetail, ResourceStoreError> {
+    let service_id = normalized_required_text("MCP 服务 ID", service_id)?;
+    let conn = open_initialized_connection(db_path)?;
+    let groups = build_mcp_library_groups(&conn)?;
+    let group = groups
+        .iter()
+        .find(|group| group.id == service_id)
+        .ok_or_else(|| ResourceStoreError::InvalidInput("未找到 MCP 服务详情。".to_string()))?;
+    Ok(mcp_service_detail_for_group(group))
+}
+
+#[derive(Clone, Debug)]
+struct McpCandidate {
+    resource: ResourceCorpusResource,
+    findings: Vec<ResourceCorpusFinding>,
+    identity_key: String,
+    display_name: String,
+    source_label: String,
+    source_kind_label: String,
+    config_location_hint: String,
+    verified_service_metadata: bool,
+    source_unknown: bool,
+    unchecked: bool,
+    config_unreadable: bool,
+    command_name: Option<String>,
+    transport: String,
+    required_env_names: Vec<String>,
+    remote_host_hint: Option<String>,
+    tool_hints: Vec<McpToolHint>,
+}
+
+#[derive(Clone, Debug)]
+struct McpLibraryGroup {
+    id: String,
+    identity_key: String,
+    candidates: Vec<McpCandidate>,
+}
+
+const MCP_SAFETY_TEXT: &str =
+    "AIOS Desktop 只显示已保存的本机 MCP 基本信息；不会启动服务、不会连接端点、不会调用 MCP 工具。";
+const MCP_TOOL_HINTS_UNAVAILABLE_TEXT: &str =
+    "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
+
+fn build_mcp_library_groups(conn: &Connection) -> Result<Vec<McpLibraryGroup>, ResourceStoreError> {
+    let candidates = list_mcp_candidates_for_connection(conn)?;
+    let mut groups: Vec<McpLibraryGroup> = Vec::new();
+    let mut indexes_by_identity = HashMap::<String, usize>::new();
+
+    for candidate in candidates {
+        let index = if let Some(index) = indexes_by_identity.get(&candidate.identity_key) {
+            *index
+        } else {
+            let id = stable_id("mcp-service", &[&candidate.identity_key]);
+            let index = groups.len();
+            groups.push(McpLibraryGroup {
+                id,
+                identity_key: candidate.identity_key.clone(),
+                candidates: Vec::new(),
+            });
+            indexes_by_identity.insert(candidate.identity_key.clone(), index);
+            index
+        };
+        groups[index].candidates.push(candidate);
+    }
+
+    groups.sort_by(|left, right| {
+        let left_item = mcp_service_item_for_group(left);
+        let right_item = mcp_service_item_for_group(right);
+        mcp_status_rank(&left_item.status)
+            .cmp(&mcp_status_rank(&right_item.status))
+            .then_with(|| left_item.display_name.cmp(&right_item.display_name))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(groups)
+}
+
+fn list_mcp_candidates_for_connection(
+    conn: &Connection,
+) -> Result<Vec<McpCandidate>, ResourceStoreError> {
+    let mut sql = corpus_resource_base_sql();
+    sql.push_str(
+        " WHERE r.resource_kind IN ('mcp-config', 'mcp-server')
+        ORDER BY r.name ASC, COALESCE(l.relative_path, '') ASC",
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], row_to_corpus_resource)?;
+    let resources = collect_rows(rows)?;
+    let mut candidates = Vec::with_capacity(resources.len());
+
+    for resource in resources {
+        let findings = list_resource_findings_for_connection(conn, &resource.id)?;
+        let verified_service_metadata = resource.resource_kind == "mcp-server";
+        let display_name = mcp_display_name(&resource, verified_service_metadata);
+        let source_unknown = is_source_unknown(&resource);
+        let source_label = mcp_source_label(&resource, source_unknown);
+        let source_kind_label = mcp_source_kind_label(&resource, &source_label, source_unknown);
+        let config_location_hint = safe_product_path_hint(&mcp_path_hint(&resource));
+        let unchecked = mcp_is_unchecked(&resource);
+        let config_unreadable = mcp_config_is_unreadable(&resource, &findings);
+        let command_name = extract_mcp_command_name(&resource.description);
+        let transport = extract_mcp_transport(&resource.description);
+        let required_env_names = extract_mcp_env_names(&resource.description);
+        let remote_host_hint = extract_remote_host_hint(&resource.description);
+        let tool_hints =
+            extract_mcp_tool_hints(&resource.description, &display_name).unwrap_or_default();
+        let identity_key = mcp_identity_key(
+            &resource,
+            &display_name,
+            &source_label,
+            verified_service_metadata,
+            &config_location_hint,
+        );
+
+        candidates.push(McpCandidate {
+            resource,
+            findings,
+            identity_key,
+            display_name,
+            source_label,
+            source_kind_label,
+            config_location_hint,
+            verified_service_metadata,
+            source_unknown,
+            unchecked,
+            config_unreadable,
+            command_name,
+            transport,
+            required_env_names,
+            remote_host_hint,
+            tool_hints,
+        });
+    }
+
+    Ok(candidates)
+}
+
+fn mcp_library_counts(groups: &[McpLibraryGroup]) -> McpLibraryCounts {
+    let mut counts = McpLibraryCounts {
+        service_count: groups.len() as u64,
+        ..McpLibraryCounts::default()
+    };
+
+    for group in groups {
+        let item = mcp_service_item_for_group(group);
+        let verified = group
+            .candidates
+            .iter()
+            .any(|candidate| candidate.verified_service_metadata);
+        if verified {
+            counts.verified_service_count += 1;
+        } else {
+            counts.unverified_service_count += 1;
+        }
+        counts.mcp_config_count += group
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.resource.resource_kind == "mcp-config")
+            .count() as u64;
+        counts.tool_hint_count += item.tool_hint_count;
+        if mcp_status_needs_attention(&item.status) {
+            counts.needs_attention_count += 1;
+        }
+        if item.status == McpServiceStatus::SourceUnknown {
+            counts.source_unknown_count += 1;
+        }
+        if item.status == McpServiceStatus::Unreadable {
+            counts.config_unreadable_count += 1;
+        }
+    }
+
+    counts
+}
+
+fn mcp_service_item_for_group(group: &McpLibraryGroup) -> McpServiceItem {
+    let primary = select_primary_mcp_candidate(group);
+    let status = mcp_status_for_group(group);
+    let attention_reasons = mcp_attention_reasons_for_group(group);
+    let tool_hints = merged_mcp_tool_hints(group, &primary.display_name);
+    let source_label = merged_mcp_source_label(group, primary);
+    let source_kind_label = merged_mcp_source_kind_label(group, primary);
+
+    McpServiceItem {
+        id: group.id.clone(),
+        display_name: primary.display_name.clone(),
+        short_purpose: mcp_short_purpose(primary),
+        status,
+        source_label,
+        source_kind_label,
+        config_location_hint: safe_product_path_hint(&primary.config_location_hint),
+        tool_hint_count: tool_hints.len() as u64,
+        tool_hints,
+        safety_text: MCP_SAFETY_TEXT.to_string(),
+        attention_reasons,
+        command_name: merged_mcp_command_name(group),
+        transport: merged_mcp_transport(group),
+        required_env_names: merged_mcp_env_names(group),
+        remote_host_hint: merged_mcp_remote_host(group),
+        updated_at: primary
+            .resource
+            .modified_at_ms
+            .or(Some(primary.resource.updated_at_ms))
+            .map(|value| value.to_string()),
+        last_seen_at: primary
+            .resource
+            .scan_job_finished_at_ms
+            .or(primary.resource.scan_job_started_at_ms)
+            .map(|value| value.to_string()),
+    }
+}
+
+fn mcp_service_detail_for_group(group: &McpLibraryGroup) -> McpServiceDetail {
+    let item = mcp_service_item_for_group(group);
+    let config_sources = group
+        .candidates
+        .iter()
+        .map(mcp_config_source_summary)
+        .collect::<Vec<_>>();
+    let findings = group
+        .candidates
+        .iter()
+        .flat_map(mcp_finding_attention_reasons)
+        .collect::<Vec<_>>();
+
+    McpServiceDetail {
+        what_it_does: mcp_detail_what_it_does(&item),
+        config_sources,
+        tool_hints_unavailable_explanation: if item.tool_hints.is_empty() {
+            MCP_TOOL_HINTS_UNAVAILABLE_TEXT.to_string()
+        } else {
+            String::new()
+        },
+        manual_check_suggestions: mcp_manual_check_suggestions(&item),
+        safety_summary: mcp_safety_summary(),
+        findings,
+        safe_advanced_metadata_summary: mcp_advanced_metadata_rows(group, &item),
+        item,
+    }
+}
+
+fn mcp_config_source_summary(candidate: &McpCandidate) -> McpConfigSourceSummary {
+    McpConfigSourceSummary {
+        id: candidate.resource.id.clone(),
+        source_label: candidate.source_label.clone(),
+        source_kind_label: candidate.source_kind_label.clone(),
+        path_hint: safe_product_path_hint(&candidate.config_location_hint),
+        root_path_hint: candidate
+            .resource
+            .root_display_path
+            .as_deref()
+            .map(safe_product_path_hint),
+        last_seen_at: candidate
+            .resource
+            .scan_job_finished_at_ms
+            .or(candidate.resource.scan_job_started_at_ms)
+            .map(|value| value.to_string()),
+        scan_status: candidate.resource.scan_job_status.clone(),
+        finding_count: candidate.findings.len() as u64,
+        verified: candidate.verified_service_metadata,
+        config_unreadable: candidate.config_unreadable,
+    }
+}
+
+fn mcp_advanced_metadata_rows(
+    group: &McpLibraryGroup,
+    item: &McpServiceItem,
+) -> Vec<McpAdvancedMetadataRow> {
+    vec![
+        McpAdvancedMetadataRow {
+            label: "产品状态".to_string(),
+            value: mcp_status_label(&item.status).to_string(),
+        },
+        McpAdvancedMetadataRow {
+            label: "服务线索键".to_string(),
+            value: group.identity_key.clone(),
+        },
+        McpAdvancedMetadataRow {
+            label: "配置来源数".to_string(),
+            value: group.candidates.len().to_string(),
+        },
+        McpAdvancedMetadataRow {
+            label: "本地记录边界".to_string(),
+            value: "仅使用 AIOS Desktop 已保存的 MCP 基本信息，不读取配置正文、不启动服务。"
+                .to_string(),
+        },
+    ]
+}
+
+fn mcp_status_for_group(group: &McpLibraryGroup) -> McpServiceStatus {
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.config_unreadable)
+    {
+        return McpServiceStatus::Unreadable;
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.source_unknown)
+    {
+        return McpServiceStatus::SourceUnknown;
+    }
+    if group
+        .candidates
+        .iter()
+        .any(mcp_candidate_has_unsafe_unverified_signal)
+    {
+        return McpServiceStatus::NeedsAttention;
+    }
+    if group.candidates.iter().any(|candidate| candidate.unchecked) {
+        return McpServiceStatus::Unchecked;
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.verified_service_metadata)
+    {
+        return McpServiceStatus::LikelyAvailable;
+    }
+    McpServiceStatus::Visible
+}
+
+fn mcp_candidate_has_unsafe_unverified_signal(candidate: &McpCandidate) -> bool {
+    candidate.command_name.as_deref() == Some("npx")
+        || candidate
+            .remote_host_hint
+            .as_deref()
+            .is_some_and(|host| !host.trim().is_empty())
+        || !candidate.required_env_names.is_empty()
+        || candidate.resource.risk_level == "high"
+        || candidate
+            .findings
+            .iter()
+            .any(|finding| finding.severity == "high")
+}
+
+fn select_primary_mcp_candidate(group: &McpLibraryGroup) -> &McpCandidate {
+    group
+        .candidates
+        .iter()
+        .min_by(|left, right| compare_mcp_candidates(left, right))
+        .expect("mcp group must contain at least one candidate")
+}
+
+fn compare_mcp_candidates(left: &McpCandidate, right: &McpCandidate) -> std::cmp::Ordering {
+    mcp_candidate_rank(left)
+        .cmp(&mcp_candidate_rank(right))
+        .then_with(|| {
+            right
+                .resource
+                .updated_at_ms
+                .cmp(&left.resource.updated_at_ms)
+        })
+        .then_with(|| left.config_location_hint.cmp(&right.config_location_hint))
+}
+
+fn mcp_candidate_rank(candidate: &McpCandidate) -> u8 {
+    if candidate.config_unreadable {
+        return 6;
+    }
+    if candidate.source_unknown {
+        return 5;
+    }
+    if candidate.verified_service_metadata {
+        return 0;
+    }
+    if candidate.source_label == "项目配置" {
+        return 1;
+    }
+    2
+}
+
+fn mcp_status_rank(status: &McpServiceStatus) -> u8 {
+    match status {
+        McpServiceStatus::LikelyAvailable => 0,
+        McpServiceStatus::Visible => 1,
+        McpServiceStatus::NeedsAttention => 2,
+        McpServiceStatus::SourceUnknown => 3,
+        McpServiceStatus::Unreadable => 4,
+        McpServiceStatus::Unchecked => 5,
+    }
+}
+
+fn mcp_status_needs_attention(status: &McpServiceStatus) -> bool {
+    matches!(
+        status,
+        McpServiceStatus::NeedsAttention
+            | McpServiceStatus::SourceUnknown
+            | McpServiceStatus::Unreadable
+            | McpServiceStatus::Unchecked
+    )
+}
+
+fn mcp_status_label(status: &McpServiceStatus) -> &'static str {
+    match status {
+        McpServiceStatus::Visible => "可见",
+        McpServiceStatus::LikelyAvailable => "可能可用",
+        McpServiceStatus::NeedsAttention => "需要处理",
+        McpServiceStatus::SourceUnknown => "来源不明",
+        McpServiceStatus::Unreadable => "无法读取",
+        McpServiceStatus::Unchecked => "未检查",
+    }
+}
+
+fn mcp_attention_reasons_for_group(group: &McpLibraryGroup) -> Vec<McpAttentionReason> {
+    let mut reasons = Vec::new();
+    if group.candidates.len() > 1 {
+        reasons.push(mcp_attention_reason(
+            "duplicate-service-clues",
+            "发现重复线索",
+            "找到了多个指向同一个 MCP 服务的配置线索；AIOS Desktop 只合并展示。",
+            "low",
+        ));
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.source_unknown)
+    {
+        reasons.push(mcp_attention_reason(
+            "source-unknown",
+            "来源不明",
+            "AIOS Desktop 还不能判断这个 MCP 配置来自哪个清楚来源。",
+            "medium",
+        ));
+    }
+    if group
+        .candidates
+        .iter()
+        .any(|candidate| candidate.config_unreadable)
+    {
+        reasons.push(mcp_attention_reason(
+            "config-unreadable",
+            "配置需要查看",
+            "这条 MCP 配置线索带有无法读取、敏感路径或高风险发现，只能显示安全摘要。",
+            "high",
+        ));
+    }
+    if group.candidates.iter().any(|candidate| candidate.unchecked) {
+        reasons.push(mcp_attention_reason(
+            "unchecked-source",
+            "尚未确认",
+            "最近一次记录没有完成状态，只能显示为待确认。",
+            "low",
+        ));
+    }
+    let env_names = merged_mcp_env_names(group);
+    for env_name in env_names {
+        reasons.push(mcp_attention_reason(
+            &format!("env-required:{env_name}"),
+            "需要环境变量",
+            &format!("这个服务需要环境变量 {env_name}，但 AIOS Desktop 不会读取它的值。"),
+            "medium",
+        ));
+    }
+    if merged_mcp_command_name(group).as_deref() == Some("npx") {
+        reasons.push(mcp_attention_reason(
+            "npx-command",
+            "需要确认依赖",
+            "这个服务使用 npx，建议开发者确认包名和版本；AIOS Desktop 不会安装或启动它。",
+            "medium",
+        ));
+    }
+    if let Some(host) = merged_mcp_remote_host(group) {
+        reasons.push(mcp_attention_reason(
+            "remote-host",
+            "可能远程连接",
+            &format!("这个服务可能连接 {host}；AIOS Desktop 不会连接端点。"),
+            "medium",
+        ));
+    }
+    for candidate in &group.candidates {
+        reasons.extend(mcp_finding_attention_reasons(candidate));
+    }
+    dedupe_mcp_attention_reasons(reasons)
+}
+
+fn mcp_finding_attention_reasons(candidate: &McpCandidate) -> Vec<McpAttentionReason> {
+    candidate
+        .findings
+        .iter()
+        .filter(|finding| finding.finding_kind != "mcp-not-executed")
+        .map(|finding| {
+            mcp_attention_reason(
+                &finding.finding_kind,
+                &mcp_finding_label(&finding.finding_kind),
+                &safe_finding_detail(&finding.message),
+                &finding.severity,
+            )
+        })
+        .collect()
+}
+
+fn dedupe_mcp_attention_reasons(reasons: Vec<McpAttentionReason>) -> Vec<McpAttentionReason> {
+    let mut seen = HashMap::<String, bool>::new();
+    reasons
+        .into_iter()
+        .filter(|reason| {
+            if seen.contains_key(&reason.code) {
+                return false;
+            }
+            seen.insert(reason.code.clone(), true);
+            true
+        })
+        .collect()
+}
+
+fn mcp_attention_reason(
+    code: &str,
+    label: &str,
+    detail: &str,
+    severity: &str,
+) -> McpAttentionReason {
+    McpAttentionReason {
+        code: code.to_string(),
+        label: label.to_string(),
+        detail: detail.to_string(),
+        severity: severity.to_string(),
+    }
+}
+
+fn mcp_finding_label(kind: &str) -> String {
+    match kind {
+        "sensitive-path-redacted" => "路径已隐藏".to_string(),
+        "mcp-not-executed" => "不会启动 MCP".to_string(),
+        "raw-log" => "日志内容已隐藏".to_string(),
+        "permission_denied" | "metadata_denied" => "无法读取元数据".to_string(),
+        _ => "需要查看".to_string(),
+    }
+}
+
+fn mcp_display_name(resource: &ResourceCorpusResource, verified_service_metadata: bool) -> String {
+    if let Some(name) = service_name_from_description(&resource.description) {
+        return safe_mcp_display_name(&name);
+    }
+    let raw_name = resource.name.trim();
+    if verified_service_metadata && !raw_name.is_empty() && !is_generic_mcp_config_name(raw_name) {
+        return safe_mcp_display_name(raw_name);
+    }
+    for value in [
+        resource.display_path.as_deref(),
+        resource.relative_path.as_deref(),
+    ] {
+        if let Some(name) = mcp_name_from_path(value, verified_service_metadata) {
+            return safe_mcp_display_name(&name);
+        }
+    }
+    if !raw_name.is_empty() {
+        return safe_mcp_display_name(raw_name);
+    }
+    "未命名 MCP 配置".to_string()
+}
+
+fn service_name_from_description(description: &str) -> Option<String> {
+    let lower = description.to_ascii_lowercase();
+    let marker = "mcp metadata for ";
+    let start = lower.find(marker)? + marker.len();
+    let value = description[start..]
+        .split(['.', ';'])
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn mcp_name_from_path(value: Option<&str>, verified_service_metadata: bool) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let normalized = value.replace('\\', "/");
+    let segments = normalized
+        .split('/')
+        .filter(|segment| !segment.trim().is_empty())
+        .collect::<Vec<_>>();
+    let file_name = segments.last()?.trim();
+    if verified_service_metadata && file_name.contains('.') {
+        return file_name.split('.').next().map(ToString::to_string);
+    }
+    Some(file_name.to_string())
+}
+
+fn safe_mcp_display_name(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "未命名 MCP 配置".to_string();
+    }
+    if contains_secret_like_product_text(trimmed) {
+        "[sensitive]".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn is_generic_mcp_config_name(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "mcp.json" | "mcp.toml" | "mcp.yaml" | "mcp.yml" | "servers.json" | "config.toml"
+    )
+}
+
+fn mcp_identity_key(
+    resource: &ResourceCorpusResource,
+    display_name: &str,
+    source_label: &str,
+    verified_service_metadata: bool,
+    config_location_hint: &str,
+) -> String {
+    let key = if verified_service_metadata {
+        format!("service:{}", normalize_mcp_key(display_name))
+    } else {
+        format!(
+            "config:{}:{}",
+            normalize_mcp_key(source_label),
+            normalize_mcp_key(config_location_hint)
+        )
+    }
+    .chars()
+    .take(512)
+    .collect::<String>();
+    if key.trim().is_empty() {
+        format!("resource:{}", safe_product_path_hint(&resource.stable_key))
+    } else {
+        key
+    }
+}
+
+fn normalize_mcp_key(value: &str) -> String {
+    value
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_ascii_lowercase()
+}
+
+fn mcp_path_hint(resource: &ResourceCorpusResource) -> String {
+    let path = resource
+        .display_path
+        .as_deref()
+        .or(resource.relative_path.as_deref())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(resource.name.as_str());
+    let root = resource
+        .root_display_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty() && *value != "未记录");
+    if let Some(root) = root {
+        if path.starts_with("~/") || path.starts_with('/') {
+            return path.to_string();
+        }
+        return format!(
+            "{}/{}",
+            root.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
+    }
+    path.to_string()
+}
+
+fn mcp_source_label(resource: &ResourceCorpusResource, source_unknown: bool) -> String {
+    if source_unknown {
+        return "来源不明".to_string();
+    }
+    let text = [
+        resource.relative_path.as_deref(),
+        resource.display_path.as_deref(),
+        resource.root_display_path.as_deref(),
+        resource.scan_source_name.as_deref(),
+        resource.source_kind.as_deref(),
+        resource.project_label.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .replace('\\', "/")
+    .to_ascii_lowercase();
+    if text.contains("codex") || text.contains(".codex") {
+        return "Codex 配置".to_string();
+    }
+    if text.contains("claude") || text.contains(".claude") {
+        return "Claude 配置".to_string();
+    }
+    if resource.project_label.is_some() {
+        return "项目配置".to_string();
+    }
+    match resource.source_kind.as_deref().unwrap_or_default() {
+        "custom-directory" => "手动添加".to_string(),
+        "intelligent-discovery" | "advanced-full-disk" => "项目配置".to_string(),
+        _ => resource
+            .scan_source_name
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "来源不明".to_string()),
+    }
+}
+
+fn mcp_source_kind_label(
+    resource: &ResourceCorpusResource,
+    source_label: &str,
+    source_unknown: bool,
+) -> String {
+    if source_unknown {
+        return "来源不明".to_string();
+    }
+    if matches!(
+        source_label,
+        "Codex 配置" | "Claude 配置" | "项目配置" | "手动添加" | "多来源"
+    ) {
+        return source_label.to_string();
+    }
+    match resource.source_kind.as_deref().unwrap_or_default() {
+        "custom-directory" => "手动添加".to_string(),
+        "intelligent-discovery" | "advanced-full-disk" => "项目配置".to_string(),
+        _ => "来源不明".to_string(),
+    }
+}
+
+fn mcp_is_unchecked(resource: &ResourceCorpusResource) -> bool {
+    resource
+        .scan_job_status
+        .as_deref()
+        .is_some_and(|status| status != "completed")
+        || resource.scan_job_status.is_none()
+}
+
+fn mcp_config_is_unreadable(
+    resource: &ResourceCorpusResource,
+    findings: &[ResourceCorpusFinding],
+) -> bool {
+    resource.sensitive_path_redacted
+        || resource.risk_level == "high"
+        || findings.iter().any(|finding| {
+            finding.finding_kind.contains("unreadable")
+                || finding.finding_kind.contains("permission")
+                || finding.finding_kind.contains("denied")
+                || finding.finding_kind == "sensitive-path-redacted"
+        })
+}
+
+fn mcp_short_purpose(candidate: &McpCandidate) -> String {
+    if candidate.verified_service_metadata {
+        return "显示本机已保存的 MCP 服务配置线索。".to_string();
+    }
+    "找到 MCP 配置线索，但暂时无法判断具体服务和工具。".to_string()
+}
+
+fn mcp_detail_what_it_does(item: &McpServiceItem) -> String {
+    if item.tool_hints.is_empty() {
+        "暂时无法判断这个服务具体提供哪些工具。".to_string()
+    } else {
+        item.short_purpose.clone()
+    }
+}
+
+fn merged_mcp_source_label(group: &McpLibraryGroup, primary: &McpCandidate) -> String {
+    let labels = unique_tool_labels(
+        group
+            .candidates
+            .iter()
+            .map(|candidate| candidate.source_label.clone())
+            .filter(|label| label != "来源不明")
+            .collect(),
+    );
+    if labels.len() > 1 {
+        "多来源".to_string()
+    } else {
+        labels
+            .first()
+            .cloned()
+            .unwrap_or_else(|| primary.source_label.clone())
+    }
+}
+
+fn merged_mcp_source_kind_label(group: &McpLibraryGroup, primary: &McpCandidate) -> String {
+    let labels = unique_tool_labels(
+        group
+            .candidates
+            .iter()
+            .map(|candidate| candidate.source_kind_label.clone())
+            .filter(|label| label != "来源不明")
+            .collect(),
+    );
+    if labels.len() > 1 {
+        "多来源".to_string()
+    } else {
+        labels
+            .first()
+            .cloned()
+            .unwrap_or_else(|| primary.source_kind_label.clone())
+    }
+}
+
+fn merged_mcp_command_name(group: &McpLibraryGroup) -> Option<String> {
+    group
+        .candidates
+        .iter()
+        .find_map(|candidate| candidate.command_name.clone())
+}
+
+fn merged_mcp_transport(group: &McpLibraryGroup) -> String {
+    group
+        .candidates
+        .iter()
+        .map(|candidate| candidate.transport.clone())
+        .find(|transport| transport != "unknown")
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn merged_mcp_env_names(group: &McpLibraryGroup) -> Vec<String> {
+    unique_tool_labels(
+        group
+            .candidates
+            .iter()
+            .flat_map(|candidate| candidate.required_env_names.clone())
+            .collect(),
+    )
+}
+
+fn merged_mcp_remote_host(group: &McpLibraryGroup) -> Option<String> {
+    group
+        .candidates
+        .iter()
+        .find_map(|candidate| candidate.remote_host_hint.clone())
+}
+
+fn merged_mcp_tool_hints(group: &McpLibraryGroup, service_label: &str) -> Vec<McpToolHint> {
+    let mut names = Vec::new();
+    for hint in group
+        .candidates
+        .iter()
+        .flat_map(|candidate| candidate.tool_hints.clone())
+    {
+        if !names.contains(&hint.name) {
+            names.push(hint.name);
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| McpToolHint {
+            name,
+            purpose: "已保存的工具名称线索。".to_string(),
+            service_label: service_label.to_string(),
+            status: "unverified".to_string(),
+        })
+        .collect()
+}
+
+fn extract_mcp_command_name(description: &str) -> Option<String> {
+    let value = extract_assignment_value(description, &["command"])?;
+    let token = value.split_whitespace().next().unwrap_or_default().trim();
+    if token.is_empty()
+        || token.eq_ignore_ascii_case("unknown")
+        || token.starts_with("http://")
+        || token.starts_with("https://")
+    {
+        return None;
+    }
+    let command = token
+        .replace('\\', "/")
+        .split('/')
+        .last()
+        .unwrap_or(token)
+        .trim_matches(|character: char| {
+            matches!(character, '"' | '\'' | '`' | ',' | ';' | ')' | '(')
+        })
+        .to_string();
+    if command.is_empty() || contains_secret_like_product_text(&command) {
+        None
+    } else {
+        Some(command)
+    }
+}
+
+fn extract_mcp_transport(description: &str) -> String {
+    extract_assignment_value(description, &["transport", "type"])
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| matches!(value.as_str(), "stdio" | "http" | "sse"))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn extract_mcp_env_names(description: &str) -> Vec<String> {
+    let Some(value) = extract_assignment_value(description, &["env names", "env", "envvarnames"])
+    else {
+        return Vec::new();
+    };
+    let normalized = value.trim().trim_matches(['[', ']', '{', '}']);
+    if normalized.is_empty()
+        || normalized == "."
+        || normalized.eq_ignore_ascii_case("none")
+        || normalized
+            .chars()
+            .all(|character| character.is_ascii_digit())
+    {
+        return Vec::new();
+    }
+    let names = normalized
+        .split(|character: char| {
+            character.is_whitespace()
+                || matches!(character, ',' | ';' | '"' | '\'' | '[' | ']' | '{' | '}')
+        })
+        .filter_map(|token| {
+            let name = token.split('=').next().unwrap_or_default().trim();
+            if is_safe_env_name(name) {
+                Some(name.to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    unique_tool_labels(names)
+}
+
+fn is_safe_env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+        && value.len() <= 96
+}
+
+fn extract_remote_host_hint(description: &str) -> Option<String> {
+    extract_url_hostname(description)
+        .or_else(|| extract_assignment_value(description, &["remote", "remotehost", "host"]))
+        .and_then(|value| safe_hostname(&value))
+}
+
+fn extract_url_hostname(value: &str) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    let (scheme, start) = if let Some(index) = lower.find("https://") {
+        ("https://", index)
+    } else if let Some(index) = lower.find("http://") {
+        ("http://", index)
+    } else {
+        return None;
+    };
+    let raw = &value[start + scheme.len()..];
+    let end = raw
+        .find(|character: char| {
+            character.is_whitespace() || matches!(character, ';' | ',' | '"' | '\'')
+        })
+        .unwrap_or(raw.len());
+    let authority_and_path = &raw[..end];
+    let authority = authority_and_path
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    let without_userinfo = authority.split('@').last().unwrap_or(authority);
+    let host = without_userinfo
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host.to_string())
+    }
+}
+
+fn safe_hostname(value: &str) -> Option<String> {
+    let host = value
+        .trim()
+        .trim_matches(|character: char| {
+            matches!(character, '"' | '\'' | '`' | ',' | ';' | ')' | '(')
+        })
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .split('@')
+        .last()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if host.is_empty()
+        || host.contains("://")
+        || contains_secret_like_product_text(host)
+        || !host
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '.'))
+    {
+        None
+    } else {
+        Some(host.to_string())
+    }
+}
+
+fn extract_mcp_tool_hints(description: &str, service_label: &str) -> Option<Vec<McpToolHint>> {
+    let value = extract_assignment_value(description, &["tools", "tool names"])?;
+    let names = value
+        .split(|character: char| {
+            character.is_whitespace()
+                || matches!(character, ',' | ';' | '"' | '\'' | '[' | ']' | '{' | '}')
+        })
+        .map(str::trim)
+        .filter(|name| is_safe_tool_hint_name(name))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let names = unique_tool_labels(names);
+    if names.is_empty() {
+        return None;
+    }
+    Some(
+        names
+            .into_iter()
+            .map(|name| McpToolHint {
+                name,
+                purpose: "已保存的工具名称线索。".to_string(),
+                service_label: service_label.to_string(),
+                status: "unverified".to_string(),
+            })
+            .collect(),
+    )
+}
+
+fn is_safe_tool_hint_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 80
+        && !contains_secret_like_product_text(value)
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+        })
+}
+
+fn extract_assignment_value(description: &str, keys: &[&str]) -> Option<String> {
+    let lower = description.to_ascii_lowercase();
+    for key in keys {
+        let key_lower = key.to_ascii_lowercase();
+        for marker in [format!("{key_lower}="), format!("{key_lower}:")] {
+            if let Some(index) = lower.find(&marker) {
+                let start = index + marker.len();
+                let raw = &description[start..];
+                let end = raw
+                    .find(|character: char| matches!(character, ';' | '\n' | '\r'))
+                    .unwrap_or(raw.len());
+                let value = raw[..end].trim().trim_end_matches('.').trim().to_string();
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn mcp_manual_check_suggestions(item: &McpServiceItem) -> Vec<String> {
+    let mut suggestions = vec![
+        "请确认相关工具已经安装。".to_string(),
+        "请在对应 AI 工具的 MCP 配置里查看来源。".to_string(),
+    ];
+    if !item.required_env_names.is_empty() {
+        suggestions.push("请确认需要的环境变量已经在你的 AI 工具里配置。".to_string());
+    }
+    if item.command_name.as_deref() == Some("npx") {
+        suggestions.push("如果使用 npx，建议确认包名、版本和本机缓存策略。".to_string());
+    }
+    if item.remote_host_hint.is_some() {
+        suggestions.push("如果你不认识这个远程主机，请先人工确认来源。".to_string());
+    }
+    if item.status == McpServiceStatus::SourceUnknown {
+        suggestions.push("如果你不认识这个服务，可以先把它标记为需要处理。".to_string());
+    }
+    suggestions
+}
+
+fn mcp_safety_summary() -> McpSafetySummary {
+    McpSafetySummary {
+        read_only: true,
+        starts_services: false,
+        connects_endpoints: false,
+        calls_tools: false,
+        reads_env_values: false,
+        stores_env_values: false,
+        text: MCP_SAFETY_TEXT.to_string(),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3919,19 +5184,21 @@ mod tests {
     use super::{
         clear_resource_library_for_path, debug_all_text_values_for_path,
         get_active_resource_corpus_summary_for_path, get_app_setting_for_path,
-        get_library_summary_for_path, get_project_resource_map_for_path,
+        get_library_summary_for_path, get_mcp_library_summary_for_path,
+        get_mcp_service_detail_for_path, get_project_resource_map_for_path,
         get_resource_counts_by_scope_for_path, get_resource_detail_for_path,
         get_scan_source_resource_map_for_path, get_skill_detail_for_path,
         get_skill_library_summary_for_path, initialize_database,
-        list_enabled_stored_scan_sources_for_path, list_persisted_resources_for_path,
-        list_project_scopes_for_path, list_resource_corpus_scopes_for_path,
-        list_resources_by_kind_for_path, list_resources_by_scope_for_path, list_scan_jobs_for_path,
-        list_scan_sources_for_path, list_skill_library_items_for_path, persist_scan_job_for_path,
-        remove_scan_source_for_path, set_app_setting_for_path, store_status_for_path,
-        update_scan_source_for_path, upsert_scan_source_for_path, PersistScanErrorInput,
-        PersistScanJobInput, PersistScanResourceInput, PersistScanSkipInput,
-        PersistScanSourceInput, ResourceCorpusQuery, ResourceStoreError, SkillStatus,
-        UpdateScanSourceInput, UpsertScanSourceInput,
+        list_enabled_stored_scan_sources_for_path, list_mcp_service_items_for_path,
+        list_persisted_resources_for_path, list_project_scopes_for_path,
+        list_resource_corpus_scopes_for_path, list_resources_by_kind_for_path,
+        list_resources_by_scope_for_path, list_scan_jobs_for_path, list_scan_sources_for_path,
+        list_skill_library_items_for_path, persist_scan_job_for_path, remove_scan_source_for_path,
+        set_app_setting_for_path, store_status_for_path, update_scan_source_for_path,
+        upsert_scan_source_for_path, McpServiceStatus, PersistScanErrorInput, PersistScanJobInput,
+        PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
+        ResourceCorpusQuery, ResourceStoreError, SkillStatus, UpdateScanSourceInput,
+        UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -4889,6 +6156,153 @@ mod tests {
         cleanup_db(db_path);
     }
 
+    #[test]
+    fn mcp_library_summary_and_items_aggregate_config_clues_without_promoting_unknowns() {
+        let db_path = temp_db_path("mcp-library-summary-items");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_mcp_library_fixture(&db_path);
+
+        let summary = get_mcp_library_summary_for_path(&db_path).expect("mcp summary should load");
+        let items = list_mcp_service_items_for_path(&db_path).expect("mcp items should load");
+
+        assert_eq!(summary.counts.mcp_config_count, 4);
+        assert_eq!(summary.counts.service_count, 6);
+        assert_eq!(summary.counts.verified_service_count, 2);
+        assert_eq!(summary.counts.unverified_service_count, 4);
+        assert_eq!(summary.counts.tool_hint_count, 0);
+        assert_eq!(summary.counts.needs_attention_count, 4);
+        assert_eq!(summary.counts.source_unknown_count, 1);
+        assert_eq!(summary.counts.config_unreadable_count, 1);
+        assert_eq!(summary.counts.service_count, items.len() as u64);
+        assert_eq!(summary.latest_search_or_scan_time, Some(1_725_100_036_000));
+        assert!(summary.metadata_only);
+        assert!(!summary.content_storage_enabled);
+
+        assert!(
+            items
+                .iter()
+                .all(|item| !item.display_name.contains("not-promoted")),
+            "unknown-local-resource rows must not be promoted into the MCP product list"
+        );
+
+        let filesystem = items
+            .iter()
+            .find(|item| item.display_name == "filesystem")
+            .expect("duplicate service metadata should collapse into one service");
+        assert_eq!(filesystem.status, McpServiceStatus::NeedsAttention);
+        assert_eq!(filesystem.source_label, "多来源");
+        assert_eq!(filesystem.command_name.as_deref(), Some("npx"));
+        assert_eq!(filesystem.transport, "stdio");
+        assert_eq!(
+            filesystem.required_env_names,
+            vec!["FILESYSTEM_ROOT".to_string()]
+        );
+        assert_eq!(filesystem.tool_hint_count, 0);
+        assert!(filesystem.tool_hints.is_empty());
+        assert!(filesystem
+            .safety_text
+            .contains("不会启动服务、不会连接端点、不会调用 MCP 工具"));
+
+        let project_config = items
+            .iter()
+            .find(|item| item.source_label == "项目配置")
+            .expect("project config clue should be visible");
+        assert_eq!(project_config.status, McpServiceStatus::Visible);
+        assert!(project_config.tool_hints.is_empty());
+
+        let unknown = items
+            .iter()
+            .find(|item| item.status == McpServiceStatus::SourceUnknown)
+            .expect("source unknown config should be explicit");
+        assert_eq!(unknown.source_label, "来源不明");
+        assert!(unknown
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "source-unknown"));
+
+        let unreadable = items
+            .iter()
+            .find(|item| item.status == McpServiceStatus::Unreadable)
+            .expect("unreadable config should be explicit");
+        assert!(unreadable
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "config-unreadable"));
+
+        let serialized =
+            serde_json::to_string(&items).expect("mcp items should serialize to product JSON");
+        assert_no_mcp_fixture_secrets(&serialized);
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn mcp_service_detail_exposes_safe_metadata_and_redacts_secret_bearing_values() {
+        let db_path = temp_db_path("mcp-library-detail-safe-output");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_mcp_library_fixture(&db_path);
+
+        let items = list_mcp_service_items_for_path(&db_path).expect("mcp items should load");
+        let filesystem = items
+            .iter()
+            .find(|item| item.display_name == "filesystem")
+            .expect("filesystem service should exist");
+        let detail = get_mcp_service_detail_for_path(&db_path, &filesystem.id)
+            .expect("filesystem detail should load");
+
+        assert_eq!(detail.item.id, filesystem.id);
+        assert_eq!(detail.item.command_name.as_deref(), Some("npx"));
+        assert_eq!(
+            detail.item.required_env_names,
+            vec!["FILESYSTEM_ROOT".to_string()]
+        );
+        assert_eq!(detail.item.transport, "stdio");
+        assert!(detail.item.tool_hints.is_empty());
+        assert_eq!(
+            detail.tool_hints_unavailable_explanation,
+            "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。"
+        );
+        assert!(detail
+            .manual_check_suggestions
+            .iter()
+            .any(|suggestion| suggestion.contains("确认相关工具已经安装")));
+        assert!(detail.safety_summary.read_only);
+        assert!(!detail.safety_summary.starts_services);
+        assert!(!detail.safety_summary.connects_endpoints);
+        assert!(!detail.safety_summary.calls_tools);
+        assert!(!detail.safety_summary.reads_env_values);
+        assert!(!detail.safety_summary.stores_env_values);
+        assert!(detail
+            .config_sources
+            .iter()
+            .all(|source| !source.path_hint.starts_with("/Users/example")));
+        assert!(detail
+            .findings
+            .iter()
+            .all(|finding| finding.detail == "已隐藏敏感内容。"));
+
+        let remote = items
+            .iter()
+            .find(|item| item.display_name == "remote-api")
+            .expect("remote service should exist");
+        let remote_detail = get_mcp_service_detail_for_path(&db_path, &remote.id)
+            .expect("remote detail should load");
+        assert_eq!(
+            remote_detail.item.remote_host_hint.as_deref(),
+            Some("api.example.com")
+        );
+        assert_eq!(remote_detail.item.transport, "http");
+
+        let serialized_detail =
+            serde_json::to_string(&detail).expect("mcp detail should serialize to product JSON");
+        let serialized_remote =
+            serde_json::to_string(&remote_detail).expect("remote detail should serialize");
+        assert_no_mcp_fixture_secrets(&serialized_detail);
+        assert_no_mcp_fixture_secrets(&serialized_remote);
+
+        cleanup_db(db_path);
+    }
+
     fn persist_skill_library_fixture(db_path: &PathBuf) {
         persist_scan_job_for_path(
             db_path,
@@ -5357,6 +6771,243 @@ mod tests {
         }
     }
 
+    fn persist_mcp_library_fixture(db_path: &PathBuf) {
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-codex",
+                30,
+                codex_mcp_source(),
+                vec![
+                    mcp_resource(
+                        "filesystem",
+                        "mcp-server",
+                        "mcp/filesystem.server.json",
+                        "mcp/filesystem.server.json",
+                        "Codex MCP metadata for filesystem. Command=npx --token=super-secret-token; transport=stdio; env names=FILESYSTEM_ROOT.",
+                        "low",
+                        1_725_300_000_000,
+                        false,
+                        vec!["metadata-only", "mcp-not-executed"],
+                    ),
+                    mcp_resource(
+                        "codex-config.toml",
+                        "mcp-config",
+                        "config.toml",
+                        "config.toml",
+                        "路径或文件名匹配 MCP 配置元数据。",
+                        "medium",
+                        1_725_300_000_100,
+                        false,
+                        vec!["metadata-only", "mcp-not-executed"],
+                    ),
+                    mcp_resource(
+                        "not-promoted-mcp.json",
+                        "unknown-local-resource",
+                        ".mcp/not-promoted-mcp.json",
+                        ".mcp/not-promoted-mcp.json",
+                        "unknown local MCP-looking metadata that must stay out of product MCP services",
+                        "low",
+                        1_725_300_000_200,
+                        false,
+                        vec!["metadata-only"],
+                    ),
+                ],
+            ),
+        )
+        .expect("codex mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-claude",
+                31,
+                claude_mcp_source(),
+                vec![mcp_resource(
+                    "filesystem",
+                    "mcp-server",
+                    "mcp/filesystem.server.json",
+                    "mcp/filesystem.server.json",
+                    "Claude MCP metadata for filesystem. Command=node; transport=stdio; env names=.",
+                    "low",
+                    1_725_300_001_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("claude mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-project",
+                32,
+                project_mcp_source(),
+                vec![mcp_resource(
+                    "servers.json",
+                    "mcp-config",
+                    ".mcp/servers.json",
+                    ".mcp/servers.json",
+                    "路径或文件名匹配 MCP 配置元数据。",
+                    "medium",
+                    1_725_300_002_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("project mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-unknown",
+                33,
+                unknown_mcp_source(),
+                vec![mcp_resource(
+                    "unknown-mcp.yaml",
+                    "mcp-config",
+                    "unknown-mcp.yaml",
+                    "unknown-mcp.yaml",
+                    "路径或文件名匹配 MCP 配置元数据。",
+                    "medium",
+                    1_725_300_003_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("unknown mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-unreadable",
+                34,
+                manual_mcp_source(),
+                vec![mcp_resource(
+                    "[sensitive]",
+                    "mcp-config",
+                    "[sensitive]/mcp.json",
+                    "[sensitive]/mcp.json",
+                    "MCP config unreadable; token=super-secret-token; raw log: bearer secret",
+                    "high",
+                    1_725_300_004_000,
+                    true,
+                    vec![
+                        "metadata-only",
+                        "mcp-not-executed",
+                        "sensitive-path-redacted",
+                    ],
+                )],
+            ),
+        )
+        .expect("unreadable mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-remote",
+                36,
+                codex_mcp_source(),
+                vec![mcp_resource(
+                    "remote-api",
+                    "mcp-server",
+                    "mcp/remote-api.server.json",
+                    "mcp/remote-api.server.json",
+                    "Codex MCP metadata for remote-api. Command=unknown; transport=http; Remote=https://bearer-token:super-secret-token@api.example.com/path?token=super-secret-token.",
+                    "low",
+                    1_725_300_006_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("remote mcp fixture should persist");
+
+        insert_mcp_fixture_raw_findings(db_path);
+    }
+
+    fn mcp_resource(
+        name: &str,
+        resource_kind: &str,
+        relative_path: &str,
+        display_path: &str,
+        description: &str,
+        risk_level: &str,
+        modified_at_ms: u64,
+        sensitive_path_redacted: bool,
+        risk_labels: Vec<&str>,
+    ) -> PersistScanResourceInput {
+        PersistScanResourceInput {
+            name: name.to_string(),
+            resource_kind: resource_kind.to_string(),
+            description: description.to_string(),
+            primary_type: "file".to_string(),
+            risk_level: risk_level.to_string(),
+            boundary_labels: vec![
+                "read-only".to_string(),
+                "no-content-read".to_string(),
+                "not-executed".to_string(),
+            ],
+            relative_path: relative_path.to_string(),
+            display_path: display_path.to_string(),
+            extension: Some("json".to_string()),
+            entry_type: "file".to_string(),
+            size_bytes: Some(128),
+            modified_at_ms: Some(modified_at_ms),
+            classification_reason: "路径或文件名匹配 MCP 配置元数据。".to_string(),
+            sensitive_path_redacted,
+            risk_labels: risk_labels.into_iter().map(ToString::to_string).collect(),
+        }
+    }
+
+    fn insert_mcp_fixture_raw_findings(db_path: &PathBuf) {
+        let conn = rusqlite::Connection::open(db_path).expect("db should open");
+        let resource_id: String = conn
+            .query_row(
+                "SELECT resource_id FROM resource_locations WHERE relative_path = ?1 LIMIT 1",
+                ["mcp/filesystem.server.json"],
+                |row| row.get(0),
+            )
+            .expect("filesystem mcp fixture resource should exist");
+        conn.execute(
+            "INSERT INTO resource_findings (
+                id, resource_id, scan_job_id, finding_kind, severity, message, safe_detail_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "finding:mcp-raw-log",
+                resource_id,
+                "job-mcp-codex",
+                "raw-log",
+                "high",
+                "raw log: bearer super-secret-token from worker stdout",
+                "{\"log\":\"raw log: bearer super-secret-token from worker stdout\"}",
+            ],
+        )
+        .expect("mcp raw log finding should persist");
+    }
+
+    fn assert_no_mcp_fixture_secrets(serialized: &str) {
+        for forbidden in [
+            "super-secret-token",
+            "bearer super-secret-token",
+            "bearer-token",
+            "raw log",
+            "worker stdout",
+            "token=",
+            "https://",
+            "/Users/example",
+            "secret-token-root",
+        ] {
+            assert!(
+                !serialized.contains(forbidden),
+                "MCP product output must not serialize forbidden fixture text: {forbidden}"
+            );
+        }
+    }
+
     fn skill_library_job(
         job_id: &str,
         sequence: u64,
@@ -5440,6 +7091,18 @@ mod tests {
         }
     }
 
+    fn codex_mcp_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-codex-mcp".to_string()),
+            display_name: "Codex MCP".to_string(),
+            root_path: "/Users/example/.codex".to_string(),
+            root_display_path: "~/.codex".to_string(),
+            profile_id: "ai-toolchain".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
     fn claude_source() -> PersistScanSourceInput {
         PersistScanSourceInput {
             id: Some("source-claude-skills".to_string()),
@@ -5447,6 +7110,18 @@ mod tests {
             root_path: "/Users/example/.claude".to_string(),
             root_display_path: "~/.claude".to_string(),
             profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn claude_mcp_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-claude-mcp".to_string()),
+            display_name: "Claude MCP".to_string(),
+            root_path: "/Users/example/.claude".to_string(),
+            root_display_path: "~/.claude".to_string(),
+            profile_id: "ai-toolchain".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
         }
@@ -5476,10 +7151,34 @@ mod tests {
         }
     }
 
+    fn manual_mcp_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-manual-mcp".to_string()),
+            display_name: "Manual MCP".to_string(),
+            root_path: "/Users/example/manual-mcp".to_string(),
+            root_display_path: "~/manual-mcp".to_string(),
+            profile_id: "ai-toolchain".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+        }
+    }
+
     fn project_source() -> PersistScanSourceInput {
         PersistScanSourceInput {
             id: Some("source-project-skills".to_string()),
             display_name: "Project Alpha".to_string(),
+            root_path: "/Users/example/project-alpha".to_string(),
+            root_display_path: "~/project-alpha".to_string(),
+            profile_id: "project-root".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: Some("Project Alpha".to_string()),
+        }
+    }
+
+    fn project_mcp_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-project-mcp".to_string()),
+            display_name: "Project Alpha MCP".to_string(),
             root_path: "/Users/example/project-alpha".to_string(),
             root_display_path: "~/project-alpha".to_string(),
             profile_id: "project-root".to_string(),
@@ -5495,6 +7194,18 @@ mod tests {
             root_path: "/Users/example/unknown".to_string(),
             root_display_path: "未记录".to_string(),
             profile_id: "custom-folder".to_string(),
+            source_kind: "unknown".to_string(),
+            project_label: None,
+        }
+    }
+
+    fn unknown_mcp_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-unknown-mcp".to_string()),
+            display_name: "unknown".to_string(),
+            root_path: "/Users/example/unknown-mcp".to_string(),
+            root_display_path: "未记录".to_string(),
+            profile_id: "ai-toolchain".to_string(),
             source_kind: "unknown".to_string(),
             project_label: None,
         }

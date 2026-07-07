@@ -41,6 +41,13 @@ import {
 } from "./lib/resourceCorpus";
 import { getFirstRunOnboardingDismissed, setFirstRunOnboardingDismissed } from "./lib/resourceStore";
 import {
+  getMcpLibrarySummary,
+  listMcpServiceItems,
+  mapMcpServiceItemToResource,
+  type McpLibrarySummary,
+  type McpServiceItem
+} from "./lib/mcpLibrary";
+import {
   getSkillDetail,
   getSkillLibraryItemIdFromResource,
   getSkillLibrarySummary,
@@ -78,6 +85,10 @@ export default function App() {
   const [skillLibraryItems, setSkillLibraryItems] = useState<SkillListItem[]>([]);
   const [skillLibraryLoading, setSkillLibraryLoading] = useState(false);
   const [skillLibraryError, setSkillLibraryError] = useState<string | null>(null);
+  const [mcpLibrarySummary, setMcpLibrarySummary] = useState<McpLibrarySummary | null>(null);
+  const [mcpServiceItems, setMcpServiceItems] = useState<McpServiceItem[]>([]);
+  const [mcpLibraryLoading, setMcpLibraryLoading] = useState(false);
+  const [mcpLibraryError, setMcpLibraryError] = useState<string | null>(null);
   const [skillDetailState, setSkillDetailState] = useState<SkillDetailRuntimeState | null>(null);
   const [, startRouteTransition] = useTransition();
   const deferredQuery = useDeferredValue(query);
@@ -161,6 +172,30 @@ export default function App() {
     };
   }, [corpusRefreshToken]);
 
+  useEffect(() => {
+    let active = true;
+    setMcpLibraryLoading(true);
+    Promise.all([getMcpLibrarySummary(), listMcpServiceItems()])
+      .then(([summary, items]) => {
+        if (!active) return;
+        setMcpLibrarySummary(summary);
+        setMcpServiceItems(items);
+        setMcpLibraryError(null);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setMcpLibrarySummary(null);
+        setMcpServiceItems([]);
+        setMcpLibraryError(formatAsyncError(loadError));
+      })
+      .finally(() => {
+        if (active) setMcpLibraryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [corpusRefreshToken]);
+
   const legacySnapshotResources = useMemo(() => (inventory ? inventory.resources.map((resource) => markLegacySnapshotResource(resource, inventory.generatedAt)) : []), [inventory]);
   const corpusDataSource = useMemo(() => buildResourceDataSourceState(corpusSummary, legacySnapshotResources.length), [corpusSummary, legacySnapshotResources.length]);
   const legacySnapshotDataSource = useMemo(() => asLegacySnapshotDataSource(corpusDataSource), [corpusDataSource]);
@@ -199,16 +234,27 @@ export default function App() {
 
   const activeResources = useMemo(() => getDefaultResourcesForDataSource(corpusDataSource, corpusResources), [corpusDataSource, corpusResources]);
   const skillLibraryResources = useMemo(() => skillLibraryItems.map(mapSkillListItemToResource), [skillLibraryItems]);
+  const mcpLibraryResources = useMemo(() => mcpServiceItems.map(mapMcpServiceItemToResource), [mcpServiceItems]);
   const skillLibraryItemById = useMemo(() => new Map(skillLibraryItems.map((item) => [item.id, item])), [skillLibraryItems]);
-  const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, skillLibraryResources]);
+  const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...mcpLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, mcpLibraryResources, skillLibraryResources]);
   const displayInventory = useMemo(() => (inventory ? { ...inventory, resources: activeResources } : null), [activeResources, inventory]);
   const displayById = useMemo(() => buildResourceDisplayMap(selectableResources), [selectableResources]);
   const skillCapabilityById = useMemo(
     () => buildSkillCapabilityClassificationMap(activeResources, displayById),
     [activeResources, displayById]
   );
-  const viewCounts = useMemo(() => getViewCountsForDataSource(corpusDataSource, activeResources, legacySnapshotResources), [activeResources, corpusDataSource, legacySnapshotResources]);
-  const moduleResources = useMemo(() => getModuleResourcesForDataSource(renderedView, corpusDataSource, activeResources, legacySnapshotResources), [activeResources, corpusDataSource, legacySnapshotResources, renderedView]);
+  const baseViewCounts = useMemo(() => getViewCountsForDataSource(corpusDataSource, activeResources, legacySnapshotResources), [activeResources, corpusDataSource, legacySnapshotResources]);
+  const viewCounts = useMemo(
+    () => ({
+      ...baseViewCounts,
+      mcp: mcpLibrarySummary ? Math.max(0, mcpLibrarySummary.counts.serviceCount) : baseViewCounts.mcp
+    }),
+    [baseViewCounts, mcpLibrarySummary]
+  );
+  const moduleResources = useMemo(() => {
+    if (renderedView === "mcp" && mcpLibrarySummary) return mcpLibraryResources;
+    return getModuleResourcesForDataSource(renderedView, corpusDataSource, activeResources, legacySnapshotResources);
+  }, [activeResources, corpusDataSource, legacySnapshotResources, mcpLibraryResources, mcpLibrarySummary, renderedView]);
   const filteredResources = useMemo(
     () => (renderedView === "skills" ? moduleResources : filterResourceList(moduleResources, deferredQuery, displayById)),
     [deferredQuery, displayById, moduleResources, renderedView]
@@ -371,10 +417,18 @@ export default function App() {
     loading: skillLibraryLoading,
     summary: skillLibrarySummary
   };
+  const mcpLibraryState = {
+    available: mcpLibrarySummary !== null,
+    error: mcpLibraryError,
+    items: mcpServiceItems,
+    loading: mcpLibraryLoading,
+    summary: mcpLibrarySummary
+  };
   const moduleProps: AiosModuleProps = {
     allResources: activeResources,
     baseline: inventory.baseline,
     resourceCorpus: moduleResourceCorpusState,
+    mcpLibrary: mcpLibraryState,
     skillLibrary: skillLibraryState,
     displayById,
     query: deferredQuery,
@@ -388,7 +442,12 @@ export default function App() {
     onViewChange: handleViewChange,
     onQueryChange: handleQueryChange
   };
-  const shellShownCount = renderedView === "skills" && skillLibrarySummary ? skillLibrarySummary.counts.dedupedSkillCount : filteredResources.length;
+  const shellShownCount =
+    renderedView === "skills" && skillLibrarySummary
+      ? skillLibrarySummary.counts.dedupedSkillCount
+      : renderedView === "mcp" && mcpLibrarySummary
+        ? mcpLibrarySummary.counts.serviceCount
+        : filteredResources.length;
 
   return (
     <AiosConsoleShell
