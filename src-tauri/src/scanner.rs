@@ -1,7 +1,7 @@
 use crate::resource_store::{
-    self, PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput,
-    PersistScanSkipInput, PersistScanSourceInput, PersistSkillManifestMetadataInput,
-    UpsertScanSourceInput,
+    self, PersistMcpConfigMetadataInput, PersistMcpConfigServiceMetadataInput,
+    PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput, PersistScanSkipInput,
+    PersistScanSourceInput, PersistSkillManifestMetadataInput, UpsertScanSourceInput,
 };
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
@@ -29,11 +29,15 @@ const MAX_DEPTH: usize = 6;
 const MAX_ENTRIES: usize = 2_000;
 const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_SKILL_MANIFEST_METADATA_BYTES: usize = 64 * 1024;
+const MAX_MCP_CONFIG_METADATA_BYTES: usize = 64 * 1024;
 const MAX_SKILL_MANIFEST_NAME_CHARS: usize = 96;
 const MAX_SKILL_MANIFEST_DESCRIPTION_CHARS: usize = 320;
 const MAX_SKILL_MANIFEST_ITEM_CHARS: usize = 64;
 const MAX_SKILL_MANIFEST_ARRAY_ITEMS: usize = 20;
 const MAX_SKILL_MANIFEST_WHEN_TO_USE_CHARS: usize = 320;
+const MAX_MCP_CONFIG_SERVICES: usize = 40;
+const MAX_MCP_CONFIG_ITEMS: usize = 40;
+const MAX_MCP_CONFIG_NAME_CHARS: usize = 96;
 const MAX_RETAINED_SCAN_JOBS: usize = 8;
 const SCAN_JOB_PROGRESS_EVENT: &str = "aios://scan-job-progress";
 const REDACTED_SEGMENT: &str = "[sensitive]";
@@ -361,6 +365,8 @@ pub struct ScanResource {
     sensitive: bool,
     #[serde(skip_serializing)]
     skill_manifest_metadata: Option<SkillManifestMetadata>,
+    #[serde(skip_serializing)]
+    mcp_config_metadata: Option<PersistMcpConfigMetadataInput>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1886,6 +1892,9 @@ fn persist_resource_input(resource: &ScanResource) -> PersistScanResourceInput {
                 Some(input)
             }
         }),
+        mcp_config_metadata: (resource.resource_kind == "mcp-config")
+            .then(|| resource.mcp_config_metadata.clone())
+            .flatten(),
     }
 }
 
@@ -2558,9 +2567,18 @@ fn scan_validated_root_with_progress(
             } else {
                 None
             };
+        let mcp_config_metadata = if metadata.is_file()
+            && resource_kind == "mcp-config"
+            && is_supported_mcp_config_path(relative)
+        {
+            read_bounded_mcp_config_metadata(path)
+        } else {
+            None
+        };
         let redacted_relative = redact_relative_path(relative);
         let sensitive = path_has_sensitive_segment(relative);
         let skill_manifest_metadata_read = skill_manifest_metadata.is_some();
+        let mcp_config_metadata_read = mcp_config_metadata.is_some();
 
         resources.push(ScanResource {
             id: format!("custom-scan:{resource_kind}:{redacted_relative}"),
@@ -2575,10 +2593,12 @@ fn scan_validated_root_with_progress(
                 resource_kind,
                 sensitive,
                 skill_manifest_metadata_read,
+                mcp_config_metadata_read,
             ),
             classification_reason,
             sensitive,
             skill_manifest_metadata,
+            mcp_config_metadata,
         });
 
         if let Some(handle) = progress_handle.as_deref_mut() {
@@ -3045,6 +3065,740 @@ fn read_bounded_skill_manifest_metadata(path: &Path) -> Option<SkillManifestMeta
         .ok()?;
     let text = String::from_utf8_lossy(&buffer);
     parse_bounded_skill_manifest_metadata(&text)
+}
+
+fn is_supported_mcp_config_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "json" | "toml" | "yaml" | "yml"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn read_bounded_mcp_config_metadata(path: &Path) -> Option<PersistMcpConfigMetadataInput> {
+    if !is_supported_mcp_config_path(path) {
+        return None;
+    }
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > MAX_MCP_CONFIG_METADATA_BYTES as u64
+    {
+        return None;
+    }
+
+    let file = fs::File::open(path).ok()?;
+    let mut buffer = Vec::with_capacity(MAX_MCP_CONFIG_METADATA_BYTES);
+    file.take(MAX_MCP_CONFIG_METADATA_BYTES as u64)
+        .read_to_end(&mut buffer)
+        .ok()?;
+    if buffer.len() > MAX_MCP_CONFIG_METADATA_BYTES {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&buffer);
+    parse_bounded_mcp_config_metadata(&text, path)
+}
+
+fn parse_bounded_mcp_config_metadata(
+    text: &str,
+    path: &Path,
+) -> Option<PersistMcpConfigMetadataInput> {
+    if text.as_bytes().len() > MAX_MCP_CONFIG_METADATA_BYTES || !is_supported_mcp_config_path(path)
+    {
+        return None;
+    }
+
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let services = if extension == "json" || text.trim_start().starts_with('{') {
+        parse_json_mcp_config_services(text)?
+    } else {
+        parse_toml_like_mcp_config_services(text)?
+    };
+    finalize_mcp_config_metadata(services)
+}
+
+fn finalize_mcp_config_metadata(
+    services: Vec<PersistMcpConfigServiceMetadataInput>,
+) -> Option<PersistMcpConfigMetadataInput> {
+    let mut output = Vec::new();
+    let mut seen = HashSet::<String>::new();
+    for service in services {
+        if output.len() >= MAX_MCP_CONFIG_SERVICES {
+            break;
+        }
+        let Some(service) = sanitize_mcp_config_service_metadata(service) else {
+            continue;
+        };
+        let key = [
+            service.service_name.as_deref().unwrap_or_default(),
+            service.display_name.as_deref().unwrap_or_default(),
+            service.command_name.as_deref().unwrap_or_default(),
+            service.remote_host_hint.as_deref().unwrap_or_default(),
+        ]
+        .join("|");
+        if seen.insert(key) {
+            output.push(service);
+        }
+    }
+    if output.is_empty() {
+        None
+    } else {
+        Some(PersistMcpConfigMetadataInput { services: output })
+    }
+}
+
+fn parse_json_mcp_config_services(text: &str) -> Option<Vec<PersistMcpConfigServiceMetadataInput>> {
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    let mut services = Vec::new();
+    collect_json_mcp_service_maps(&value, &mut services);
+    if services.is_empty() {
+        None
+    } else {
+        Some(services)
+    }
+}
+
+fn collect_json_mcp_service_maps(
+    value: &serde_json::Value,
+    services: &mut Vec<PersistMcpConfigServiceMetadataInput>,
+) {
+    if services.len() >= MAX_MCP_CONFIG_SERVICES {
+        return;
+    }
+    let Some(object) = value.as_object() else {
+        return;
+    };
+
+    for key in ["mcpServers", "mcp_servers", "servers"] {
+        if let Some(map) = object.get(key).and_then(|value| value.as_object()) {
+            for (service_key, service_value) in map {
+                if services.len() >= MAX_MCP_CONFIG_SERVICES {
+                    break;
+                }
+                if let Some(service) = parse_json_mcp_service(service_key, service_value) {
+                    services.push(service);
+                }
+            }
+        }
+    }
+
+    if let Some(nested) = object.get("mcp") {
+        collect_json_mcp_service_maps(nested, services);
+    }
+}
+
+fn parse_json_mcp_service(
+    service_key: &str,
+    value: &serde_json::Value,
+) -> Option<PersistMcpConfigServiceMetadataInput> {
+    let object = value.as_object()?;
+    let command_raw = json_string_field(object, &["command", "cmd"]);
+    let command_name = command_raw
+        .as_deref()
+        .and_then(sanitize_mcp_config_command_name);
+    let args = json_string_array_field(object, &["args", "arguments"]);
+    let remote_host_hint = json_string_field(
+        object,
+        &["url", "endpoint", "remote", "remoteUrl", "remote_host"],
+    )
+    .as_deref()
+    .and_then(hostname_from_url_or_host);
+    let transport = json_string_field(object, &["transport", "type"])
+        .as_deref()
+        .and_then(sanitize_mcp_config_transport)
+        .or_else(|| remote_host_hint.as_ref().map(|_| "http".to_string()))
+        .or_else(|| command_name.as_ref().map(|_| "stdio".to_string()));
+    let uses_npx = command_name.as_deref() == Some("npx")
+        || args
+            .iter()
+            .any(|arg| sanitize_mcp_config_command_name(arg).as_deref() == Some("npx"));
+    let uses_at_latest = command_raw
+        .as_deref()
+        .is_some_and(|command| command.contains("@latest"))
+        || args.iter().any(|arg| arg.contains("@latest"));
+
+    Some(PersistMcpConfigServiceMetadataInput {
+        service_name: sanitize_mcp_config_label(service_key).or_else(|| {
+            json_string_field(object, &["serviceName", "service_name", "name"])
+                .as_deref()
+                .and_then(sanitize_mcp_config_label)
+        }),
+        display_name: json_string_field(object, &["displayName", "display_name", "title"])
+            .as_deref()
+            .and_then(sanitize_mcp_config_label),
+        command_name,
+        transport,
+        required_env_names: json_env_names(object),
+        remote_host_hint,
+        uses_npx,
+        package_fetch_risk: uses_npx,
+        uses_at_latest,
+        unpinned_package_hint: uses_npx && !uses_at_latest,
+        static_tool_hints: json_tool_hints(object),
+    })
+}
+
+fn json_string_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    for key in keys {
+        if let Some(value) = object.get(*key).and_then(|value| value.as_str()) {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+fn json_string_array_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Vec<String> {
+    for key in keys {
+        if let Some(values) = object.get(*key).and_then(|value| value.as_array()) {
+            return values
+                .iter()
+                .filter_map(|value| value.as_str().map(ToString::to_string))
+                .take(MAX_MCP_CONFIG_ITEMS)
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn json_env_names(object: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let Some(env) = object.get("env").or_else(|| object.get("environment")) else {
+        return Vec::new();
+    };
+    let names = if let Some(env_object) = env.as_object() {
+        env_object.keys().cloned().collect::<Vec<_>>()
+    } else if let Some(env_array) = env.as_array() {
+        env_array
+            .iter()
+            .filter_map(|value| value.as_str().map(ToString::to_string))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    sanitize_mcp_config_env_names(names)
+}
+
+fn json_tool_hints(object: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    for key in [
+        "tools",
+        "toolNames",
+        "tool_names",
+        "staticToolHints",
+        "static_tool_hints",
+    ] {
+        let Some(value) = object.get(key) else {
+            continue;
+        };
+        let names = if let Some(array) = value.as_array() {
+            array
+                .iter()
+                .filter_map(|item| {
+                    item.as_str().map(ToString::to_string).or_else(|| {
+                        item.as_object()
+                            .and_then(|object| object.get("name"))
+                            .and_then(|name| name.as_str())
+                            .map(ToString::to_string)
+                    })
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let names = sanitize_mcp_config_tool_hints(names);
+        if !names.is_empty() {
+            return names;
+        }
+    }
+    Vec::new()
+}
+
+fn parse_toml_like_mcp_config_services(
+    text: &str,
+) -> Option<Vec<PersistMcpConfigServiceMetadataInput>> {
+    let mut services = HashMap::<String, PersistMcpConfigServiceMetadataInput>::new();
+    let mut current_service: Option<String> = None;
+    let mut current_env_service: Option<String> = None;
+
+    for raw_line in text.lines() {
+        let line = strip_mcp_config_inline_comment(raw_line).trim().to_string();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some((name, is_env)) = parse_mcp_config_section(&line) {
+            services
+                .entry(name.clone())
+                .or_insert_with(|| PersistMcpConfigServiceMetadataInput {
+                    service_name: sanitize_mcp_config_label(&name),
+                    ..PersistMcpConfigServiceMetadataInput::default()
+                });
+            current_service = (!is_env).then_some(name.clone());
+            current_env_service = is_env.then_some(name);
+            continue;
+        }
+
+        let Some((key, raw_value)) = parse_mcp_key_value(&line) else {
+            continue;
+        };
+
+        if let Some(service_name) = current_env_service.as_deref() {
+            if let Some(service) = services.get_mut(service_name) {
+                service.required_env_names.push(key);
+            }
+            continue;
+        }
+
+        let Some(service_name) = current_service.as_deref() else {
+            continue;
+        };
+        let Some(service) = services.get_mut(service_name) else {
+            continue;
+        };
+        apply_toml_like_mcp_value(service, &key, &raw_value);
+    }
+
+    let mut output = services.into_values().collect::<Vec<_>>();
+    output.sort_by(|left, right| left.service_name.cmp(&right.service_name));
+    if output.is_empty() {
+        None
+    } else {
+        Some(output)
+    }
+}
+
+fn parse_mcp_config_section(line: &str) -> Option<(String, bool)> {
+    let body = line.strip_prefix('[')?.strip_suffix(']')?.trim();
+    let parts = split_mcp_section_parts(body);
+    if parts.len() < 2 {
+        return None;
+    }
+    if !matches!(parts[0].as_str(), "mcp_servers" | "mcpServers" | "servers") {
+        return None;
+    }
+    let name = strip_mcp_config_quotes(&parts[1]).to_string();
+    if sanitize_mcp_config_label(&name).is_none() {
+        return None;
+    }
+    let is_env = parts
+        .get(2)
+        .is_some_and(|part| part.eq_ignore_ascii_case("env"));
+    Some((name, is_env))
+}
+
+fn split_mcp_section_parts(value: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    for character in value.chars() {
+        if matches!(character, '"' | '\'') {
+            if quote == Some(character) {
+                quote = None;
+            } else if quote.is_none() {
+                quote = Some(character);
+            }
+            current.push(character);
+            continue;
+        }
+        if character == '.' && quote.is_none() {
+            parts.push(strip_mcp_config_quotes(&current).to_string());
+            current.clear();
+            continue;
+        }
+        current.push(character);
+    }
+    if !current.trim().is_empty() {
+        parts.push(strip_mcp_config_quotes(&current).to_string());
+    }
+    parts
+}
+
+fn parse_mcp_key_value(line: &str) -> Option<(String, String)> {
+    let (key, value) = line.split_once('=')?;
+    let key = key.trim();
+    if !is_safe_mcp_env_name(key) {
+        return None;
+    }
+    Some((key.to_string(), value.trim().to_string()))
+}
+
+fn apply_toml_like_mcp_value(
+    service: &mut PersistMcpConfigServiceMetadataInput,
+    key: &str,
+    raw_value: &str,
+) {
+    match key {
+        "command" | "cmd" => {
+            let raw = strip_mcp_config_quotes(raw_value).to_string();
+            service.command_name = sanitize_mcp_config_command_name(&raw);
+            if service.command_name.as_deref() == Some("npx") {
+                service.uses_npx = true;
+                service.package_fetch_risk = true;
+            }
+            if raw.contains("@latest") {
+                service.uses_at_latest = true;
+            }
+        }
+        "args" | "arguments" => {
+            let args = parse_mcp_config_array(raw_value);
+            if args
+                .iter()
+                .any(|arg| sanitize_mcp_config_command_name(arg).as_deref() == Some("npx"))
+            {
+                service.uses_npx = true;
+                service.package_fetch_risk = true;
+            }
+            if args.iter().any(|arg| arg.contains("@latest")) {
+                service.uses_at_latest = true;
+            }
+        }
+        "url" | "endpoint" | "remote" | "remoteUrl" | "remote_host" => {
+            service.remote_host_hint = hostname_from_url_or_host(raw_value);
+            if service.transport.is_none() && service.remote_host_hint.is_some() {
+                service.transport = Some("http".to_string());
+            }
+        }
+        "transport" | "type" => {
+            service.transport = sanitize_mcp_config_transport(strip_mcp_config_quotes(raw_value));
+        }
+        "env" | "environment" => {
+            let names = if raw_value.trim_start().starts_with('{') {
+                parse_mcp_inline_table_keys(raw_value)
+            } else {
+                parse_mcp_config_array(raw_value)
+            };
+            service.required_env_names.extend(names);
+        }
+        "tools" | "toolNames" | "tool_names" | "staticToolHints" | "static_tool_hints" => {
+            service
+                .static_tool_hints
+                .extend(parse_mcp_config_array(raw_value));
+        }
+        "name" | "serviceName" | "service_name" => {
+            service.service_name = sanitize_mcp_config_label(strip_mcp_config_quotes(raw_value));
+        }
+        "displayName" | "display_name" | "title" => {
+            service.display_name = sanitize_mcp_config_label(strip_mcp_config_quotes(raw_value));
+        }
+        _ => {}
+    }
+    if service.uses_npx && !service.uses_at_latest {
+        service.unpinned_package_hint = true;
+    }
+}
+
+fn strip_mcp_config_inline_comment(line: &str) -> String {
+    let mut quote: Option<char> = None;
+    for (index, character) in line.char_indices() {
+        if matches!(character, '"' | '\'') {
+            if quote == Some(character) {
+                quote = None;
+            } else if quote.is_none() {
+                quote = Some(character);
+            }
+        }
+        if character == '#' && quote.is_none() {
+            return line[..index].to_string();
+        }
+    }
+    line.to_string()
+}
+
+fn parse_mcp_config_array(value: &str) -> Vec<String> {
+    let body = value
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    if body.is_empty() {
+        return Vec::new();
+    }
+    let mut values = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    for character in body.chars() {
+        if matches!(character, '"' | '\'') {
+            if quote == Some(character) {
+                quote = None;
+            } else if quote.is_none() {
+                quote = Some(character);
+            }
+            continue;
+        }
+        if character == ',' && quote.is_none() {
+            if !current.trim().is_empty() {
+                values.push(strip_mcp_config_quotes(&current).to_string());
+            }
+            current.clear();
+            continue;
+        }
+        current.push(character);
+    }
+    if !current.trim().is_empty() {
+        values.push(strip_mcp_config_quotes(&current).to_string());
+    }
+    values
+}
+
+fn parse_mcp_inline_table_keys(value: &str) -> Vec<String> {
+    value
+        .trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .split(',')
+        .filter_map(|part| part.split_once('=').map(|(key, _)| key))
+        .map(strip_mcp_config_quotes)
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn strip_mcp_config_quotes(value: &str) -> &str {
+    value
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\'' | '`' | ',' | ';'))
+}
+
+fn sanitize_mcp_config_service_metadata(
+    mut service: PersistMcpConfigServiceMetadataInput,
+) -> Option<PersistMcpConfigServiceMetadataInput> {
+    service.service_name = service
+        .service_name
+        .as_deref()
+        .and_then(sanitize_mcp_config_label);
+    service.display_name = service
+        .display_name
+        .as_deref()
+        .and_then(sanitize_mcp_config_label);
+    service.command_name = service
+        .command_name
+        .as_deref()
+        .and_then(sanitize_mcp_config_command_name);
+    service.transport = service
+        .transport
+        .as_deref()
+        .and_then(sanitize_mcp_config_transport);
+    service.required_env_names = sanitize_mcp_config_env_names(service.required_env_names);
+    service.remote_host_hint = service
+        .remote_host_hint
+        .as_deref()
+        .and_then(hostname_from_url_or_host);
+    service.static_tool_hints = sanitize_mcp_config_tool_hints(service.static_tool_hints);
+    if service.uses_npx {
+        service.package_fetch_risk = true;
+    }
+    if service.uses_npx && !service.uses_at_latest {
+        service.unpinned_package_hint = true;
+    }
+    if service.transport.is_none() && service.remote_host_hint.is_some() {
+        service.transport = Some("http".to_string());
+    }
+    if service.transport.is_none() && service.command_name.is_some() {
+        service.transport = Some("stdio".to_string());
+    }
+
+    if service.service_name.is_none()
+        && service.display_name.is_none()
+        && service.command_name.is_none()
+        && service.transport.is_none()
+        && service.required_env_names.is_empty()
+        && service.remote_host_hint.is_none()
+        && !service.uses_npx
+        && !service.package_fetch_risk
+        && !service.uses_at_latest
+        && !service.unpinned_package_hint
+        && service.static_tool_hints.is_empty()
+    {
+        None
+    } else {
+        Some(service)
+    }
+}
+
+fn sanitize_mcp_config_label(value: &str) -> Option<String> {
+    let normalized = collapse_skill_manifest_whitespace(strip_mcp_config_quotes(value));
+    if normalized.is_empty()
+        || normalized.contains("://")
+        || contains_secret_like_manifest_text(&normalized)
+        || contains_log_like_manifest_text(&normalized)
+        || contains_env_assignment_manifest_text(&normalized)
+    {
+        None
+    } else {
+        Some(truncate_skill_manifest_text(
+            &normalized,
+            MAX_MCP_CONFIG_NAME_CHARS,
+        ))
+    }
+}
+
+fn sanitize_mcp_config_command_name(value: &str) -> Option<String> {
+    let trimmed = strip_mcp_config_quotes(value);
+    if trimmed.is_empty()
+        || trimmed.split_whitespace().count() > 1
+        || trimmed.contains("://")
+        || contains_secret_like_manifest_text(trimmed)
+        || contains_log_like_manifest_text(trimmed)
+    {
+        return None;
+    }
+    let command = trimmed
+        .replace('\\', "/")
+        .split('/')
+        .last()
+        .unwrap_or_default()
+        .trim_matches(|character: char| {
+            matches!(character, '"' | '\'' | '`' | ',' | ';' | ')' | '(')
+        })
+        .to_string();
+    if command.is_empty()
+        || command.eq_ignore_ascii_case("unknown")
+        || contains_secret_like_manifest_text(&command)
+        || contains_log_like_manifest_text(&command)
+    {
+        None
+    } else {
+        Some(truncate_skill_manifest_text(
+            &command,
+            MAX_MCP_CONFIG_NAME_CHARS,
+        ))
+    }
+}
+
+fn sanitize_mcp_config_transport(value: &str) -> Option<String> {
+    let normalized = strip_mcp_config_quotes(value).to_ascii_lowercase();
+    if matches!(normalized.as_str(), "stdio" | "http" | "sse") {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
+fn sanitize_mcp_config_env_names(values: Vec<String>) -> Vec<String> {
+    let mut output = Vec::new();
+    for value in values {
+        if output.len() >= MAX_MCP_CONFIG_ITEMS {
+            break;
+        }
+        let name = value.split('=').next().unwrap_or_default().trim();
+        if is_safe_mcp_env_name(name) && !output.contains(&name.to_string()) {
+            output.push(name.to_string());
+        }
+    }
+    output
+}
+
+fn sanitize_mcp_config_tool_hints(values: Vec<String>) -> Vec<String> {
+    let mut output = Vec::new();
+    for value in values {
+        if output.len() >= MAX_MCP_CONFIG_ITEMS {
+            break;
+        }
+        let name = strip_mcp_config_quotes(&value);
+        if is_safe_mcp_tool_hint_name(name) && !output.contains(&name.to_string()) {
+            output.push(name.to_string());
+        }
+    }
+    output
+}
+
+fn is_safe_mcp_env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+        && value.len() <= MAX_MCP_CONFIG_NAME_CHARS
+}
+
+fn is_safe_mcp_tool_hint_name(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    !value.is_empty()
+        && value.len() <= MAX_MCP_CONFIG_NAME_CHARS
+        && ![
+            "secret",
+            "token",
+            "credential",
+            "password",
+            "passwd",
+            "private_key",
+            "api_key",
+            "apikey",
+            "auth",
+            "session",
+            "cookie",
+            "bearer",
+        ]
+        .iter()
+        .any(|word| lower.contains(word))
+        && !contains_secret_like_manifest_text(value)
+        && !contains_log_like_manifest_text(value)
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+        })
+}
+
+fn hostname_from_url_or_host(value: &str) -> Option<String> {
+    extract_mcp_config_url_hostname(value).or_else(|| sanitize_mcp_config_host(value))
+}
+
+fn extract_mcp_config_url_hostname(value: &str) -> Option<String> {
+    let trimmed = strip_mcp_config_quotes(value);
+    let lower = trimmed.to_ascii_lowercase();
+    let (scheme, start) = if let Some(index) = lower.find("https://") {
+        ("https://", index)
+    } else if let Some(index) = lower.find("http://") {
+        ("http://", index)
+    } else {
+        return None;
+    };
+    let raw = &trimmed[start + scheme.len()..];
+    let end = raw
+        .find(|character: char| {
+            character.is_whitespace() || matches!(character, ';' | ',' | '"' | '\'')
+        })
+        .unwrap_or(raw.len());
+    let authority = raw[..end].split(['/', '?', '#']).next().unwrap_or_default();
+    let without_userinfo = authority.split('@').last().unwrap_or(authority);
+    sanitize_mcp_config_host(without_userinfo)
+}
+
+fn sanitize_mcp_config_host(value: &str) -> Option<String> {
+    let host = strip_mcp_config_quotes(value)
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .split('@')
+        .last()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if host.is_empty()
+        || host.contains("://")
+        || contains_secret_like_manifest_text(host)
+        || contains_log_like_manifest_text(host)
+        || !host
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '.'))
+    {
+        None
+    } else {
+        Some(host.to_string())
+    }
 }
 
 fn parse_bounded_skill_manifest_metadata(text: &str) -> Option<SkillManifestMetadata> {
@@ -3760,10 +4514,14 @@ fn boundary_labels_for(
     resource_kind: &'static str,
     sensitive: bool,
     skill_manifest_metadata_read: bool,
+    mcp_config_metadata_read: bool,
 ) -> Vec<&'static str> {
     let mut labels = vec!["read-only", "no-content-read", "no-symlink-follow"];
     if skill_manifest_metadata_read {
         labels.push("bounded-skill-manifest-metadata");
+    }
+    if mcp_config_metadata_read {
+        labels.push("bounded-mcp-config-metadata");
     }
     if sensitive {
         labels.push("redacted");
@@ -3827,8 +4585,9 @@ mod tests {
     use super::{
         build_scan_job_event_payload, classify_resource_kind, current_time_ms,
         discovery_candidate_roots_for_home, excluded_names_for_scan_mode, get_scan_profiles,
-        home_dir, normalize_source_ids, parse_bounded_skill_manifest_metadata,
-        persist_completed_scan_result, persist_resource_input,
+        home_dir, normalize_source_ids, parse_bounded_mcp_config_metadata,
+        parse_bounded_skill_manifest_metadata, persist_completed_scan_result,
+        persist_resource_input, read_bounded_mcp_config_metadata,
         read_bounded_skill_manifest_metadata, recompute_batch_counters, redact_relative_path,
         resolve_custom_directory_scan_profile, resolve_scan_profile, scan_validated_root,
         skip_inputs_from_counts, validate_scan_root, validate_scan_root_for_mode,
@@ -3836,8 +4595,9 @@ mod tests {
         ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus, ScanMode, ScanProgress,
         SelectedRoot, ADVANCED_FULL_DISK_PROFILE_ID, ADVANCED_FULL_DISK_SOURCE_KIND,
         CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID, INTELLIGENT_DISCOVERY_PROFILE_ID,
-        MAX_SKILL_MANIFEST_ARRAY_ITEMS, MAX_SKILL_MANIFEST_DESCRIPTION_CHARS,
-        MAX_SKILL_MANIFEST_ITEM_CHARS, MAX_SKILL_MANIFEST_METADATA_BYTES,
+        MAX_MCP_CONFIG_METADATA_BYTES, MAX_SKILL_MANIFEST_ARRAY_ITEMS,
+        MAX_SKILL_MANIFEST_DESCRIPTION_CHARS, MAX_SKILL_MANIFEST_ITEM_CHARS,
+        MAX_SKILL_MANIFEST_METADATA_BYTES,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -4263,6 +5023,218 @@ mod tests {
         assert_eq!(metadata.tags, vec!["safe-tag".to_string()]);
         assert_eq!(metadata.capabilities, vec!["safe-capability".to_string()]);
         assert!(metadata.when_to_use.is_none());
+    }
+
+    #[test]
+    fn mcp_config_metadata_extracts_safe_json_service_entries() {
+        let metadata = parse_bounded_mcp_config_metadata(
+            r#"{
+              "mcpServers": {
+                "filesystem": {
+                  "displayName": "Local Files",
+                  "command": "/usr/local/bin/npx",
+                  "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "--token=super-secret-token"],
+                  "env": { "FILESYSTEM_ROOT": "/private/path", "SERVICE_MODE": "readonly" },
+                  "transport": "stdio",
+                  "tools": ["read_file", "write_file", "token=super-secret-token"]
+                },
+                "remote-api": {
+                  "url": "https://bearer-token:super-secret-token@api.example.com/mcp?token=super-secret-token",
+                  "type": "sse",
+                  "staticToolHints": ["search", "bearer-token"]
+                }
+              }
+            }"#,
+            Path::new(".mcp/servers.json"),
+        )
+        .expect("safe JSON MCP metadata should parse");
+
+        assert_eq!(metadata.services.len(), 2);
+        let filesystem = metadata
+            .services
+            .iter()
+            .find(|service| service.service_name.as_deref() == Some("filesystem"))
+            .expect("filesystem service should be extracted");
+        assert_eq!(filesystem.display_name.as_deref(), Some("Local Files"));
+        assert_eq!(filesystem.command_name.as_deref(), Some("npx"));
+        assert_eq!(filesystem.transport.as_deref(), Some("stdio"));
+        assert_eq!(
+            filesystem.required_env_names,
+            vec!["FILESYSTEM_ROOT".to_string(), "SERVICE_MODE".to_string()]
+        );
+        assert!(filesystem.uses_npx);
+        assert!(filesystem.package_fetch_risk);
+        assert!(filesystem.uses_at_latest);
+        assert_eq!(
+            filesystem.static_tool_hints,
+            vec!["read_file".to_string(), "write_file".to_string()]
+        );
+
+        let remote = metadata
+            .services
+            .iter()
+            .find(|service| service.service_name.as_deref() == Some("remote-api"))
+            .expect("remote service should be extracted");
+        assert_eq!(remote.remote_host_hint.as_deref(), Some("api.example.com"));
+        assert_eq!(remote.transport.as_deref(), Some("sse"));
+        assert_eq!(remote.static_tool_hints, vec!["search".to_string()]);
+
+        let serialized = serde_json::to_string(&metadata).expect("metadata should serialize");
+        assert!(!serialized.contains("super-secret-token"));
+        assert!(!serialized.contains("--token"));
+        assert!(!serialized.contains("https://"));
+        assert!(!serialized.contains("/private/path"));
+    }
+
+    #[test]
+    fn mcp_config_metadata_extracts_safe_toml_like_sections() {
+        let metadata = parse_bounded_mcp_config_metadata(
+            r#"
+            [mcp_servers."filesystem"]
+            command = "/opt/bin/node"
+            args = ["server.js"]
+            transport = "stdio"
+            env = { FILESYSTEM_ROOT = "/private/path" }
+            tools = ["read_file", "cookie-value"]
+
+            [mcp_servers.remote.env]
+            REMOTE_TIMEOUT = "30"
+
+            [mcp_servers.remote]
+            url = "https://remote.example.com/sse?token=super-secret-token"
+            type = "http"
+            "#,
+            Path::new("config.toml"),
+        )
+        .expect("safe TOML-like MCP metadata should parse");
+
+        assert_eq!(metadata.services.len(), 2);
+        let filesystem = metadata
+            .services
+            .iter()
+            .find(|service| service.service_name.as_deref() == Some("filesystem"))
+            .expect("filesystem service should be extracted");
+        assert_eq!(filesystem.command_name.as_deref(), Some("node"));
+        assert_eq!(filesystem.transport.as_deref(), Some("stdio"));
+        assert_eq!(
+            filesystem.required_env_names,
+            vec!["FILESYSTEM_ROOT".to_string()]
+        );
+        assert_eq!(filesystem.static_tool_hints, vec!["read_file".to_string()]);
+
+        let remote = metadata
+            .services
+            .iter()
+            .find(|service| service.service_name.as_deref() == Some("remote"))
+            .expect("remote service should be extracted");
+        assert_eq!(
+            remote.remote_host_hint.as_deref(),
+            Some("remote.example.com")
+        );
+        assert_eq!(remote.transport.as_deref(), Some("http"));
+        assert_eq!(
+            remote.required_env_names,
+            vec!["REMOTE_TIMEOUT".to_string()]
+        );
+    }
+
+    #[test]
+    fn mcp_config_metadata_falls_back_for_malformed_or_oversized_content() {
+        assert!(parse_bounded_mcp_config_metadata("{", Path::new(".mcp/broken.json")).is_none());
+        assert!(parse_bounded_mcp_config_metadata(
+            "mcpServers:\n  filesystem:\n    command: npx: broken",
+            Path::new(".mcp/broken.yaml")
+        )
+        .is_none());
+
+        let root = temp_scan_fixture_root("oversized-mcp-config");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".mcp")).expect("mcp fixture directory should be created");
+        fs::write(
+            root.join(".mcp/servers.json"),
+            format!(
+                "{{\"mcpServers\":{{\"filesystem\":{{\"command\":\"node\",\"padding\":\"{}\"}}}}}}",
+                "A".repeat(MAX_MCP_CONFIG_METADATA_BYTES + 1)
+            ),
+        )
+        .expect("oversized MCP config fixture should be written");
+
+        assert!(read_bounded_mcp_config_metadata(&root.join(".mcp/servers.json")).is_none());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scan_only_parses_supported_mcp_config_files_and_keeps_fallback_safe() {
+        let root = temp_scan_fixture_root("mcp-config-scope");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".mcp")).expect("mcp fixture directory should be created");
+        fs::create_dir_all(root.join("configs"))
+            .expect("config fixture directory should be created");
+        fs::write(
+            root.join(".mcp/servers.json"),
+            r#"{"mcpServers":{"filesystem":{"command":"node","env":{"FILESYSTEM_ROOT":"/tmp"}}}}"#,
+        )
+        .expect("safe MCP config should be written");
+        fs::write(
+            root.join(".mcp/README.md"),
+            r#"{"mcpServers":{"private-doc":{"command":"npx","args":["--token=super-secret-token"]}}}"#,
+        )
+        .expect("markdown under .mcp should be written");
+        fs::write(root.join(".mcp/broken.json"), "{").expect("broken config should be written");
+        fs::write(
+            root.join("configs/app.json"),
+            r#"{"mcpServers":{"not-mcp-resource":{"command":"npx"}}}"#,
+        )
+        .expect("non-mcp config should be written");
+
+        let selected = SelectedRoot {
+            selection_id: "mcp-config-scope".to_string(),
+            canonical_root: root.clone(),
+            display_name: "mcp-config-scope".to_string(),
+            root_summary: "~/mcp-config-scope".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
+            .expect("default profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("scan should not fail");
+
+        let parsed = result
+            .resources
+            .iter()
+            .find(|resource| resource.relative_path == ".mcp/servers.json")
+            .expect("supported mcp config should be returned");
+        assert_eq!(
+            parsed
+                .mcp_config_metadata
+                .as_ref()
+                .map(|metadata| metadata.services.len()),
+            Some(1)
+        );
+
+        let markdown = result
+            .resources
+            .iter()
+            .find(|resource| resource.relative_path == ".mcp/README.md")
+            .expect("markdown clue should still be classified by path");
+        assert!(markdown.mcp_config_metadata.is_none());
+
+        let broken = result
+            .resources
+            .iter()
+            .find(|resource| resource.relative_path == ".mcp/broken.json")
+            .expect("broken config should still be classified by path");
+        assert!(broken.mcp_config_metadata.is_none());
+
+        assert!(result.resources.iter().all(|resource| resource
+            .mcp_config_metadata
+            .as_ref()
+            .map_or(true, |metadata| !metadata.services.iter().any(|service| {
+                service.service_name.as_deref() == Some("not-mcp-resource")
+            }))));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
