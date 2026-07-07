@@ -81,6 +81,9 @@ const item: SkillListItem = {
   sourceLabel: "Codex",
   sourceKindLabel: "Codex",
   availableInTools: ["Codex"],
+  aliases: ["writer", "copy-helper"],
+  tags: ["writing", "product-copy"],
+  capabilities: ["drafting", "editing"],
   usageText: "在 Codex 中输入 `$writer`。",
   attentionReasons: [
     {
@@ -105,6 +108,9 @@ assert.equal(mapped.zhStatus, "重复");
 assert.equal(mapped.metadata?.skillLibraryItemId, "skill:writer");
 assert.equal(mapped.metadata?.sourceLabel, "Codex");
 assert.equal(mapped.metadata?.usageText, "在 Codex 中输入 `$writer`。");
+assert.deepEqual(mapped.metadata?.aliases, ["writer", "copy-helper"]);
+assert.deepEqual(mapped.metadata?.tags, ["writing", "product-copy"]);
+assert.deepEqual(mapped.metadata?.capabilities, ["drafting", "editing"]);
 assert.equal(mapped.prompts[0]?.target, "codex");
 assert.match(mapped.prompts[0]?.prompt ?? "", /\$writer/);
 assert.equal(mapped.paths[0], "~/.codex/skills/writer/SKILL.md");
@@ -120,6 +126,9 @@ const sourceUnknownItem: SkillListItem = {
   sourceLabel: "来源不明",
   sourceKindLabel: "来源不明",
   availableInTools: ["Unknown"],
+  aliases: [],
+  tags: [],
+  capabilities: [],
   usageText: null,
   attentionReasons: [
     {
@@ -179,6 +188,9 @@ assert.equal(detailModel.title, "writer");
 assert.equal(detailModel.originalName, "writer");
 assert.equal(detailModel.whatItDoes, "帮助用户撰写、改写和润色文本。");
 assert.equal(detailModel.whenToUse, "需要起草、整理或改写文字时使用。");
+assert.equal(detailModel.aliasesText, "writer、copy-helper");
+assert.equal(detailModel.tagsText, "writing、product-copy");
+assert.equal(detailModel.capabilitiesText, "drafting、editing");
 assert.equal(detailModel.availableInToolsText, "Codex");
 assert.equal(detailModel.howToUse, "在 Codex 中输入 `$writer`。");
 assert.equal(detailModel.sourceText, "Codex");
@@ -223,6 +235,9 @@ const searchableItems: SkillListItem[] = [
     sourceLabel: "项目来源",
     sourceKindLabel: "项目来源",
     availableInTools: ["Unknown"],
+    aliases: [],
+    tags: ["project"],
+    capabilities: ["整理"],
     usageText: fallbackSkillUsageText,
     attentionReasons: [],
     primaryPathHint: "~/workspace/project-helper/SKILL.md",
@@ -231,6 +246,10 @@ const searchableItems: SkillListItem[] = [
 ];
 const filteredBySource = filterSkillLibraryItems(searchableItems, "来源不明");
 assert.deepEqual(filteredBySource.map((row) => row.id), ["skill:mystery"]);
+const filteredByAlias = filterSkillLibraryItems(searchableItems, "copy-helper");
+assert.deepEqual(filteredByAlias.map((row) => row.id), ["skill:writer"]);
+const filteredByCapability = filterSkillLibraryItems(searchableItems, "drafting");
+assert.deepEqual(filteredByCapability.map((row) => row.id), ["skill:writer"]);
 assert.equal(productSummary.counts.dedupedSkillCount, 4, "product totals remain separate from search result length");
 assert.equal(filteredBySource.length, 1);
 

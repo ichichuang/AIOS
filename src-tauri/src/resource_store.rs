@@ -8,9 +8,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 
 const DATABASE_FILE_NAME: &str = "aios-resource-library.sqlite3";
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const DEFAULT_RESOURCE_QUERY_LIMIT: usize = 100;
 const MAX_RESOURCE_QUERY_LIMIT: usize = 500;
+const MAX_SKILL_PRODUCT_METADATA_ARRAY_ITEMS: usize = 20;
+const MAX_SKILL_PRODUCT_METADATA_ITEM_CHARS: usize = 64;
+const MAX_SKILL_PRODUCT_METADATA_WHEN_TO_USE_CHARS: usize = 320;
 
 #[derive(Clone, Debug)]
 pub struct ResourceStoreState {
@@ -144,6 +147,23 @@ pub struct PersistScanResourceInput {
     pub classification_reason: String,
     pub sensitive_path_redacted: bool,
     pub risk_labels: Vec<String>,
+    pub skill_manifest_metadata: Option<PersistSkillManifestMetadataInput>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PersistSkillManifestMetadataInput {
+    pub aliases: Vec<String>,
+    pub tags: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub when_to_use: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct ResourceProductMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skill_manifest: Option<PersistSkillManifestMetadataInput>,
 }
 
 #[derive(Clone, Debug)]
@@ -425,6 +445,8 @@ pub struct ResourceCorpusResource {
     pub modified_at_ms: Option<u64>,
     pub classification_reason: Option<String>,
     pub sensitive_path_redacted: bool,
+    #[serde(skip_serializing)]
+    pub(crate) product_metadata: ResourceProductMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -504,6 +526,9 @@ pub struct SkillListItem {
     pub source_label: String,
     pub source_kind_label: String,
     pub available_in_tools: Vec<String>,
+    pub aliases: Vec<String>,
+    pub tags: Vec<String>,
+    pub capabilities: Vec<String>,
     pub usage_text: Option<String>,
     pub attention_reasons: Vec<SkillAttentionReason>,
     pub primary_path_hint: String,
@@ -944,6 +969,7 @@ pub fn initialize_database(db_path: &Path) -> Result<(), ResourceStoreError> {
     migrate_v1(&conn)?;
     migrate_v2(&conn)?;
     migrate_v3(&conn)?;
+    migrate_v4(&conn)?;
     Ok(())
 }
 
@@ -1156,11 +1182,12 @@ pub fn persist_scan_job_for_path(
         );
         let resource_id = stable_id("resource", &[&stable_key]);
         let boundary_labels_json = serde_json::to_string(&resource.boundary_labels)?;
+        let product_metadata_json = product_metadata_json_for_resource(resource)?;
         tx.execute(
             "INSERT INTO resources (
                 id, stable_key, name, resource_kind, description, primary_type,
-                risk_level, boundary_labels_json, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+                risk_level, boundary_labels_json, product_metadata_json, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
             ON CONFLICT(stable_key) DO UPDATE SET
                 name = excluded.name,
                 resource_kind = excluded.resource_kind,
@@ -1168,6 +1195,7 @@ pub fn persist_scan_job_for_path(
                 primary_type = excluded.primary_type,
                 risk_level = excluded.risk_level,
                 boundary_labels_json = excluded.boundary_labels_json,
+                product_metadata_json = excluded.product_metadata_json,
                 updated_at = excluded.updated_at",
             params![
                 resource_id,
@@ -1178,6 +1206,7 @@ pub fn persist_scan_job_for_path(
                 resource.primary_type,
                 resource.risk_level,
                 boundary_labels_json,
+                product_metadata_json,
                 now
             ],
         )?;
@@ -1271,6 +1300,134 @@ pub fn persist_scan_job_for_path(
 
     tx.commit()?;
     Ok(())
+}
+
+fn product_metadata_json_for_resource(
+    resource: &PersistScanResourceInput,
+) -> Result<String, ResourceStoreError> {
+    let skill_manifest = resource
+        .skill_manifest_metadata
+        .as_ref()
+        .and_then(sanitize_skill_manifest_product_metadata);
+    serde_json::to_string(&ResourceProductMetadata { skill_manifest })
+        .map_err(ResourceStoreError::from)
+}
+
+fn parse_resource_product_metadata_json(value: &str) -> ResourceProductMetadata {
+    serde_json::from_str::<ResourceProductMetadata>(value)
+        .map(sanitize_resource_product_metadata)
+        .unwrap_or_default()
+}
+
+fn sanitize_resource_product_metadata(
+    metadata: ResourceProductMetadata,
+) -> ResourceProductMetadata {
+    ResourceProductMetadata {
+        skill_manifest: metadata
+            .skill_manifest
+            .as_ref()
+            .and_then(sanitize_skill_manifest_product_metadata),
+    }
+}
+
+fn sanitize_skill_manifest_product_metadata(
+    metadata: &PersistSkillManifestMetadataInput,
+) -> Option<PersistSkillManifestMetadataInput> {
+    let sanitized = PersistSkillManifestMetadataInput {
+        aliases: sanitize_product_metadata_items(&metadata.aliases),
+        tags: sanitize_product_metadata_items(&metadata.tags),
+        capabilities: sanitize_product_metadata_items(&metadata.capabilities),
+        when_to_use: metadata.when_to_use.as_deref().and_then(|value| {
+            sanitize_product_metadata_text(value, MAX_SKILL_PRODUCT_METADATA_WHEN_TO_USE_CHARS)
+        }),
+    };
+
+    if sanitized.aliases.is_empty()
+        && sanitized.tags.is_empty()
+        && sanitized.capabilities.is_empty()
+        && sanitized.when_to_use.is_none()
+    {
+        None
+    } else {
+        Some(sanitized)
+    }
+}
+
+fn sanitize_product_metadata_items(values: &[String]) -> Vec<String> {
+    let mut output = Vec::new();
+    for value in values {
+        if output.len() >= MAX_SKILL_PRODUCT_METADATA_ARRAY_ITEMS {
+            break;
+        }
+        if let Some(safe_value) =
+            sanitize_product_metadata_text(value, MAX_SKILL_PRODUCT_METADATA_ITEM_CHARS)
+        {
+            if !output.contains(&safe_value) {
+                output.push(safe_value);
+            }
+        }
+    }
+    output
+}
+
+fn sanitize_product_metadata_text(value: &str, max_chars: usize) -> Option<String> {
+    let normalized = value
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\''))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if normalized.is_empty() || contains_unsafe_product_metadata_text(&normalized) {
+        return None;
+    }
+    Some(truncate_product_metadata_text(&normalized, max_chars))
+}
+
+fn truncate_product_metadata_text(value: &str, max_chars: usize) -> String {
+    let mut output = value.chars().take(max_chars).collect::<String>();
+    if value.chars().count() > max_chars {
+        output.push_str("...");
+    }
+    output
+}
+
+fn contains_unsafe_product_metadata_text(value: &str) -> bool {
+    contains_secret_like_product_text(value)
+        || contains_raw_log_hint(value)
+        || contains_env_assignment_product_metadata_text(value)
+        || contains_code_or_command_product_metadata_text(value)
+}
+
+fn contains_env_assignment_product_metadata_text(value: &str) -> bool {
+    value.split_whitespace().any(|token| {
+        let Some((left, right)) = token.split_once('=') else {
+            return false;
+        };
+        !left.is_empty()
+            && !right.is_empty()
+            && left.len() <= 96
+            && left
+                .chars()
+                .next()
+                .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+            && left.chars().all(|character| {
+                character == '_' || character.is_ascii_uppercase() || character.is_ascii_digit()
+            })
+    })
+}
+
+fn contains_code_or_command_product_metadata_text(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("```")
+        || lower.contains("~~~")
+        || lower.contains("rm -rf")
+        || lower.starts_with("$ ")
+        || [
+            "curl ", "sudo ", "npm ", "pnpm ", "yarn ", "cargo ", "python ", "node ", "bash ",
+            "sh ",
+        ]
+        .iter()
+        .any(|command| lower.starts_with(command) || lower.contains(&format!("; {command}")))
 }
 
 pub fn store_status_for_path(db_path: &Path) -> Result<ResourceStoreStatus, ResourceStoreError> {
@@ -2814,6 +2971,7 @@ struct SkillCandidate {
     findings: Vec<ResourceCorpusFinding>,
     identity_key: String,
     original_name: String,
+    manifest_metadata: Option<PersistSkillManifestMetadataInput>,
     source_label: String,
     source_kind_label: String,
     available_in_tools: Vec<String>,
@@ -2884,6 +3042,7 @@ fn list_skill_candidates_for_connection(
         let findings = list_resource_findings_for_connection(conn, &resource.id)?;
         let original_name = skill_original_name(&resource);
         let identity_key = skill_identity_key(&resource, &original_name);
+        let manifest_metadata = resource.product_metadata.skill_manifest.clone();
         let available_in_tools = infer_available_tools(&resource);
         let source_unknown = is_source_unknown(&resource);
         let source_label = skill_source_label(&resource, &available_in_tools, source_unknown);
@@ -2897,6 +3056,7 @@ fn list_skill_candidates_for_connection(
             findings,
             identity_key,
             original_name,
+            manifest_metadata,
             source_label,
             source_kind_label,
             available_in_tools,
@@ -2951,12 +3111,13 @@ fn skill_library_counts(groups: &[SkillLibraryGroup]) -> SkillLibraryCounts {
 fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
     let primary = select_primary_skill_candidate(group);
     let available_in_tools = merged_available_tools(group);
+    let manifest_metadata = merged_skill_manifest_metadata(group);
     let status = skill_status_for_group(group);
     let usage_text = Some(skill_usage_text(
         &primary.original_name,
         &available_in_tools,
     ));
-    let short_purpose = skill_short_purpose(primary);
+    let short_purpose = skill_short_purpose(primary, &manifest_metadata);
     let attention_reasons = attention_reasons_for_group(group);
 
     SkillListItem {
@@ -2968,6 +3129,9 @@ fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
         source_label: merged_source_label(group, primary),
         source_kind_label: merged_source_kind_label(group, primary),
         available_in_tools,
+        aliases: manifest_metadata.aliases,
+        tags: manifest_metadata.tags,
+        capabilities: manifest_metadata.capabilities,
         usage_text,
         attention_reasons,
         primary_path_hint: safe_product_path_hint(&primary.primary_path_hint),
@@ -3007,10 +3171,17 @@ fn skill_detail_for_group(group: &SkillLibraryGroup) -> SkillDetail {
         .iter()
         .flat_map(finding_attention_reasons)
         .collect::<Vec<_>>();
+    let manifest_when_to_use = group.candidates.iter().find_map(|candidate| {
+        candidate
+            .manifest_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.when_to_use.clone())
+    });
 
     SkillDetail {
         what_it_does: item.short_purpose.clone(),
-        when_to_use: skill_when_to_use(&item.original_name, &item.short_purpose),
+        when_to_use: manifest_when_to_use
+            .or_else(|| skill_when_to_use(&item.original_name, &item.short_purpose)),
         how_to_use: Some(usage_text.clone()),
         usage_summary: SkillUsageSummary {
             usage_known: usage_text != UNKNOWN_SKILL_USAGE_TEXT,
@@ -3052,7 +3223,7 @@ fn skill_advanced_metadata_rows(
     group: &SkillLibraryGroup,
     item: &SkillListItem,
 ) -> Vec<SkillAdvancedMetadataRow> {
-    vec![
+    let mut rows = vec![
         SkillAdvancedMetadataRow {
             label: "产品状态".to_string(),
             value: skill_status_label(&item.status).to_string(),
@@ -3069,7 +3240,26 @@ fn skill_advanced_metadata_rows(
             label: "本地记录边界".to_string(),
             value: "仅使用 AIOS Desktop 已保存的基本信息，不读取技能正文。".to_string(),
         },
-    ]
+    ];
+    if !item.aliases.is_empty() {
+        rows.push(SkillAdvancedMetadataRow {
+            label: "别名".to_string(),
+            value: item.aliases.join("、"),
+        });
+    }
+    if !item.tags.is_empty() {
+        rows.push(SkillAdvancedMetadataRow {
+            label: "标签".to_string(),
+            value: item.tags.join("、"),
+        });
+    }
+    if !item.capabilities.is_empty() {
+        rows.push(SkillAdvancedMetadataRow {
+            label: "能力线索".to_string(),
+            value: item.capabilities.join("、"),
+        });
+    }
+    rows
 }
 
 fn skill_status_for_group(group: &SkillLibraryGroup) -> SkillStatus {
@@ -3584,6 +3774,44 @@ fn skill_is_broken(resource: &ResourceCorpusResource, findings: &[ResourceCorpus
         || findings.iter().any(|finding| finding.severity == "high")
 }
 
+fn merged_skill_manifest_metadata(group: &SkillLibraryGroup) -> PersistSkillManifestMetadataInput {
+    let mut aliases = Vec::new();
+    let mut tags = Vec::new();
+    let mut capabilities = Vec::new();
+    let mut when_to_use = None;
+
+    for metadata in group
+        .candidates
+        .iter()
+        .filter_map(|candidate| candidate.manifest_metadata.as_ref())
+    {
+        merge_limited_product_metadata_items(&mut aliases, &metadata.aliases);
+        merge_limited_product_metadata_items(&mut tags, &metadata.tags);
+        merge_limited_product_metadata_items(&mut capabilities, &metadata.capabilities);
+        if when_to_use.is_none() {
+            when_to_use = metadata.when_to_use.clone();
+        }
+    }
+
+    PersistSkillManifestMetadataInput {
+        aliases,
+        tags,
+        capabilities,
+        when_to_use,
+    }
+}
+
+fn merge_limited_product_metadata_items(target: &mut Vec<String>, values: &[String]) {
+    for value in values {
+        if target.len() >= MAX_SKILL_PRODUCT_METADATA_ARRAY_ITEMS {
+            break;
+        }
+        if !target.contains(value) {
+            target.push(value.clone());
+        }
+    }
+}
+
 fn merged_available_tools(group: &SkillLibraryGroup) -> Vec<String> {
     let mut tools = group
         .candidates
@@ -3658,10 +3886,37 @@ fn skill_invocation_name(original_name: &str) -> String {
     }
 }
 
-fn skill_short_purpose(candidate: &SkillCandidate) -> String {
+fn skill_short_purpose(
+    candidate: &SkillCandidate,
+    manifest_metadata: &PersistSkillManifestMetadataInput,
+) -> String {
     let description = candidate.resource.description.trim();
     if is_meaningful_skill_description(description) {
         return description.to_string();
+    }
+    if !manifest_metadata.capabilities.is_empty() {
+        return format!(
+            "可用于{}。",
+            manifest_metadata
+                .capabilities
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("、")
+        );
+    }
+    if !manifest_metadata.tags.is_empty() {
+        return format!(
+            "与{}相关的技能。",
+            manifest_metadata
+                .tags
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("、")
+        );
     }
     infer_skill_purpose_from_name(&candidate.original_name)
         .unwrap_or_else(|| "暂时无法判断用途。请在高级信息里查看来源。".to_string())
@@ -3812,6 +4067,7 @@ fn open_initialized_connection(db_path: &Path) -> Result<Connection, ResourceSto
     migrate_v1(&conn)?;
     migrate_v2(&conn)?;
     migrate_v3(&conn)?;
+    migrate_v4(&conn)?;
     Ok(conn)
 }
 
@@ -3878,6 +4134,7 @@ fn migrate_v1(conn: &Connection) -> Result<(), ResourceStoreError> {
             primary_type TEXT NOT NULL,
             risk_level TEXT NOT NULL,
             boundary_labels_json TEXT NOT NULL,
+            product_metadata_json TEXT NOT NULL DEFAULT '{}',
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
@@ -3970,7 +4227,7 @@ fn migrate_v2(conn: &Connection) -> Result<(), ResourceStoreError> {
     )?;
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
-        params![SCHEMA_VERSION, u64_to_i64(current_time_ms())],
+        params![2_i64, u64_to_i64(current_time_ms())],
     )?;
     Ok(())
 }
@@ -3984,6 +4241,20 @@ fn migrate_v3(conn: &Connection) -> Result<(), ResourceStoreError> {
         "CREATE INDEX IF NOT EXISTS idx_resource_locations_source ON resource_locations(scan_source_id)",
         [],
     )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+        params![3_i64, u64_to_i64(current_time_ms())],
+    )?;
+    Ok(())
+}
+
+fn migrate_v4(conn: &Connection) -> Result<(), ResourceStoreError> {
+    if !column_exists(conn, "resources", "product_metadata_json")? {
+        conn.execute(
+            "ALTER TABLE resources ADD COLUMN product_metadata_json TEXT NOT NULL DEFAULT '{}'",
+            [],
+        )?;
+    }
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
         params![SCHEMA_VERSION, u64_to_i64(current_time_ms())],
@@ -4413,7 +4684,7 @@ fn corpus_resource_base_sql() -> String {
     "
     SELECT
         r.id, r.stable_key, r.name, r.resource_kind, r.description, r.primary_type,
-        r.risk_level, r.boundary_labels_json, r.updated_at,
+        r.risk_level, r.boundary_labels_json, r.product_metadata_json, r.updated_at,
         l.id, l.scan_source_id, s.display_name, s.source_kind, s.enabled,
         s.project_label, s.root_display_path, s.profile_id,
         l.scan_job_id, j.status, j.started_at, j.finished_at,
@@ -4460,6 +4731,7 @@ fn row_to_corpus_resource(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceC
     let boundary_labels_json: String = row.get(7)?;
     let boundary_labels =
         serde_json::from_str::<Vec<String>>(&boundary_labels_json).unwrap_or_default();
+    let product_metadata_json: String = row.get(8)?;
     Ok(ResourceCorpusResource {
         id: row.get(0)?,
         stable_key: row.get(1)?,
@@ -4469,27 +4741,28 @@ fn row_to_corpus_resource(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceC
         primary_type: row.get(5)?,
         risk_level: row.get(6)?,
         boundary_labels,
-        updated_at_ms: i64_to_u64(row.get(8)?),
-        location_id: row.get(9)?,
-        scan_source_id: row.get(10)?,
-        scan_source_name: row.get(11)?,
-        source_kind: row.get(12)?,
-        scan_source_enabled: row.get::<_, Option<i64>>(13)?.map(int_to_bool),
-        project_label: row.get(14)?,
-        root_display_path: row.get(15)?,
-        profile_id: row.get(16)?,
-        scan_job_id: row.get(17)?,
-        scan_job_status: row.get(18)?,
-        scan_job_started_at_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64),
-        scan_job_finished_at_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64),
-        relative_path: row.get(21)?,
-        display_path: row.get(22)?,
-        extension: row.get(23)?,
-        entry_type: row.get(24)?,
-        size_bytes: row.get::<_, Option<i64>>(25)?.map(i64_to_u64),
-        modified_at_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64),
-        classification_reason: row.get(27)?,
-        sensitive_path_redacted: int_to_bool(row.get(28)?),
+        updated_at_ms: i64_to_u64(row.get(9)?),
+        location_id: row.get(10)?,
+        scan_source_id: row.get(11)?,
+        scan_source_name: row.get(12)?,
+        source_kind: row.get(13)?,
+        scan_source_enabled: row.get::<_, Option<i64>>(14)?.map(int_to_bool),
+        project_label: row.get(15)?,
+        root_display_path: row.get(16)?,
+        profile_id: row.get(17)?,
+        scan_job_id: row.get(18)?,
+        scan_job_status: row.get(19)?,
+        scan_job_started_at_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64),
+        scan_job_finished_at_ms: row.get::<_, Option<i64>>(21)?.map(i64_to_u64),
+        relative_path: row.get(22)?,
+        display_path: row.get(23)?,
+        extension: row.get(24)?,
+        entry_type: row.get(25)?,
+        size_bytes: row.get::<_, Option<i64>>(26)?.map(i64_to_u64),
+        modified_at_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64),
+        classification_reason: row.get(28)?,
+        sensitive_path_redacted: int_to_bool(row.get(29)?),
+        product_metadata: parse_resource_product_metadata_json(&product_metadata_json),
     })
 }
 
@@ -5121,6 +5394,7 @@ pub fn debug_all_text_values_for_path(db_path: &Path) -> Result<String, Resource
                 "primary_type",
                 "risk_level",
                 "boundary_labels_json",
+                "product_metadata_json",
             ],
         ),
         (
@@ -5203,7 +5477,7 @@ fn debug_text_values_for_table(
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_resource_library_for_path, debug_all_text_values_for_path,
+        clear_resource_library_for_path, column_exists, debug_all_text_values_for_path,
         get_active_resource_corpus_summary_for_path, get_app_setting_for_path,
         get_library_summary_for_path, get_mcp_library_summary_for_path,
         get_mcp_service_detail_for_path, get_project_resource_map_for_path,
@@ -5218,8 +5492,8 @@ mod tests {
         set_app_setting_for_path, store_status_for_path, update_scan_source_for_path,
         upsert_scan_source_for_path, McpServiceStatus, PersistScanErrorInput, PersistScanJobInput,
         PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
-        ResourceCorpusQuery, ResourceStoreError, SkillStatus, UpdateScanSourceInput,
-        UpsertScanSourceInput,
+        PersistSkillManifestMetadataInput, ResourceCorpusQuery, ResourceStoreError, SkillStatus,
+        UpdateScanSourceInput, UpsertScanSourceInput,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -5237,10 +5511,13 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 3);
+        assert_eq!(status.schema_version, 4);
         assert_eq!(status.resource_count, 0);
         assert!(status.metadata_only);
         assert!(!status.content_storage_enabled);
+        let conn = rusqlite::Connection::open(&db_path).expect("db should open");
+        assert!(column_exists(&conn, "resources", "product_metadata_json")
+            .expect("product metadata column check should work"));
 
         cleanup_db(db_path);
     }
@@ -5398,7 +5675,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should still load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 3);
+        assert_eq!(status.schema_version, 4);
 
         cleanup_db(db_path);
     }
@@ -5887,6 +6164,150 @@ mod tests {
             .source_summaries
             .iter()
             .all(|source| source.path_hint.ends_with("skills/writer/SKILL.md")));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_exposes_safe_structured_manifest_metadata() {
+        let db_path = temp_db_path("skill-library-structured-manifest");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-skill-structured-manifest",
+                42,
+                codex_source(),
+                vec![PersistScanResourceInput {
+                    name: "Better Writer".to_string(),
+                    resource_kind: "skill".to_string(),
+                    description: "Writes concise product summaries.".to_string(),
+                    primary_type: "file".to_string(),
+                    risk_level: "low".to_string(),
+                    boundary_labels: vec![
+                        "metadata-only".to_string(),
+                        "bounded-skill-manifest-metadata".to_string(),
+                    ],
+                    relative_path: "skills/writer/SKILL.md".to_string(),
+                    display_path: "skills/writer/SKILL.md".to_string(),
+                    extension: Some("md".to_string()),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(128),
+                    modified_at_ms: Some(1_725_300_011_000),
+                    classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                    sensitive_path_redacted: false,
+                    risk_labels: vec!["metadata-only".to_string()],
+                    skill_manifest_metadata: Some(PersistSkillManifestMetadataInput {
+                        aliases: vec!["writer".to_string(), "copy-helper".to_string()],
+                        tags: vec!["writing".to_string(), "product-copy".to_string()],
+                        capabilities: vec!["drafting".to_string(), "editing".to_string()],
+                        when_to_use: Some(
+                            "Use when product copy needs a concise local skill.".to_string(),
+                        ),
+                    }),
+                }],
+            ),
+        )
+        .expect("structured manifest metadata should persist");
+
+        let item = list_skill_library_items_for_path(&db_path)
+            .expect("skill items should load")
+            .into_iter()
+            .find(|item| item.display_name == "Better Writer")
+            .expect("manifest item should exist");
+        assert_eq!(
+            item.aliases,
+            vec!["writer".to_string(), "copy-helper".to_string()]
+        );
+        assert_eq!(
+            item.tags,
+            vec!["writing".to_string(), "product-copy".to_string()]
+        );
+        assert_eq!(
+            item.capabilities,
+            vec!["drafting".to_string(), "editing".to_string()]
+        );
+
+        let detail =
+            get_skill_detail_for_path(&db_path, &item.id).expect("skill detail should load");
+        assert_eq!(
+            detail.when_to_use.as_deref(),
+            Some("Use when product copy needs a concise local skill.")
+        );
+        assert_eq!(detail.item.aliases, item.aliases);
+        assert!(detail
+            .safe_advanced_metadata_summary
+            .iter()
+            .any(|row| row.label == "能力线索" && row.value == "drafting、editing"));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_discards_unsafe_structured_manifest_metadata_fields() {
+        let db_path = temp_db_path("skill-library-unsafe-structured-manifest");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-skill-unsafe-structured-manifest",
+                43,
+                codex_source(),
+                vec![PersistScanResourceInput {
+                    name: "Safe Partial Skill".to_string(),
+                    resource_kind: "skill".to_string(),
+                    description: "Safe skill description.".to_string(),
+                    primary_type: "file".to_string(),
+                    risk_level: "low".to_string(),
+                    boundary_labels: vec!["metadata-only".to_string()],
+                    relative_path: "skills/safe-partial/SKILL.md".to_string(),
+                    display_path: "skills/safe-partial/SKILL.md".to_string(),
+                    extension: Some("md".to_string()),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(128),
+                    modified_at_ms: Some(1_725_300_012_000),
+                    classification_reason: "路径或文件名匹配技能资源。".to_string(),
+                    sensitive_path_redacted: false,
+                    risk_labels: vec!["metadata-only".to_string()],
+                    skill_manifest_metadata: Some(PersistSkillManifestMetadataInput {
+                        aliases: vec![
+                            "safe-partial".to_string(),
+                            "token=super-secret-token".to_string(),
+                        ],
+                        tags: vec!["safe-tag".to_string(), "stdout: secret".to_string()],
+                        capabilities: vec![
+                            "safe-review".to_string(),
+                            "curl https://example.com/?token=super-secret-token".to_string(),
+                        ],
+                        when_to_use: Some(
+                            "OPENAI_API_KEY=super-secret-token\nstack trace".to_string(),
+                        ),
+                    }),
+                }],
+            ),
+        )
+        .expect("unsafe structured manifest metadata should persist safely");
+
+        let item = list_skill_library_items_for_path(&db_path)
+            .expect("skill items should load")
+            .into_iter()
+            .find(|item| item.display_name == "Safe Partial Skill")
+            .expect("safe partial item should exist");
+        assert_eq!(item.aliases, vec!["safe-partial".to_string()]);
+        assert_eq!(item.tags, vec!["safe-tag".to_string()]);
+        assert_eq!(item.capabilities, vec!["safe-review".to_string()]);
+
+        let detail =
+            get_skill_detail_for_path(&db_path, &item.id).expect("skill detail should load");
+        assert_ne!(
+            detail.when_to_use.as_deref(),
+            Some("OPENAI_API_KEY=super-secret-token\nstack trace")
+        );
+        let serialized = serde_json::to_string(&detail).expect("detail should serialize safely");
+        assert!(!serialized.contains("super-secret-token"));
+        assert!(!serialized.contains("OPENAI_API_KEY"));
+        assert!(!serialized.contains("stack trace"));
+        assert!(!serialized.contains("curl https://"));
 
         cleanup_db(db_path);
     }
@@ -6550,6 +6971,7 @@ mod tests {
                         classification_reason: "路径或文件名匹配技能资源。".to_string(),
                         sensitive_path_redacted: false,
                         risk_labels: vec!["metadata-only".to_string()],
+                        skill_manifest_metadata: None,
                     },
                     PersistScanResourceInput {
                         name: "SKILL.md".to_string(),
@@ -6570,6 +6992,7 @@ mod tests {
                         classification_reason: "路径或文件名匹配技能资源。".to_string(),
                         sensitive_path_redacted: false,
                         risk_labels: vec!["metadata-only".to_string()],
+                        skill_manifest_metadata: None,
                     },
                     PersistScanResourceInput {
                         name: "[sensitive]".to_string(),
@@ -6594,6 +7017,7 @@ mod tests {
                             "metadata-only".to_string(),
                             "sensitive-path-redacted".to_string(),
                         ],
+                        skill_manifest_metadata: None,
                     },
                 ],
             ),
@@ -6622,6 +7046,7 @@ mod tests {
                     classification_reason: "路径或文件名匹配技能资源。".to_string(),
                     sensitive_path_redacted: false,
                     risk_labels: vec!["metadata-only".to_string()],
+                    skill_manifest_metadata: None,
                 }],
             ),
         )
@@ -6649,6 +7074,7 @@ mod tests {
                     classification_reason: "路径或文件名匹配技能资源。".to_string(),
                     sensitive_path_redacted: false,
                     risk_labels: vec!["metadata-only".to_string()],
+                    skill_manifest_metadata: None,
                 }],
             ),
         )
@@ -7346,6 +7772,7 @@ mod tests {
             classification_reason: "路径或文件名匹配 MCP 配置元数据。".to_string(),
             sensitive_path_redacted,
             risk_labels: risk_labels.into_iter().map(ToString::to_string).collect(),
+            skill_manifest_metadata: None,
         }
     }
 
@@ -7481,6 +7908,7 @@ mod tests {
             classification_reason: "路径或文件名匹配技能资源。".to_string(),
             sensitive_path_redacted,
             risk_labels: risk_labels.into_iter().map(ToString::to_string).collect(),
+            skill_manifest_metadata: None,
         }
     }
 
@@ -7649,6 +8077,7 @@ mod tests {
                     classification_reason: "路径或文件名匹配技能资源。".to_string(),
                     sensitive_path_redacted: false,
                     risk_labels: vec!["metadata-only".to_string()],
+                    skill_manifest_metadata: None,
                 },
                 PersistScanResourceInput {
                     name: "[sensitive]".to_string(),
@@ -7670,6 +8099,7 @@ mod tests {
                         "metadata-only".to_string(),
                         "sensitive-path-redacted".to_string(),
                     ],
+                    skill_manifest_metadata: None,
                 },
             ],
             skips: vec![PersistScanSkipInput {

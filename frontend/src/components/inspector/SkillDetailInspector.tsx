@@ -67,6 +67,9 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
 
         <DetailTextBlock title="它能做什么" value={view.whatItDoes} />
         <DetailTextBlock title="适合什么时候用" value={view.whenToUse} />
+        {view.capabilitiesText && <DetailTextBlock title="能力线索" value={view.capabilitiesText} />}
+        {view.tagsText && <DetailTextBlock title="标签" value={view.tagsText} />}
+        {view.aliasesText && <DetailTextBlock title="别名" value={view.aliasesText} />}
         <DetailTextBlock title="可在哪些 AI 工具中使用" value={view.availableInToolsText} />
         <DetailTextBlock title="如何使用" value={view.howToUse || fallbackSkillUsageText} muted={!view.usageKnown} />
       </Box>

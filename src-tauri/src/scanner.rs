@@ -1,6 +1,7 @@
 use crate::resource_store::{
     self, PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput,
-    PersistScanSkipInput, PersistScanSourceInput, UpsertScanSourceInput,
+    PersistScanSkipInput, PersistScanSourceInput, PersistSkillManifestMetadataInput,
+    UpsertScanSourceInput,
 };
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,9 @@ const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_SKILL_MANIFEST_METADATA_BYTES: usize = 64 * 1024;
 const MAX_SKILL_MANIFEST_NAME_CHARS: usize = 96;
 const MAX_SKILL_MANIFEST_DESCRIPTION_CHARS: usize = 320;
+const MAX_SKILL_MANIFEST_ITEM_CHARS: usize = 64;
+const MAX_SKILL_MANIFEST_ARRAY_ITEMS: usize = 20;
+const MAX_SKILL_MANIFEST_WHEN_TO_USE_CHARS: usize = 320;
 const MAX_RETAINED_SCAN_JOBS: usize = 8;
 const SCAN_JOB_PROGRESS_EVENT: &str = "aios://scan-job-progress";
 const REDACTED_SEGMENT: &str = "[sensitive]";
@@ -363,6 +367,10 @@ pub struct ScanResource {
 struct SkillManifestMetadata {
     name: Option<String>,
     description: Option<String>,
+    aliases: Vec<String>,
+    tags: Vec<String>,
+    capabilities: Vec<String>,
+    when_to_use: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1861,6 +1869,23 @@ fn persist_resource_input(resource: &ScanResource) -> PersistScanResourceInput {
             .iter()
             .map(|label| (*label).to_string())
             .collect(),
+        skill_manifest_metadata: manifest_metadata.and_then(|metadata| {
+            let input = PersistSkillManifestMetadataInput {
+                aliases: metadata.aliases.clone(),
+                tags: metadata.tags.clone(),
+                capabilities: metadata.capabilities.clone(),
+                when_to_use: metadata.when_to_use.clone(),
+            };
+            if input.aliases.is_empty()
+                && input.tags.is_empty()
+                && input.capabilities.is_empty()
+                && input.when_to_use.is_none()
+            {
+                None
+            } else {
+                Some(input)
+            }
+        }),
     }
 }
 
@@ -3050,10 +3075,28 @@ fn parse_bounded_skill_manifest_metadata(text: &str) -> Option<SkillManifestMeta
         }
     });
 
-    if name.is_none() && description.is_none() {
+    let aliases = frontmatter_values.aliases;
+    let tags = frontmatter_values.tags;
+    let capabilities = frontmatter_values.capabilities;
+    let when_to_use = frontmatter_values.when_to_use;
+
+    if name.is_none()
+        && description.is_none()
+        && aliases.is_empty()
+        && tags.is_empty()
+        && capabilities.is_empty()
+        && when_to_use.is_none()
+    {
         None
     } else {
-        Some(SkillManifestMetadata { name, description })
+        Some(SkillManifestMetadata {
+            name,
+            description,
+            aliases,
+            tags,
+            capabilities,
+            when_to_use,
+        })
     }
 }
 
@@ -3073,6 +3116,10 @@ struct MarkdownHeading {
 struct ParsedSkillFrontmatterValues {
     name: Option<String>,
     description: Option<String>,
+    aliases: Vec<String>,
+    tags: Vec<String>,
+    capabilities: Vec<String>,
+    when_to_use: Option<String>,
 }
 
 fn extract_skill_frontmatter(text: &str) -> Option<ExtractedFrontmatter> {
@@ -3097,33 +3144,133 @@ fn parse_skill_frontmatter_values(
     frontmatter: &ExtractedFrontmatter,
 ) -> ParsedSkillFrontmatterValues {
     let mut values = ParsedSkillFrontmatterValues::default();
+    let lines = frontmatter.text.lines().collect::<Vec<_>>();
 
-    for line in frontmatter.text.lines() {
+    let mut index = 0;
+    while index < lines.len() {
+        let line = lines[index];
         let Some((raw_key, raw_value)) = line.split_once(':') else {
+            index += 1;
             continue;
         };
         let key = raw_key.trim();
         let value = raw_value.trim();
-        if value.is_empty() || value == "|" || value == ">" {
-            continue;
-        }
 
         match key {
             "name" => {
-                if values.name.is_none() {
+                if values.name.is_none() && !frontmatter_scalar_is_empty(value) {
                     values.name = sanitize_skill_manifest_name(value);
                 }
             }
             "description" => {
-                if values.description.is_none() {
+                if values.description.is_none() && !frontmatter_scalar_is_empty(value) {
                     values.description = sanitize_skill_manifest_description(value);
+                }
+            }
+            "aliases" => {
+                merge_skill_manifest_items(
+                    &mut values.aliases,
+                    parse_skill_manifest_frontmatter_array(&lines, &mut index, value),
+                );
+            }
+            "tags" => {
+                merge_skill_manifest_items(
+                    &mut values.tags,
+                    parse_skill_manifest_frontmatter_array(&lines, &mut index, value),
+                );
+            }
+            "capabilities" => {
+                merge_skill_manifest_items(
+                    &mut values.capabilities,
+                    parse_skill_manifest_frontmatter_array(&lines, &mut index, value),
+                );
+            }
+            "whenToUse" | "when_to_use" => {
+                if values.when_to_use.is_none() {
+                    values.when_to_use =
+                        parse_skill_manifest_when_to_use(&lines, &mut index, value);
                 }
             }
             _ => {}
         }
+        index += 1;
     }
 
     values
+}
+
+fn frontmatter_scalar_is_empty(value: &str) -> bool {
+    value.is_empty() || value == "|" || value == ">"
+}
+
+fn parse_skill_manifest_frontmatter_array(
+    lines: &[&str],
+    index: &mut usize,
+    value: &str,
+) -> Vec<String> {
+    if frontmatter_scalar_is_empty(value) {
+        parse_skill_manifest_block_items(lines, index)
+    } else if value.starts_with('[') && value.ends_with(']') {
+        value
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .split(',')
+            .filter_map(sanitize_skill_manifest_item)
+            .collect::<Vec<_>>()
+    } else {
+        sanitize_skill_manifest_item(value)
+            .map(|item| vec![item])
+            .unwrap_or_default()
+    }
+}
+
+fn parse_skill_manifest_when_to_use(
+    lines: &[&str],
+    index: &mut usize,
+    value: &str,
+) -> Option<String> {
+    if frontmatter_scalar_is_empty(value) {
+        let joined = parse_skill_manifest_block_items(lines, index).join(" ");
+        sanitize_skill_manifest_when_to_use(&joined)
+    } else if value.starts_with('[') && value.ends_with(']') {
+        let joined = value
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .split(',')
+            .filter_map(sanitize_skill_manifest_when_to_use)
+            .collect::<Vec<_>>()
+            .join(" ");
+        sanitize_skill_manifest_when_to_use(&joined)
+    } else {
+        sanitize_skill_manifest_when_to_use(value)
+    }
+}
+
+fn parse_skill_manifest_block_items(lines: &[&str], index: &mut usize) -> Vec<String> {
+    let mut output = Vec::new();
+    while *index + 1 < lines.len() {
+        let next_line = lines[*index + 1];
+        let trimmed = next_line.trim_start();
+        let Some(item) = trimmed.strip_prefix("- ") else {
+            break;
+        };
+        if let Some(safe_item) = sanitize_skill_manifest_item(item) {
+            output.push(safe_item);
+        }
+        *index += 1;
+    }
+    output
+}
+
+fn merge_skill_manifest_items(target: &mut Vec<String>, values: Vec<String>) {
+    for value in values {
+        if target.len() >= MAX_SKILL_MANIFEST_ARRAY_ITEMS {
+            break;
+        }
+        if !target.contains(&value) {
+            target.push(value);
+        }
+    }
 }
 
 fn first_markdown_heading(text: &str) -> Option<MarkdownHeading> {
@@ -3203,6 +3350,14 @@ fn sanitize_skill_manifest_name(value: &str) -> Option<String> {
 
 fn sanitize_skill_manifest_description(value: &str) -> Option<String> {
     sanitize_skill_manifest_text(value, MAX_SKILL_MANIFEST_DESCRIPTION_CHARS)
+}
+
+fn sanitize_skill_manifest_item(value: &str) -> Option<String> {
+    sanitize_skill_manifest_text(value, MAX_SKILL_MANIFEST_ITEM_CHARS)
+}
+
+fn sanitize_skill_manifest_when_to_use(value: &str) -> Option<String> {
+    sanitize_skill_manifest_text(value, MAX_SKILL_MANIFEST_WHEN_TO_USE_CHARS)
 }
 
 fn sanitize_skill_manifest_text(value: &str, max_chars: usize) -> Option<String> {
@@ -3681,7 +3836,8 @@ mod tests {
         ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus, ScanMode, ScanProgress,
         SelectedRoot, ADVANCED_FULL_DISK_PROFILE_ID, ADVANCED_FULL_DISK_SOURCE_KIND,
         CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID, INTELLIGENT_DISCOVERY_PROFILE_ID,
-        MAX_SKILL_MANIFEST_DESCRIPTION_CHARS, MAX_SKILL_MANIFEST_METADATA_BYTES,
+        MAX_SKILL_MANIFEST_ARRAY_ITEMS, MAX_SKILL_MANIFEST_DESCRIPTION_CHARS,
+        MAX_SKILL_MANIFEST_ITEM_CHARS, MAX_SKILL_MANIFEST_METADATA_BYTES,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -3987,6 +4143,64 @@ mod tests {
     }
 
     #[test]
+    fn skill_manifest_metadata_extracts_safe_structured_frontmatter_fields() {
+        let metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Better Writer\ndescription: Writes concise product summaries.\naliases:\n  - writer\n  - copy-helper\ntags: [writing, product-copy, review]\ncapabilities:\n  - drafting\n  - editing\nwhenToUse: When product copy needs to be concise and safe.\n---\n\nPrivate body text is not retained.",
+        )
+        .expect("safe structured frontmatter metadata should parse");
+
+        assert_eq!(metadata.name.as_deref(), Some("Better Writer"));
+        assert_eq!(
+            metadata.aliases,
+            vec!["writer".to_string(), "copy-helper".to_string()]
+        );
+        assert_eq!(
+            metadata.tags,
+            vec![
+                "writing".to_string(),
+                "product-copy".to_string(),
+                "review".to_string()
+            ]
+        );
+        assert_eq!(
+            metadata.capabilities,
+            vec!["drafting".to_string(), "editing".to_string()]
+        );
+        assert_eq!(
+            metadata.when_to_use.as_deref(),
+            Some("When product copy needs to be concise and safe.")
+        );
+    }
+
+    #[test]
+    fn skill_manifest_metadata_limits_structured_items_and_discards_unsafe_values() {
+        let safe_tags = (0..24)
+            .map(|index| format!("tag-{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let long_alias = "a".repeat(MAX_SKILL_MANIFEST_ITEM_CHARS + 40);
+        let metadata = parse_bounded_skill_manifest_metadata(&format!(
+            "---\nname: Safe Structured Skill\naliases: [{long_alias}, token=super-secret-token, safe-alias]\ntags: [{safe_tags}]\ncapabilities:\n  - safe-review\n  - npm install secret-tool\n  - https://user:password@example.com/?token=super-secret-token\nwhenToUse:\n  - Use when review needs a concise local skill.\n  - stderr: token=super-secret-token\n---\n",
+        ))
+        .expect("safe structured values should survive unsafe siblings");
+
+        assert_eq!(metadata.name.as_deref(), Some("Safe Structured Skill"));
+        assert!(metadata.aliases.iter().any(|alias| alias == "safe-alias"));
+        assert!(metadata.aliases.iter().all(|alias| {
+            !alias.contains("super-secret-token")
+                && alias.chars().count() <= MAX_SKILL_MANIFEST_ITEM_CHARS + 3
+        }));
+        assert_eq!(metadata.tags.len(), MAX_SKILL_MANIFEST_ARRAY_ITEMS);
+        assert_eq!(metadata.tags.first().map(String::as_str), Some("tag-0"));
+        assert_eq!(metadata.tags.last().map(String::as_str), Some("tag-19"));
+        assert_eq!(metadata.capabilities, vec!["safe-review".to_string()]);
+        assert_eq!(
+            metadata.when_to_use.as_deref(),
+            Some("Use when review needs a concise local skill.")
+        );
+    }
+
+    #[test]
     fn skill_manifest_metadata_uses_heading_and_bounded_first_paragraph() {
         let metadata = parse_bounded_skill_manifest_metadata(
             "# Heading Writer\n\nWrites safe first-paragraph summaries for local skills.\n\nPrivate follow-up body is not retained.",
@@ -4034,6 +4248,21 @@ mod tests {
         .expect("safe name should survive secret-bearing URL description");
         assert_eq!(url_metadata.name.as_deref(), Some("Safe Name"));
         assert!(url_metadata.description.is_none());
+    }
+
+    #[test]
+    fn skill_manifest_metadata_preserves_safe_fields_when_structured_field_is_unsafe() {
+        let metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Safe Partial Skill\ndescription: Safe description.\naliases:\n  - safe-partial\n  - -----BEGIN PRIVATE KEY-----\ntags: [safe-tag, stdout: token=super-secret-token]\ncapabilities: [safe-capability]\nwhenToUse: TOKEN=super-secret-token\n---\n",
+        )
+        .expect("safe scalar fields should survive unsafe structured values");
+
+        assert_eq!(metadata.name.as_deref(), Some("Safe Partial Skill"));
+        assert_eq!(metadata.description.as_deref(), Some("Safe description."));
+        assert_eq!(metadata.aliases, vec!["safe-partial".to_string()]);
+        assert_eq!(metadata.tags, vec!["safe-tag".to_string()]);
+        assert_eq!(metadata.capabilities, vec!["safe-capability".to_string()]);
+        assert!(metadata.when_to_use.is_none());
     }
 
     #[test]
@@ -4140,7 +4369,7 @@ mod tests {
         fs::create_dir_all(root.join("docs")).expect("docs fixture directory should be created");
         fs::write(
             root.join("skills/better/SKILL.md"),
-            "---\nname: Better Skill\ndescription: Safe skill metadata.\n---\nBody text not stored.",
+            "---\nname: Better Skill\ndescription: Safe skill metadata.\naliases: [better]\ntags: [safe-tag]\ncapabilities: [safe-capability]\nwhenToUse: Use when a better local skill is needed.\n---\nBody text not stored.",
         )
         .expect("skill manifest should be written");
         fs::write(
@@ -4180,11 +4409,23 @@ mod tests {
                 .and_then(|metadata| metadata.description.as_deref()),
             Some("Safe skill metadata.")
         );
+        assert_eq!(
+            skill
+                .skill_manifest_metadata
+                .as_ref()
+                .map(|metadata| metadata.aliases.as_slice()),
+            Some(&["better".to_string()][..])
+        );
         assert!(result.resources.iter().all(|resource| resource
             .skill_manifest_metadata
             .as_ref()
             .and_then(|metadata| metadata.name.as_deref())
             != Some("Private Doc")));
+        assert!(result.resources.iter().all(|resource| resource
+            .skill_manifest_metadata
+            .as_ref()
+            .map_or(true, |metadata| metadata.aliases
+                != vec!["Private Doc".to_string()])));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -4197,7 +4438,7 @@ mod tests {
             .expect("skill fixture directory should be created");
         fs::write(
             root.join("skills/writer/SKILL.md"),
-            "---\nname: Better Writer\ndescription: Writes concise product summaries.\n---\nPrivate body text is not retained.",
+            "---\nname: Better Writer\ndescription: Writes concise product summaries.\naliases: [writer, copy-helper]\ntags: [writing, product-copy]\ncapabilities: [drafting, editing]\nwhenToUse: Use when product copy needs a concise local skill.\n---\nPrivate body text is not retained.",
         )
         .expect("skill manifest should be written");
 
@@ -4248,12 +4489,33 @@ mod tests {
             skill_item.short_purpose,
             "Writes concise product summaries."
         );
+        assert_eq!(
+            skill_item.aliases,
+            vec!["writer".to_string(), "copy-helper".to_string()]
+        );
+        assert_eq!(
+            skill_item.tags,
+            vec!["writing".to_string(), "product-copy".to_string()]
+        );
+        assert_eq!(
+            skill_item.capabilities,
+            vec!["drafting".to_string(), "editing".to_string()]
+        );
         let detail = resource_store::get_skill_detail_for_path(&db_path, &skill_item.id)
             .expect("skill detail should load");
         assert_eq!(detail.what_it_does, "Writes concise product summaries.");
+        assert_eq!(
+            detail.when_to_use.as_deref(),
+            Some("Use when product copy needs a concise local skill.")
+        );
+        assert_eq!(
+            detail.item.aliases,
+            vec!["writer".to_string(), "copy-helper".to_string()]
+        );
         let stored_text = resource_store::debug_all_text_values_for_path(&db_path)
             .expect("debug text should load");
         assert!(!stored_text.contains("Private body text"));
+        assert!(!stored_text.contains("super-secret-token"));
 
         cleanup_resource_store(db_path);
         let _ = fs::remove_dir_all(root);

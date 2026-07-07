@@ -42,6 +42,9 @@ export interface SkillListItem {
   sourceLabel: string;
   sourceKindLabel: string;
   availableInTools: string[];
+  aliases: string[];
+  tags: string[];
+  capabilities: string[];
   usageText: string | null;
   attentionReasons: SkillAttentionReason[];
   primaryPathHint: string;
@@ -109,6 +112,9 @@ export interface SkillDetailViewModel {
   originalName: string;
   whatItDoes: string;
   whenToUse: string;
+  aliasesText: string | null;
+  tagsText: string | null;
+  capabilitiesText: string | null;
   availableInToolsText: string;
   howToUse: string;
   sourceText: string;
@@ -185,6 +191,9 @@ export function buildSkillDetailViewModel(input: SkillDetailViewInput): SkillDet
     originalName: item?.originalName?.trim() || title,
     whatItDoes: input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || "暂时无法判断它能做什么。请在高级信息里查看来源。",
     whenToUse: input.detail?.whenToUse?.trim() || (mode === "loading" ? "正在读取适用场景。" : "暂时无法判断适合什么时候用。请在高级信息里查看来源。"),
+    aliasesText: formatSkillMetadataList(item?.aliases),
+    tagsText: formatSkillMetadataList(item?.tags),
+    capabilitiesText: formatSkillMetadataList(item?.capabilities),
     availableInToolsText: formatSkillTools(availableInTools),
     howToUse: usageText?.trim() || fallbackSkillUsageText,
     sourceText: item?.sourceLabel?.trim() || "来源不明",
@@ -269,6 +278,9 @@ export function mapSkillListItemToResource(item: SkillListItem): AiosResource {
       sourceLabel: item.sourceLabel,
       sourceKindLabel: item.sourceKindLabel,
       availableInTools: item.availableInTools,
+      aliases: item.aliases,
+      tags: item.tags,
+      capabilities: item.capabilities,
       usageText,
       attentionReasons: item.attentionReasons,
       sourceCount: item.sourceCount
@@ -298,6 +310,9 @@ function skillItemSearchText(item: SkillListItem): string {
     item.sourceLabel,
     item.sourceKindLabel,
     ...item.availableInTools,
+    ...item.aliases,
+    ...item.tags,
+    ...item.capabilities,
     item.usageText ?? fallbackSkillUsageText,
     ...item.attentionReasons.flatMap((reason) => [reason.code, reason.label, reason.detail]),
     item.primaryPathHint
@@ -309,6 +324,11 @@ function skillItemSearchText(item: SkillListItem): string {
 function formatSkillTools(tools: readonly string[]): string {
   const visible = tools.filter((tool) => tool && tool !== "Unknown");
   return visible.length > 0 ? visible.join("、") : "暂时无法判断";
+}
+
+function formatSkillMetadataList(values: readonly string[] | null | undefined): string | null {
+  const visible = (values ?? []).map((value) => value.trim()).filter(Boolean);
+  return visible.length > 0 ? visible.join("、") : null;
 }
 
 function dedupeSkillAttentionReasons(reasons: readonly SkillAttentionReason[]): SkillAttentionReason[] {
