@@ -8,14 +8,13 @@ import { markAiosPerf } from "../../lib/perf";
 import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type SkillCapabilityCategoryKey } from "../../lib/skillCapabilityClassifier";
 import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import { buildSkillIdentityRows, filterSkillIdentityRows, type SkillIdentityRow } from "../../lib/skillIdentityModel";
-import { fallbackSkillUsageText, filterSkillLibraryItems, mapSkillListItemToResource, skillItemNeedsAttention, type SkillListItem, type SkillStatus } from "../../lib/skillLibrary";
+import { fallbackSkillUsageText, filterSkillLibraryItems, mapSkillListItemToResource, skillStatusFilterOptions, type SkillListItem, type SkillStatus, type SkillStatusFilter } from "../../lib/skillLibrary";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
 import { AiosAccordionPanel, AiosModuleFrame, AiosSectionRail, AiosSegmentedSwitcher } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 
-type SkillQualityFilterMode = "all" | "needs-work";
 type SkillLibraryTab = "groups" | "all";
 
 interface SkillGroup {
@@ -33,10 +32,14 @@ interface ProductSkillGroup {
 }
 
 const ROW_HEIGHT = 108;
+const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "needsAttention", label: "需补全" }
+];
 
 export const SkillsModule = memo(function SkillsModule({ displayById, query, resources, selectedId, skillCapabilityById, skillLibrary, onClearSelection, onSelect }: AiosModuleProps) {
   const [libraryTab, setLibraryTab] = useState<SkillLibraryTab>("groups");
-  const [qualityFilterMode, setQualityFilterMode] = useState<SkillQualityFilterMode>("all");
+  const [statusFilterMode, setStatusFilterMode] = useState<SkillStatusFilter>("all");
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
@@ -60,14 +63,15 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       new Map(
         groups.map((group) => [
           group.key,
-          filterSkillIdentityRows(group.rows, query, { displayById, capabilitySearchTextById }).filter((row) => shouldIncludeQualityRow(row, qualityFilterMode, enrichmentByRowId))
+          filterSkillIdentityRows(group.rows, query, { displayById, capabilitySearchTextById }).filter((row) => shouldIncludeQualityRow(row, statusFilterMode, enrichmentByRowId))
         ])
       ),
-    [capabilitySearchTextById, displayById, enrichmentByRowId, groups, qualityFilterMode, query]
+    [capabilitySearchTextById, displayById, enrichmentByRowId, groups, statusFilterMode, query]
   );
   const defaultGroupKey = groups[0]?.key ?? null;
   const queryActive = normalizedQuery.length > 0;
-  const firstMatchingGroupKey = queryActive ? groups.find((group) => (filteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null : null;
+  const fallbackStatusFilterActive = statusFilterMode !== "all";
+  const firstMatchingGroupKey = queryActive || fallbackStatusFilterActive ? groups.find((group) => (filteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null : null;
   const activeKey = getValidGroupKey(groups, activeGroupKey) ?? firstMatchingGroupKey ?? defaultGroupKey;
   const renderedKey = getValidGroupKey(groups, renderedGroupKey) ?? activeKey;
   const renderedGroup = groups.find((group) => group.key === renderedKey) ?? groups[0] ?? null;
@@ -98,13 +102,14 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       new Map(
         productGroups.map((group) => [
           group.key,
-          filterSkillLibraryItems(group.rows, query).filter((row) => (qualityFilterMode === "all" ? true : skillItemNeedsAttention(row)))
+          filterSkillLibraryItems(group.rows, query, statusFilterMode)
         ])
       ),
-    [productGroups, qualityFilterMode, query]
+    [productGroups, statusFilterMode, query]
   );
   const productDefaultGroupKey = productGroups[0]?.key ?? null;
-  const productFirstMatchingGroupKey = queryActive ? productGroups.find((group) => (productFilteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null : null;
+  const productStatusFilterActive = statusFilterMode !== "all";
+  const productFirstMatchingGroupKey = queryActive || productStatusFilterActive ? productGroups.find((group) => (productFilteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null : null;
   const productActiveKey = getValidGroupKey(productGroups, activeGroupKey) ?? productFirstMatchingGroupKey ?? productDefaultGroupKey;
   const productRenderedKey = getValidGroupKey(productGroups, renderedGroupKey) ?? productActiveKey;
   const productRenderedGroup = productGroups.find((group) => group.key === productRenderedKey) ?? productGroups[0] ?? null;
@@ -157,17 +162,17 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
   );
 
   const handleQualityFilterChange = useCallback(
-    (_event: MouseEvent<HTMLElement>, nextMode: SkillQualityFilterMode | null) => {
-      if (!nextMode || nextMode === qualityFilterMode) return;
+    (_event: MouseEvent<HTMLElement>, nextMode: SkillStatusFilter | null) => {
+      if (!nextMode || nextMode === statusFilterMode) return;
       markAiosPerf("skills-quality-filter-request", { mode: nextMode });
-      setQualityFilterMode(nextMode);
+      setStatusFilterMode(nextMode);
       setActiveGroupKey(null);
       onClearSelection();
       startGroupTransition(() => {
         setRenderedGroupKey(null);
       });
     },
-    [onClearSelection, qualityFilterMode, startGroupTransition]
+    [onClearSelection, statusFilterMode, startGroupTransition]
   );
 
   const handleGroupChange = useCallback(
@@ -192,12 +197,12 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       group: effectiveRenderedKey ?? "empty",
       mode: effectiveMode,
       sourceView: useProductLibrary ? "skill-library-product" : "merged",
-      qualityFilter: qualityFilterMode,
+      statusFilter: statusFilterMode,
       visible: effectiveVisibleRowsCount,
       total: useProductLibrary ? skillLibrary.items.length : skillRows.length,
       query: normalizedQuery ? "filtered" : "empty"
     });
-  }, [effectiveMode, effectiveRenderedKey, effectiveVisibleRowsCount, normalizedQuery, qualityFilterMode, skillLibrary.items.length, skillRows.length, useProductLibrary]);
+  }, [effectiveMode, effectiveRenderedKey, effectiveVisibleRowsCount, normalizedQuery, statusFilterMode, skillLibrary.items.length, skillRows.length, useProductLibrary]);
 
   useEffect(() => {
     if (!normalizedQuery) return;
@@ -262,6 +267,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
   );
   const effectiveLibraryTabOptions = useProductLibrary ? productLibraryTabOptions : libraryTabOptions;
   const effectiveCategoryRailOptions = useProductLibrary ? productCategoryRailOptions : categoryRailOptions;
+  const effectiveStatusFilterOptions = useProductLibrary ? skillStatusFilterOptions : fallbackSkillStatusFilterOptions;
   const effectiveActiveKey = useProductLibrary ? productActiveKey : activeKey;
   const effectiveActiveGroup = useProductLibrary ? productActiveGroup : activeGroup;
   const effectiveGroupsLength = useProductLibrary ? productGroups.length : groups.length;
@@ -275,7 +281,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       summary={zhCN.moduleSummaries.skills}
       count={effectiveTotalRowsCount}
       ariaLabel={moduleAriaLabel("skills")}
-      motionKey={`skills:${effectiveMode}:${libraryTab}:${qualityFilterMode}:${effectiveRenderedKey ?? "none"}:${effectiveVisibleRowsCount}:${normalizedQuery ? "query" : "all"}`}
+      motionKey={`skills:${effectiveMode}:${libraryTab}:${statusFilterMode}:${effectiveRenderedKey ?? "none"}:${effectiveVisibleRowsCount}:${normalizedQuery ? "query" : "all"}`}
     >
       <Box className="skill-library-toolbar" data-aios-layout-fixed>
         <Box className="skill-filter-row">
@@ -285,11 +291,14 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
             className="skill-filter-toggle"
             exclusive
             size="small"
-            value={qualityFilterMode}
+            value={statusFilterMode}
             onChange={handleQualityFilterChange}
           >
-            <ToggleButton value="all">全部</ToggleButton>
-            <ToggleButton value="needs-work">{useProductLibrary ? "需处理" : "需补全"}</ToggleButton>
+            {effectiveStatusFilterOptions.map((option) => (
+              <ToggleButton key={option.value} value={option.value}>
+                {option.label}
+              </ToggleButton>
+            ))}
           </ToggleButtonGroup>
         </Box>
         <Box className="skill-filter-search-state">
@@ -425,7 +434,7 @@ function getValidGroupKey(groups: Array<{ key: string }>, key: string | null): s
   return key && groups.some((group) => group.key === key) ? key : null;
 }
 
-function shouldIncludeQualityRow(row: SkillIdentityRow, mode: SkillQualityFilterMode, enrichmentByRowId: ReadonlyMap<string, { qualityLevel: string }>): boolean {
+function shouldIncludeQualityRow(row: SkillIdentityRow, mode: SkillStatusFilter, enrichmentByRowId: ReadonlyMap<string, { qualityLevel: string }>): boolean {
   if (mode === "all") return true;
   return enrichmentByRowId.get(row.id)?.qualityLevel !== "complete";
 }

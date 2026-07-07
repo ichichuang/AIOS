@@ -11,9 +11,11 @@ import {
   listSkillLibraryItems,
   mapSkillListItemToResource,
   sanitizeSkillDetailLoadError,
+  skillStatusFilterOptions,
   type SkillDetail,
   type SkillLibrarySummary,
-  type SkillListItem
+  type SkillListItem,
+  type SkillStatusFilter
 } from "./skillLibrary";
 import { fallbackResourceCorpusSummary } from "./resourceCorpus";
 
@@ -227,6 +229,75 @@ const searchableItems: SkillListItem[] = [
   sourceUnknownItem,
   {
     ...item,
+    id: "skill:needs-review",
+    displayName: "needs-review",
+    originalName: "needs-review",
+    shortPurpose: "需要用户查看来源。",
+    status: "needsAttention",
+    sourceLabel: "手动添加",
+    sourceKindLabel: "手动添加",
+    aliases: ["review-helper"],
+    tags: ["review"],
+    capabilities: ["检查"],
+    attentionReasons: [
+      {
+        code: "manual-review",
+        label: "需要处理",
+        detail: "这个技能需要人工确认来源。",
+        severity: "medium"
+      }
+    ],
+    primaryPathHint: "~/manual/needs-review/SKILL.md",
+    sourceCount: 1
+  },
+  {
+    ...item,
+    id: "skill:broken",
+    displayName: "broken",
+    originalName: "broken",
+    shortPurpose: "来源缺少说明文件。",
+    status: "broken",
+    sourceLabel: "项目来源",
+    sourceKindLabel: "项目来源",
+    aliases: ["repair-helper"],
+    tags: ["broken"],
+    capabilities: ["修复线索"],
+    attentionReasons: [
+      {
+        code: "missing-manifest",
+        label: "已损坏",
+        detail: "找不到技能说明文件。",
+        severity: "high"
+      }
+    ],
+    primaryPathHint: "~/workspace/broken/SKILL.md",
+    sourceCount: 1
+  },
+  {
+    ...item,
+    id: "skill:unchecked",
+    displayName: "unchecked",
+    originalName: "unchecked",
+    shortPurpose: "来源还没有完成查找。",
+    status: "unchecked",
+    sourceLabel: "全局来源",
+    sourceKindLabel: "全局来源",
+    aliases: ["pending-helper"],
+    tags: ["pending"],
+    capabilities: ["待检查"],
+    attentionReasons: [
+      {
+        code: "unchecked-source",
+        label: "未检查",
+        detail: "最近记录尚未完成。",
+        severity: "medium"
+      }
+    ],
+    primaryPathHint: "~/global/unchecked/SKILL.md",
+    sourceCount: 1
+  },
+  {
+    ...item,
     id: "skill:project-helper",
     displayName: "project-helper",
     originalName: "project-helper",
@@ -244,14 +315,54 @@ const searchableItems: SkillListItem[] = [
     sourceCount: 1
   }
 ];
+assert.deepEqual(
+  skillStatusFilterOptions.map((option) => option.label),
+  ["全部", "可用", "需要处理", "重复", "已损坏", "来源不明", "未检查"]
+);
 const filteredBySource = filterSkillLibraryItems(searchableItems, "来源不明");
 assert.deepEqual(filteredBySource.map((row) => row.id), ["skill:mystery"]);
 const filteredByAlias = filterSkillLibraryItems(searchableItems, "copy-helper");
 assert.deepEqual(filteredByAlias.map((row) => row.id), ["skill:writer"]);
 const filteredByCapability = filterSkillLibraryItems(searchableItems, "drafting");
 assert.deepEqual(filteredByCapability.map((row) => row.id), ["skill:writer"]);
+const statusFilterExpectations: Array<[SkillStatusFilter, string[]]> = [
+  ["all", ["skill:writer", "skill:mystery", "skill:needs-review", "skill:broken", "skill:unchecked", "skill:project-helper"]],
+  ["available", ["skill:project-helper"]],
+  ["needsAttention", ["skill:writer", "skill:mystery", "skill:needs-review", "skill:broken", "skill:unchecked"]],
+  ["duplicate", ["skill:writer"]],
+  ["broken", ["skill:broken"]],
+  ["sourceUnknown", ["skill:mystery"]],
+  ["unchecked", ["skill:unchecked"]]
+];
+for (const [filter, expectedIds] of statusFilterExpectations) {
+  assert.deepEqual(
+    filterSkillLibraryItems(searchableItems, "", filter).map((row) => row.id),
+    expectedIds,
+    `${filter} status filter should match product status semantics`
+  );
+}
+assert.deepEqual(
+  filterSkillLibraryItems(searchableItems, "copy-helper", "duplicate").map((row) => row.id),
+  ["skill:writer"],
+  "search and duplicate status filtering must compose"
+);
+assert.deepEqual(
+  filterSkillLibraryItems(searchableItems, "copy-helper", "available").map((row) => row.id),
+  [],
+  "query matches must still respect the selected status filter"
+);
+assert.deepEqual(
+  filterSkillLibraryItems(searchableItems, "mystery", "needsAttention").map((row) => row.id),
+  ["skill:mystery"],
+  "needsAttention includes sourceUnknown/broken/duplicate/unchecked semantics but still composes with query"
+);
+const productCountsBeforeFiltering = { ...productSummary.counts };
+const visibleNeedsAttentionRows = filterSkillLibraryItems(searchableItems, "", "needsAttention");
 assert.equal(productSummary.counts.dedupedSkillCount, 4, "product totals remain separate from search result length");
 assert.equal(filteredBySource.length, 1);
+assert.equal(visibleNeedsAttentionRows.length, 5);
+assert.deepEqual(productSummary.counts, productCountsBeforeFiltering, "status filtering must not mutate authoritative product totals");
+assert.equal(fallbackHomeStats.skillCount, 2, "non-Tauri fallback still uses view counts rather than product status filters");
 
 const ordinarySurfaceText = [
   readFrontendFile("components/modules/DashboardModule.tsx"),

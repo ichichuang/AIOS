@@ -5,6 +5,7 @@ import type { ResourceCorpusSummary } from "./resourceCorpus";
 import type { AiosResource, ResourceStatus, RiskLevel, ToolType, UsagePrompt } from "../types/inventory";
 
 export type SkillStatus = "available" | "needsAttention" | "duplicate" | "broken" | "sourceUnknown" | "unchecked";
+export type SkillStatusFilter = "all" | SkillStatus;
 
 export interface SkillLibraryCounts {
   totalSkillCandidates: number;
@@ -144,6 +145,16 @@ export interface HomeSkillLibraryStats {
 }
 
 export const fallbackSkillUsageText = "暂时无法判断使用方法。请在高级信息里查看来源。";
+
+export const skillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "available", label: "可用" },
+  { value: "needsAttention", label: "需要处理" },
+  { value: "duplicate", label: "重复" },
+  { value: "broken", label: "已损坏" },
+  { value: "sourceUnknown", label: "来源不明" },
+  { value: "unchecked", label: "未检查" }
+];
 
 export async function getSkillLibrarySummary(): Promise<SkillLibrarySummary | null> {
   if (!isTauriRuntimeAvailable()) return null;
@@ -289,14 +300,19 @@ export function mapSkillListItemToResource(item: SkillListItem): AiosResource {
   };
 }
 
-export function filterSkillLibraryItems(items: readonly SkillListItem[], query: string): SkillListItem[] {
+export function filterSkillLibraryItems(items: readonly SkillListItem[], query: string, statusFilter: SkillStatusFilter = "all"): SkillListItem[] {
   const normalized = query.trim().toLowerCase();
-  if (!normalized) return [...items];
-  return items.filter((item) => skillItemSearchText(item).includes(normalized));
+  return items.filter((item) => skillItemMatchesStatusFilter(item, statusFilter) && (!normalized || skillItemSearchText(item).includes(normalized)));
 }
 
 export function skillItemNeedsAttention(item: SkillListItem): boolean {
   return item.status !== "available";
+}
+
+function skillItemMatchesStatusFilter(item: SkillListItem, statusFilter: SkillStatusFilter): boolean {
+  if (statusFilter === "all") return true;
+  if (statusFilter === "needsAttention") return skillItemNeedsAttention(item);
+  return item.status === statusFilter;
 }
 
 function skillItemSearchText(item: SkillListItem): string {
