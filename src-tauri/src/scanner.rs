@@ -6,6 +6,7 @@ use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -26,6 +27,9 @@ const ADVANCED_FULL_DISK_SOURCE_KIND: &str = "advanced-full-disk";
 const MAX_DEPTH: usize = 6;
 const MAX_ENTRIES: usize = 2_000;
 const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_SKILL_MANIFEST_METADATA_BYTES: usize = 64 * 1024;
+const MAX_SKILL_MANIFEST_NAME_CHARS: usize = 96;
+const MAX_SKILL_MANIFEST_DESCRIPTION_CHARS: usize = 320;
 const MAX_RETAINED_SCAN_JOBS: usize = 8;
 const SCAN_JOB_PROGRESS_EVENT: &str = "aios://scan-job-progress";
 const REDACTED_SEGMENT: &str = "[sensitive]";
@@ -351,6 +355,14 @@ pub struct ScanResource {
     boundary_labels: Vec<&'static str>,
     classification_reason: &'static str,
     sensitive: bool,
+    #[serde(skip_serializing)]
+    skill_manifest_metadata: Option<SkillManifestMetadata>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SkillManifestMetadata {
+    name: Option<String>,
+    description: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1817,10 +1829,18 @@ fn scan_source_input(
 }
 
 fn persist_resource_input(resource: &ScanResource) -> PersistScanResourceInput {
+    let manifest_metadata = resource.skill_manifest_metadata.as_ref();
+    let name = manifest_metadata
+        .and_then(|metadata| metadata.name.clone())
+        .unwrap_or_else(|| display_name_for_relative_resource(&resource.relative_path));
+    let description = manifest_metadata
+        .and_then(|metadata| metadata.description.clone())
+        .unwrap_or_else(|| resource.classification_reason.to_string());
+
     PersistScanResourceInput {
-        name: display_name_for_relative_resource(&resource.relative_path),
+        name,
         resource_kind: resource.resource_kind.to_string(),
-        description: resource.classification_reason.to_string(),
+        description,
         primary_type: resource.entry_type.to_string(),
         risk_level: risk_level_for_scan_resource(resource).to_string(),
         boundary_labels: resource
@@ -2507,8 +2527,15 @@ fn scan_validated_root_with_progress(
         }
 
         let (resource_kind, classification_reason) = classify_resource(relative);
+        let skill_manifest_metadata =
+            if metadata.is_file() && resource_kind == "skill" && is_skill_manifest_path(relative) {
+                read_bounded_skill_manifest_metadata(path)
+            } else {
+                None
+            };
         let redacted_relative = redact_relative_path(relative);
         let sensitive = path_has_sensitive_segment(relative);
+        let skill_manifest_metadata_read = skill_manifest_metadata.is_some();
 
         resources.push(ScanResource {
             id: format!("custom-scan:{resource_kind}:{redacted_relative}"),
@@ -2519,9 +2546,14 @@ fn scan_validated_root_with_progress(
             modified_at_ms: modified_at_ms(&metadata),
             resource_kind,
             risk_labels: risk_labels_for(resource_kind, sensitive),
-            boundary_labels: boundary_labels_for(resource_kind, sensitive),
+            boundary_labels: boundary_labels_for(
+                resource_kind,
+                sensitive,
+                skill_manifest_metadata_read,
+            ),
             classification_reason,
             sensitive,
+            skill_manifest_metadata,
         });
 
         if let Some(handle) = progress_handle.as_deref_mut() {
@@ -2969,6 +3001,331 @@ fn classify_resource(path: &Path) -> (&'static str, &'static str) {
     )
 }
 
+fn is_skill_manifest_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|file_name| file_name.eq_ignore_ascii_case("SKILL.md"))
+}
+
+fn read_bounded_skill_manifest_metadata(path: &Path) -> Option<SkillManifestMetadata> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return None;
+    }
+
+    let file = fs::File::open(path).ok()?;
+    let mut buffer = Vec::with_capacity(MAX_SKILL_MANIFEST_METADATA_BYTES);
+    file.take(MAX_SKILL_MANIFEST_METADATA_BYTES as u64)
+        .read_to_end(&mut buffer)
+        .ok()?;
+    let text = String::from_utf8_lossy(&buffer);
+    parse_bounded_skill_manifest_metadata(&text)
+}
+
+fn parse_bounded_skill_manifest_metadata(text: &str) -> Option<SkillManifestMetadata> {
+    let frontmatter = extract_skill_frontmatter(text);
+    let frontmatter_values = frontmatter
+        .as_ref()
+        .map(parse_skill_frontmatter_values)
+        .unwrap_or_default();
+    let heading = first_markdown_heading(text);
+    let paragraph_start_line = heading
+        .as_ref()
+        .map(|heading| heading.next_line_index)
+        .unwrap_or_else(|| {
+            frontmatter
+                .as_ref()
+                .map(|frontmatter| frontmatter.next_line_index)
+                .unwrap_or(0)
+        });
+
+    let name = frontmatter_values
+        .name
+        .or_else(|| heading.and_then(|heading| sanitize_skill_manifest_name(&heading.value)));
+    let description = frontmatter_values.description.or_else(|| {
+        if frontmatter.is_none() {
+            first_safe_markdown_paragraph(text, paragraph_start_line)
+        } else {
+            None
+        }
+    });
+
+    if name.is_none() && description.is_none() {
+        None
+    } else {
+        Some(SkillManifestMetadata { name, description })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ExtractedFrontmatter {
+    text: String,
+    next_line_index: usize,
+}
+
+#[derive(Clone, Debug)]
+struct MarkdownHeading {
+    value: String,
+    next_line_index: usize,
+}
+
+#[derive(Default)]
+struct ParsedSkillFrontmatterValues {
+    name: Option<String>,
+    description: Option<String>,
+}
+
+fn extract_skill_frontmatter(text: &str) -> Option<ExtractedFrontmatter> {
+    let lines = text.lines().collect::<Vec<_>>();
+    if lines.first().map(|line| line.trim()) != Some("---") {
+        return None;
+    }
+
+    for (index, line) in lines.iter().enumerate().skip(1) {
+        if line.trim() == "---" {
+            return Some(ExtractedFrontmatter {
+                text: lines[1..index].join("\n"),
+                next_line_index: index + 1,
+            });
+        }
+    }
+
+    None
+}
+
+fn parse_skill_frontmatter_values(
+    frontmatter: &ExtractedFrontmatter,
+) -> ParsedSkillFrontmatterValues {
+    let mut values = ParsedSkillFrontmatterValues::default();
+
+    for line in frontmatter.text.lines() {
+        let Some((raw_key, raw_value)) = line.split_once(':') else {
+            continue;
+        };
+        let key = raw_key.trim();
+        let value = raw_value.trim();
+        if value.is_empty() || value == "|" || value == ">" {
+            continue;
+        }
+
+        match key {
+            "name" => {
+                if values.name.is_none() {
+                    values.name = sanitize_skill_manifest_name(value);
+                }
+            }
+            "description" => {
+                if values.description.is_none() {
+                    values.description = sanitize_skill_manifest_description(value);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    values
+}
+
+fn first_markdown_heading(text: &str) -> Option<MarkdownHeading> {
+    let mut in_code_block = false;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+        if in_code_block {
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix("# ") {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(MarkdownHeading {
+                    value: value.to_string(),
+                    next_line_index: index + 1,
+                });
+            }
+        }
+    }
+    None
+}
+
+fn first_safe_markdown_paragraph(text: &str, start_line_index: usize) -> Option<String> {
+    let mut paragraph = Vec::new();
+    let mut in_code_block = false;
+
+    for line in text.lines().skip(start_line_index) {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            if !paragraph.is_empty() {
+                break;
+            }
+            in_code_block = !in_code_block;
+            continue;
+        }
+        if in_code_block {
+            continue;
+        }
+        if trimmed.is_empty() {
+            if paragraph.is_empty() {
+                continue;
+            }
+            break;
+        }
+        if trimmed == "---" {
+            continue;
+        }
+        if trimmed.starts_with('#')
+            || trimmed.starts_with('>')
+            || trimmed.starts_with("- ")
+            || trimmed.starts_with("* ")
+            || trimmed.starts_with("+ ")
+        {
+            if paragraph.is_empty() {
+                continue;
+            }
+            break;
+        }
+
+        paragraph.push(trimmed);
+    }
+
+    if paragraph.is_empty() {
+        None
+    } else {
+        sanitize_skill_manifest_description(&paragraph.join(" "))
+    }
+}
+
+fn sanitize_skill_manifest_name(value: &str) -> Option<String> {
+    sanitize_skill_manifest_text(value, MAX_SKILL_MANIFEST_NAME_CHARS)
+}
+
+fn sanitize_skill_manifest_description(value: &str) -> Option<String> {
+    sanitize_skill_manifest_text(value, MAX_SKILL_MANIFEST_DESCRIPTION_CHARS)
+}
+
+fn sanitize_skill_manifest_text(value: &str, max_chars: usize) -> Option<String> {
+    let normalized = collapse_skill_manifest_whitespace(strip_skill_manifest_quotes(value));
+    if normalized.is_empty() || contains_unsafe_skill_manifest_text(&normalized) {
+        return None;
+    }
+
+    Some(truncate_skill_manifest_text(&normalized, max_chars))
+}
+
+fn strip_skill_manifest_quotes(value: &str) -> &str {
+    value
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\''))
+}
+
+fn collapse_skill_manifest_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn truncate_skill_manifest_text(value: &str, max_chars: usize) -> String {
+    let mut output = value.chars().take(max_chars).collect::<String>();
+    if value.chars().count() > max_chars {
+        output.push_str("...");
+    }
+    output
+}
+
+fn contains_unsafe_skill_manifest_text(value: &str) -> bool {
+    contains_secret_like_manifest_text(value)
+        || contains_code_or_command_manifest_text(value)
+        || contains_log_like_manifest_text(value)
+        || contains_env_assignment_manifest_text(value)
+}
+
+fn contains_secret_like_manifest_text(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("-----begin") && lower.contains("private key")
+        || lower.contains("authorization: bearer")
+        || lower.contains("bearer sk-")
+        || lower.contains("sk-") && lower.len() > 24
+        || lower.contains("akia") && lower.len() > 20
+        || secret_assignment_present(&lower)
+        || lower.contains(".env")
+        || lower.contains("super-secret")
+        || url_with_secret_present(&lower)
+}
+
+fn secret_assignment_present(lower: &str) -> bool {
+    [
+        "password",
+        "passwd",
+        "api_key",
+        "apikey",
+        "secret",
+        "token",
+        "credential",
+        "private_key",
+        "auth",
+        "session",
+        "cookie",
+    ]
+    .iter()
+    .any(|key| {
+        lower.contains(&format!("{key}="))
+            || lower.contains(&format!("{key}:"))
+            || lower.contains(&format!("{key} ="))
+            || lower.contains(&format!("{key} :"))
+    })
+}
+
+fn url_with_secret_present(lower: &str) -> bool {
+    (lower.contains("http://") || lower.contains("https://"))
+        && (lower.contains('@')
+            || lower.contains("token=")
+            || lower.contains("api_key=")
+            || lower.contains("apikey=")
+            || lower.contains("secret=")
+            || lower.contains("password="))
+}
+
+fn contains_code_or_command_manifest_text(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("```")
+        || lower.contains("~~~")
+        || lower.contains("rm -rf")
+        || lower.starts_with("$ ")
+        || [
+            "curl ", "sudo ", "npm ", "pnpm ", "yarn ", "cargo ", "python ", "node ", "bash ",
+            "sh ",
+        ]
+        .iter()
+        .any(|command| lower.starts_with(command) || lower.contains(&format!("; {command}")))
+}
+
+fn contains_log_like_manifest_text(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("raw log")
+        || lower.contains("stdout")
+        || lower.contains("stderr")
+        || lower.contains("stack trace")
+        || lower.contains("traceback")
+}
+
+fn contains_env_assignment_manifest_text(value: &str) -> bool {
+    value.split_whitespace().any(|token| {
+        let Some((left, right)) = token.split_once('=') else {
+            return false;
+        };
+        !left.is_empty()
+            && !right.is_empty()
+            && left.len() <= 96
+            && left
+                .chars()
+                .next()
+                .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+            && left.chars().all(|character| {
+                character == '_' || character.is_ascii_uppercase() || character.is_ascii_digit()
+            })
+    })
+}
+
 fn is_broad_or_system_root(path: &Path) -> bool {
     let normalized = normalize_for_policy(path);
     if matches!(normalized.as_str(), "/" | "/users" | "/volumes") {
@@ -3244,8 +3601,15 @@ fn risk_labels_for(resource_kind: &'static str, sensitive: bool) -> Vec<&'static
     labels
 }
 
-fn boundary_labels_for(resource_kind: &'static str, sensitive: bool) -> Vec<&'static str> {
+fn boundary_labels_for(
+    resource_kind: &'static str,
+    sensitive: bool,
+    skill_manifest_metadata_read: bool,
+) -> Vec<&'static str> {
     let mut labels = vec!["read-only", "no-content-read", "no-symlink-follow"];
+    if skill_manifest_metadata_read {
+        labels.push("bounded-skill-manifest-metadata");
+    }
     if sensitive {
         labels.push("redacted");
     }
@@ -3308,14 +3672,16 @@ mod tests {
     use super::{
         build_scan_job_event_payload, classify_resource_kind, current_time_ms,
         discovery_candidate_roots_for_home, excluded_names_for_scan_mode, get_scan_profiles,
-        home_dir, normalize_source_ids, persist_completed_scan_result, recompute_batch_counters,
-        redact_relative_path, resolve_custom_directory_scan_profile, resolve_scan_profile,
-        scan_validated_root, skip_inputs_from_counts, validate_scan_root,
-        validate_scan_root_for_mode, ScanBatchProgress, ScanBatchSnapshot, ScanBatchSourceSnapshot,
-        ScanBatchSourceStatus, ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus,
-        ScanMode, ScanProgress, SelectedRoot, ADVANCED_FULL_DISK_PROFILE_ID,
-        ADVANCED_FULL_DISK_SOURCE_KIND, CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID,
-        INTELLIGENT_DISCOVERY_PROFILE_ID,
+        home_dir, normalize_source_ids, parse_bounded_skill_manifest_metadata,
+        persist_completed_scan_result, persist_resource_input,
+        read_bounded_skill_manifest_metadata, recompute_batch_counters, redact_relative_path,
+        resolve_custom_directory_scan_profile, resolve_scan_profile, scan_validated_root,
+        skip_inputs_from_counts, validate_scan_root, validate_scan_root_for_mode,
+        ScanBatchProgress, ScanBatchSnapshot, ScanBatchSourceSnapshot, ScanBatchSourceStatus,
+        ScanBatchStatus, ScanCancellation, ScanCounts, ScanJobStatus, ScanMode, ScanProgress,
+        SelectedRoot, ADVANCED_FULL_DISK_PROFILE_ID, ADVANCED_FULL_DISK_SOURCE_KIND,
+        CUSTOM_DIRECTORY_SOURCE_KIND, DEFAULT_SCAN_PROFILE_ID, INTELLIGENT_DISCOVERY_PROFILE_ID,
+        MAX_SKILL_MANIFEST_DESCRIPTION_CHARS, MAX_SKILL_MANIFEST_METADATA_BYTES,
     };
     use crate::resource_store;
     use std::collections::HashSet;
@@ -3607,6 +3973,114 @@ mod tests {
     }
 
     #[test]
+    fn skill_manifest_metadata_extracts_safe_frontmatter_name_and_description() {
+        let metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Better Writer\ndescription: Writes concise product summaries.\n---\n\nPrivate body text is not retained.",
+        )
+        .expect("safe frontmatter metadata should parse");
+
+        assert_eq!(metadata.name.as_deref(), Some("Better Writer"));
+        assert_eq!(
+            metadata.description.as_deref(),
+            Some("Writes concise product summaries.")
+        );
+    }
+
+    #[test]
+    fn skill_manifest_metadata_uses_heading_and_bounded_first_paragraph() {
+        let metadata = parse_bounded_skill_manifest_metadata(
+            "# Heading Writer\n\nWrites safe first-paragraph summaries for local skills.\n\nPrivate follow-up body is not retained.",
+        )
+        .expect("safe heading metadata should parse");
+
+        assert_eq!(metadata.name.as_deref(), Some("Heading Writer"));
+        assert_eq!(
+            metadata.description.as_deref(),
+            Some("Writes safe first-paragraph summaries for local skills.")
+        );
+    }
+
+    #[test]
+    fn skill_manifest_metadata_discards_secret_like_code_and_log_values() {
+        let secret_metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: token=super-secret-token\ndescription: api_key=super-secret-token\n---\n",
+        );
+        assert!(secret_metadata.is_none());
+
+        let code_metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Safe Name\ndescription: ```bash\nrm -rf ~/.ssh\n```\n---\n",
+        )
+        .expect("safe name should survive unsafe description");
+        assert_eq!(code_metadata.name.as_deref(), Some("Safe Name"));
+        assert!(code_metadata.description.is_none());
+
+        let log_metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Safe Name\ndescription: stderr: token=super-secret-token\n---\n",
+        )
+        .expect("safe name should survive unsafe log-like description");
+        assert_eq!(log_metadata.name.as_deref(), Some("Safe Name"));
+        assert!(log_metadata.description.is_none());
+
+        let env_metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Safe Name\ndescription: OPENAI_API_KEY=super-secret-token\n---\n",
+        )
+        .expect("safe name should survive env-like unsafe description");
+        assert_eq!(env_metadata.name.as_deref(), Some("Safe Name"));
+        assert!(env_metadata.description.is_none());
+
+        let url_metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: Safe Name\ndescription: https://user:password@example.com/?token=super-secret-token\n---\n",
+        )
+        .expect("safe name should survive secret-bearing URL description");
+        assert_eq!(url_metadata.name.as_deref(), Some("Safe Name"));
+        assert!(url_metadata.description.is_none());
+    }
+
+    #[test]
+    fn skill_manifest_metadata_falls_back_when_frontmatter_is_malformed() {
+        let metadata = parse_bounded_skill_manifest_metadata(
+            "---\nname: malformed frontmatter without close\n# Fallback Skill\n\nSafe fallback paragraph.",
+        )
+        .expect("malformed frontmatter should not fail metadata parsing");
+
+        assert_eq!(metadata.name.as_deref(), Some("Fallback Skill"));
+        assert_eq!(
+            metadata.description.as_deref(),
+            Some("Safe fallback paragraph.")
+        );
+    }
+
+    #[test]
+    fn skill_manifest_metadata_reads_only_bounded_prefix() {
+        let root = temp_scan_fixture_root("bounded-skill-prefix");
+        let _ = fs::remove_dir_all(&root);
+        let skill_dir = root.join("skills/bounded");
+        fs::create_dir_all(&skill_dir).expect("skill directory should be created");
+        let long_safe_paragraph = "A".repeat(MAX_SKILL_MANIFEST_METADATA_BYTES + 512);
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("# Bounded Skill\n\n{long_safe_paragraph} token=super-secret-token\n"),
+        )
+        .expect("bounded skill fixture should be written");
+
+        let metadata = read_bounded_skill_manifest_metadata(&skill_dir.join("SKILL.md"))
+            .expect("bounded prefix should produce safe metadata");
+
+        assert_eq!(metadata.name.as_deref(), Some("Bounded Skill"));
+        let description = metadata
+            .description
+            .as_deref()
+            .expect("long safe paragraph should be shortened, not dropped");
+        assert!(description.len() <= MAX_SKILL_MANIFEST_DESCRIPTION_CHARS + 3);
+        assert!(description
+            .chars()
+            .all(|character| character == 'A' || character == '.'));
+        assert!(!description.contains("super-secret-token"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn scans_fixture_with_classification_and_excludes() {
         let canonical_root = fixture_root();
         let selected = SelectedRoot {
@@ -3655,6 +4129,173 @@ mod tests {
             result.counts.skipped_by_exclude > 0,
             "fixture should exercise scanner-local excludes"
         );
+    }
+
+    #[test]
+    fn scan_only_parses_skill_md_metadata_and_ignores_other_markdown() {
+        let root = temp_scan_fixture_root("skill-metadata-scope");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("skills/better"))
+            .expect("skill fixture directory should be created");
+        fs::create_dir_all(root.join("docs")).expect("docs fixture directory should be created");
+        fs::write(
+            root.join("skills/better/SKILL.md"),
+            "---\nname: Better Skill\ndescription: Safe skill metadata.\n---\nBody text not stored.",
+        )
+        .expect("skill manifest should be written");
+        fs::write(
+            root.join("docs/notes.md"),
+            "---\nname: Private Doc\ndescription: Should never be parsed as skill metadata.\n---\n",
+        )
+        .expect("non-skill markdown should be written");
+
+        let selected = SelectedRoot {
+            selection_id: "skill-metadata-scope".to_string(),
+            canonical_root: root.clone(),
+            display_name: "skill-metadata-scope".to_string(),
+            root_summary: "~/skill-metadata-scope".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
+            .expect("default profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("scan should succeed");
+
+        let skill = result
+            .resources
+            .iter()
+            .find(|resource| resource.relative_path == "skills/better/SKILL.md")
+            .expect("skill manifest should be returned");
+        assert_eq!(
+            skill
+                .skill_manifest_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.name.as_deref()),
+            Some("Better Skill")
+        );
+        assert_eq!(
+            skill
+                .skill_manifest_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.description.as_deref()),
+            Some("Safe skill metadata.")
+        );
+        assert!(result.resources.iter().all(|resource| resource
+            .skill_manifest_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.name.as_deref())
+            != Some("Private Doc")));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scan_and_persist_use_safe_skill_manifest_metadata_when_available() {
+        let root = temp_scan_fixture_root("skill-manifest-product");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("skills/writer"))
+            .expect("skill fixture directory should be created");
+        fs::write(
+            root.join("skills/writer/SKILL.md"),
+            "---\nname: Better Writer\ndescription: Writes concise product summaries.\n---\nPrivate body text is not retained.",
+        )
+        .expect("skill manifest should be written");
+
+        let selected = SelectedRoot {
+            selection_id: "skill-manifest-product".to_string(),
+            canonical_root: root.clone(),
+            display_name: "skill-manifest-product".to_string(),
+            root_summary: "~/skill-manifest-product".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile =
+            resolve_scan_profile(Some("project-root")).expect("known profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("scan should succeed");
+        let db_path = temp_resource_store_path();
+        resource_store::initialize_database(&db_path).expect("resource DB should initialize");
+        let started_at_ms = current_time_ms();
+        persist_completed_scan_result(
+            &db_path,
+            "scan-job-skill-manifest-product",
+            "scanner-test",
+            started_at_ms,
+            started_at_ms + 250,
+            &selected,
+            &profile,
+            &result,
+        )
+        .expect("manifest scan result should persist");
+
+        let persisted_resources = resource_store::list_persisted_resources_for_path(&db_path, None)
+            .expect("persisted resources should load");
+        let persisted_skill = persisted_resources
+            .iter()
+            .find(|resource| resource.display_path == "skills/writer/SKILL.md")
+            .expect("persisted skill should exist");
+        assert_eq!(persisted_skill.name, "Better Writer");
+        assert_eq!(
+            persisted_skill.description,
+            "Writes concise product summaries."
+        );
+
+        let skill_item = resource_store::list_skill_library_items_for_path(&db_path)
+            .expect("skill library items should load")
+            .into_iter()
+            .find(|item| item.display_name == "Better Writer")
+            .expect("Skill Library should use manifest name");
+        assert_eq!(
+            skill_item.short_purpose,
+            "Writes concise product summaries."
+        );
+        let detail = resource_store::get_skill_detail_for_path(&db_path, &skill_item.id)
+            .expect("skill detail should load");
+        assert_eq!(detail.what_it_does, "Writes concise product summaries.");
+        let stored_text = resource_store::debug_all_text_values_for_path(&db_path)
+            .expect("debug text should load");
+        assert!(!stored_text.contains("Private body text"));
+
+        cleanup_resource_store(db_path);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scan_falls_back_when_skill_manifest_metadata_is_unsafe_or_malformed() {
+        let root = temp_scan_fixture_root("skill-manifest-fallback");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("skills/unsafe"))
+            .expect("skill fixture directory should be created");
+        fs::write(
+            root.join("skills/unsafe/SKILL.md"),
+            "---\nname: token=super-secret-token\ndescription: -----BEGIN PRIVATE KEY-----\n---\n",
+        )
+        .expect("unsafe skill manifest should be written");
+
+        let selected = SelectedRoot {
+            selection_id: "skill-manifest-fallback".to_string(),
+            canonical_root: root.clone(),
+            display_name: "skill-manifest-fallback".to_string(),
+            root_summary: "~/skill-manifest-fallback".to_string(),
+            source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
+            user_confirmed_mode: true,
+        };
+        let profile = resolve_scan_profile(Some(DEFAULT_SCAN_PROFILE_ID))
+            .expect("default profile should resolve");
+        let result = scan_validated_root(&selected, &profile).expect("scan should still succeed");
+        let resource = result
+            .resources
+            .iter()
+            .find(|resource| resource.relative_path == "skills/unsafe/SKILL.md")
+            .expect("unsafe manifest should still be classified by path");
+
+        assert!(resource.skill_manifest_metadata.is_none());
+        assert_eq!(persist_resource_input(resource).name, "SKILL.md");
+        assert_eq!(
+            persist_resource_input(resource).description,
+            "路径或文件名匹配技能资源。"
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -4001,6 +4642,17 @@ mod tests {
 
     fn symlink_fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/scanner-symlink-test")
+    }
+
+    fn temp_scan_fixture_root(name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_millis();
+        let index = NEXT_TEST_RESOURCE_STORE.fetch_add(1, Ordering::Relaxed);
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("{name}-{now}-{index}"))
     }
 
     fn sample_batch_source(

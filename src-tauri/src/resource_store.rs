@@ -3245,6 +3245,11 @@ fn finding_label(kind: &str) -> String {
 }
 
 fn skill_original_name(resource: &ResourceCorpusResource) -> String {
+    let name = resource.name.trim();
+    if !name.is_empty() && !is_generic_skill_file_name(name) {
+        return safe_skill_name(name);
+    }
+
     for value in [
         resource.display_path.as_deref(),
         resource.relative_path.as_deref(),
@@ -3252,10 +3257,6 @@ fn skill_original_name(resource: &ResourceCorpusResource) -> String {
         if let Some(name) = skill_name_from_manifest_path(value) {
             return safe_skill_name(&name);
         }
-    }
-    let name = resource.name.trim();
-    if !name.is_empty() && !is_generic_skill_file_name(name) {
-        return safe_skill_name(name);
     }
     "未命名技能".to_string()
 }
@@ -5839,6 +5840,53 @@ mod tests {
             .attention_reasons
             .iter()
             .any(|reason| reason.code == "sensitive-path-redacted"));
+
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_library_prefers_stored_manifest_name_and_description_for_skill_md() {
+        let db_path = temp_db_path("skill-library-manifest-name");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-skill-manifest-name",
+                41,
+                project_source(),
+                vec![skill_resource(
+                    "Better Writer",
+                    "skill",
+                    "skills/writer/SKILL.md",
+                    "skills/writer/SKILL.md",
+                    "Writes concise product summaries.",
+                    "low",
+                    1_725_300_009_000,
+                    false,
+                    vec!["metadata-only", "bounded-skill-manifest-metadata"],
+                )],
+            ),
+        )
+        .expect("manifest metadata skill should persist");
+
+        let item = list_skill_library_items_for_path(&db_path)
+            .expect("skill items should load")
+            .into_iter()
+            .find(|item| item.display_name == "Better Writer")
+            .expect("manifest name should become the product display name");
+
+        assert_eq!(item.original_name, "Better Writer");
+        assert_eq!(item.short_purpose, "Writes concise product summaries.");
+        assert_eq!(item.status, SkillStatus::Available);
+
+        let detail =
+            get_skill_detail_for_path(&db_path, &item.id).expect("skill detail should load");
+        assert_eq!(detail.what_it_does, "Writes concise product summaries.");
+        assert_eq!(detail.item.display_name, "Better Writer");
+        assert!(detail
+            .source_summaries
+            .iter()
+            .all(|source| source.path_hint.ends_with("skills/writer/SKILL.md")));
 
         cleanup_db(db_path);
     }
