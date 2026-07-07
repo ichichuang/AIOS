@@ -1,16 +1,17 @@
-import { Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Alert, Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import SearchRounded from "@mui/icons-material/SearchRounded";
-import { memo, useCallback, useEffect, useMemo, useState, useTransition, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactElement } from "react";
-import { List, type RowComponentProps } from "react-window";
+import { memo, useCallback, useEffect, useMemo, useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactElement } from "react";
+import { List } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { markAiosPerf } from "../../lib/perf";
+import { productVirtualListHeight, shouldShowProductRowsMismatchDiagnostic } from "../../lib/productListRendering";
 import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type SkillCapabilityCategoryKey } from "../../lib/skillCapabilityClassifier";
 import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import { buildSkillIdentityRows, filterSkillIdentityRows, type SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { fallbackSkillUsageText, filterSkillLibraryItems, mapSkillListItemToResource, skillStatusFilterOptions, type SkillListItem, type SkillStatus, type SkillStatusFilter } from "../../lib/skillLibrary";
 import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
-import { AiosAccordionPanel, AiosModuleFrame, AiosSectionRail, AiosSegmentedSwitcher } from "../ui/AiosUiPrimitives";
+import { AiosModuleFrame, AiosSectionHeader, AiosSectionRail, AiosSegmentedSwitcher } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
@@ -133,7 +134,16 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     if (queryActive || libraryTab === "all") return productQueryResultRows;
     return productRenderedGroup ? productFilteredRowsByGroupKey.get(productRenderedGroup.key) ?? [] : [];
   }, [libraryTab, productFilteredRowsByGroupKey, productQueryResultRows, productRenderedGroup, queryActive]);
-  const productRowProps = useMemo<ProductSkillRowProps>(() => ({ rows: productVisibleRows, selectedId, onSelect }), [onSelect, productVisibleRows, selectedId]);
+  const visibleListHeight = productVirtualListHeight(visibleRows.length, ROW_HEIGHT);
+  const productVisibleListHeight = productVirtualListHeight(productVisibleRows.length, ROW_HEIGHT);
+  const productRowsMismatch = shouldShowProductRowsMismatchDiagnostic({
+    summaryCount: skillLibrary.summary?.counts.dedupedSkillCount ?? 0,
+    rowCount: productVisibleRows.length,
+    query,
+    statusFilterActive: productStatusFilterActive,
+    loading: skillLibrary.loading,
+    error: skillLibrary.error
+  });
 
   const libraryTabOptions = useMemo(
     () => [
@@ -242,26 +252,28 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
           rowCount={visibleRows.length}
           rowHeight={ROW_HEIGHT}
           rowProps={rowProps}
-          style={{ height: "100%", width: "100%" }}
+          style={{ height: visibleListHeight, width: "100%" }}
         />
       )}
     </Box>
   );
   const productSkillListShell = (
     <Box className="compact-skill-list-shell" data-aios-internal-scroll="true">
-      {productVisibleRows.length === 0 ? (
+      {productRowsMismatch ? (
+        <Alert className="product-row-diagnostic" severity="warning" variant="outlined">
+          <Typography component="strong">统计显示已有技能，但当前列表没有可显示行。</Typography>
+          <Typography color="text.secondary" variant="body2">
+            请刷新本地记录或重新完成一次查找；AIOS Desktop 不会读取技能正文。
+          </Typography>
+        </Alert>
+      ) : productVisibleRows.length === 0 ? (
         <ModuleEmptyState {...emptyCopy} />
       ) : (
-        <List
-          className="compact-skill-window"
-          defaultHeight={ROW_HEIGHT * Math.min(productVisibleRows.length, 8)}
-          overscanCount={4}
-          rowComponent={ProductSkillRow}
-          rowCount={productVisibleRows.length}
-          rowHeight={ROW_HEIGHT}
-          rowProps={productRowProps}
-          style={{ height: "100%", width: "100%" }}
-        />
+        <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVisibleListHeight }}>
+          {productVisibleRows.map((item) => (
+            <ProductSkillStaticRow key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
+          ))}
+        </Box>
       )}
     </Box>
   );
@@ -316,85 +328,88 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
             value={effectiveActiveKey ?? ""}
             onChange={handleGroupChange}
           />
-          <AiosAccordionPanel className="skill-list-accordion" count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
+          <SkillListPanel count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
             {effectiveSkillListShell}
-          </AiosAccordionPanel>
+          </SkillListPanel>
         </Box>
       ) : (
-        <AiosAccordionPanel className="skill-list-accordion" count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
+        <SkillListPanel count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
           {effectiveSkillListShell}
-        </AiosAccordionPanel>
+        </SkillListPanel>
       )}
     </AiosModuleFrame>
   );
 });
 
-interface ProductSkillRowProps {
-  rows: SkillListItem[];
-  selectedId: string | null;
-  onSelect: AiosModuleProps["onSelect"];
+function SkillListPanel({ children, count, summary, title }: { children: ReactElement; count: number; summary: string; title: string }) {
+  return (
+    <Box className="skill-list-panel skill-list-accordion" data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
+      <AiosSectionHeader count={count} summary={summary} title={title} />
+      {children}
+    </Box>
+  );
 }
 
-function ProductSkillRowComponent({ ariaAttributes, index, style, rows, selectedId, onSelect }: RowComponentProps<ProductSkillRowProps>): ReactElement | null {
-  const item = rows[index];
-  if (!item) return null;
+function ProductSkillStaticRow({ item, selectedId, onSelect }: { item: SkillListItem; selectedId: string | null; onSelect: AiosModuleProps["onSelect"] }): ReactElement {
   const resource = mapSkillListItemToResource(item);
-  const selected = resource.id === selectedId;
+  return (
+    <ProductSkillRowContent
+      item={item}
+      resource={resource}
+      selected={resource.id === selectedId}
+      onSelect={() => onSelect(resource, { skillListItem: item })}
+    />
+  );
+}
+
+function ProductSkillRowContent({ item, resource, selected, onSelect }: { item: SkillListItem; resource: ReturnType<typeof mapSkillListItemToResource>; selected: boolean; onSelect: () => void }) {
   const usageText = item.usageText ?? fallbackSkillUsageText;
   const visibleChips = [
     { label: item.sourceLabel || "来源不明", className: "source-chip", variant: "outlined" as const },
     { label: skillStatusLabels[item.status], className: `status-chip status-${resource.status}`, variant: "filled" as const }
   ];
 
-  function handleSelect() {
-    onSelect(resource, { skillListItem: item });
-  }
-
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    onSelect(resource, { skillListItem: item });
+    onSelect();
   }
 
   return (
-    <Box {...ariaAttributes} className="compact-skill-row" style={style as CSSProperties} data-aios-list-row>
-      <Box
-        aria-pressed={selected}
-        className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"}
-        data-aios-hover-card
-        data-resource-id={resource.id}
-        data-aios-selected-surface={selected ? "true" : undefined}
-        role="button"
-        tabIndex={0}
-        onClick={handleSelect}
-        onKeyDown={handleKeyDown}
-      >
-        <Box className="compact-skill-main">
-          <Box className="resource-header-row">
-            <Typography className="resource-title compact-skill-title" component="h3" title={item.displayName}>
-              {item.displayName}
-            </Typography>
-            <Box className="compact-skill-chip-line">
-              {visibleChips.map((chip, chipIndex) => (
-                <Chip key={`${chip.label}-${chipIndex}`} className={chip.className} label={chip.label} size="small" variant={chip.variant} />
-              ))}
-            </Box>
-          </Box>
-          <Box className="resource-secondary-row">
-            <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code" title={item.originalName || item.primaryPathHint}>
-              {item.originalName || item.primaryPathHint}
-            </Box>
-          </Box>
-          <Typography className="resource-description compact-skill-description" color="text.secondary" title={usageText} variant="body2">
-            {item.shortPurpose || usageText}
+    <Box
+      aria-pressed={selected}
+      className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"}
+      data-aios-hover-card
+      data-resource-id={resource.id}
+      data-aios-selected-surface={selected ? "true" : undefined}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={handleKeyDown}
+    >
+      <Box className="compact-skill-main">
+        <Box className="resource-header-row">
+          <Typography className="resource-title compact-skill-title" component="h3" title={item.displayName}>
+            {item.displayName}
           </Typography>
+          <Box className="compact-skill-chip-line">
+            {visibleChips.map((chip, chipIndex) => (
+              <Chip key={`${chip.label}-${chipIndex}`} className={chip.className} label={chip.label} size="small" variant={chip.variant} />
+            ))}
+          </Box>
         </Box>
+        <Box className="resource-secondary-row">
+          <Box className="code-pill resource-technical-name compact-skill-technical-name" component="code" title={item.originalName || item.primaryPathHint}>
+            {item.originalName || item.primaryPathHint}
+          </Box>
+        </Box>
+        <Typography className="resource-description compact-skill-description" color="text.secondary" title={usageText} variant="body2">
+          {item.shortPurpose || usageText}
+        </Typography>
       </Box>
     </Box>
   );
 }
-
-const ProductSkillRow = memo(ProductSkillRowComponent) as (props: RowComponentProps<ProductSkillRowProps>) => ReactElement | null;
 
 function groupSkillRowsByCapability(rows: SkillIdentityRow[], skillCapabilityById: ReadonlyMap<string, { primaryCategory: { key: SkillCapabilityCategoryKey } }>): SkillGroup[] {
   const rowsByCategory = new Map<SkillCapabilityCategoryKey, SkillIdentityRow[]>(SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, []]));

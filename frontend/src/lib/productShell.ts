@@ -132,7 +132,7 @@ export const homeFirstRunGuideCopy = {
   ],
   chooseFolderAction: "选择一个文件夹",
   reviewLocationAction: "查看查找位置",
-  nextStepAction: "继续到查找位置并开始扫描",
+  nextStepAction: "继续到查找位置",
   closeAction: "稍后"
 };
 

@@ -3,7 +3,9 @@ import {
   buildPersistedLibraryState,
   buildDiscoveryResultStats,
   buildPrivacyDataControlSummary,
+  buildDefaultSelectedSourceIds,
   buildSelectedBatchSourceIds,
+  buildScanFlowStatus,
   clearResourceLibrary,
   fallbackResourceLibrarySummary,
   getFirstRunOnboardingDismissed,
@@ -142,7 +144,10 @@ assert.match(WHAT_AIOS_STORES_COPY, /相对路径/);
 assert.match(WHAT_AIOS_NEVER_STORES_COPY, /供应商密钥/);
 
 const disabledSource: PersistedScanSource = { ...source, id: "scan-source:disabled", enabled: false };
-assert.deepEqual(buildSelectedBatchSourceIds([source, disabledSource], [source.id, disabledSource.id]), [source.id]);
+const intelligentSource: PersistedScanSource = { ...source, id: "scan-source:intelligent", sourceKind: "intelligent-discovery" };
+const advancedSource: PersistedScanSource = { ...source, id: "scan-source:advanced", sourceKind: "advanced-full-disk" };
+assert.deepEqual(buildDefaultSelectedSourceIds([source, intelligentSource, advancedSource, disabledSource]), [source.id]);
+assert.deepEqual(buildSelectedBatchSourceIds([source, disabledSource, intelligentSource, advancedSource], [source.id, disabledSource.id, intelligentSource.id, advancedSource.id]), [source.id, intelligentSource.id, advancedSource.id]);
 assert.equal(patchSourceInList([source], { ...source, projectLabel: "Renamed" })[0].projectLabel, "Renamed");
 
 const batchSnapshot: ScanBatchSnapshot = {
@@ -172,6 +177,29 @@ assert.equal(scanBatchProgressPercent(batchSnapshot), 25);
 assert.equal(scanBatchStatusLabel("running"), "扫描中");
 assert.equal(isTerminalScanBatchStatus("completed"), true);
 assert.equal(isTerminalScanBatchStatus("running"), false);
+assert.deepEqual(
+  buildScanFlowStatus([], [], null, fallbackResourceLibrarySummary),
+  {
+    stage: "idle",
+    severity: "info",
+    title: "添加查找位置",
+    summary: "先添加一个明确授权的文件夹。AIOS Desktop 不会自动查找整台电脑。",
+    skillsActionEnabled: false,
+    mcpActionEnabled: false
+  }
+);
+assert.equal(buildScanFlowStatus([source], [], null, summary).title, "选择要查找的位置");
+assert.equal(buildScanFlowStatus([source], [source.id], null, summary).stage, "ready");
+assert.equal(buildScanFlowStatus([source], [source.id], batchSnapshot, summary).stage, "scanning");
+assert.match(buildScanFlowStatus([source], [source.id], batchSnapshot, summary).summary, /已开始查找，只读取基本信息/);
+assert.equal(
+  buildScanFlowStatus([source], [source.id], { ...batchSnapshot, status: "completed", completedSources: 1, totalSources: 1, completedAtMs: 1_725_000_001_000 }, summary).title,
+  "查找完成"
+);
+assert.match(
+  buildScanFlowStatus([source], [source.id], { ...batchSnapshot, status: "completed", completedSources: 1, totalSources: 1, failedSources: 1, completedAtMs: 1_725_000_001_000 }, summary).summary,
+  /保存 4 项本机元数据结果，跳过 2 项，失败 1 个来源，用时/
+);
 
 const discoveryStats = buildDiscoveryResultStats(summary, [source], {
   ...batchSnapshot,

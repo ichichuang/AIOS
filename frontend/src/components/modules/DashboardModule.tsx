@@ -47,7 +47,7 @@ export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skil
       const addedCount = Math.max(result.selectedCount, result.sources.length);
       if (addedCount > 0) {
         setFolderAddState("added");
-        setFolderAddMessage(`已添加 ${formatCount(addedCount)} 个文件夹。添加不会自动扫描，请继续到查找位置并手动开始。`);
+        setFolderAddMessage(`已添加 ${formatCount(addedCount)} 个文件夹。添加不会自动扫描；请在查找位置确认后手动点击开始查找。`);
         resourceCorpus.refresh();
         return;
       }

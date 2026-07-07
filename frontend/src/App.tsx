@@ -35,7 +35,7 @@ import {
   getMcpLibrarySummary,
   getMcpServiceDetail,
   listMcpServiceItems,
-  mapMcpServiceItemToResource,
+  mapMcpServiceItemToResources,
   sanitizeMcpDetailLoadError,
   type McpServiceDetailRuntimeState,
   type McpLibrarySummary,
@@ -240,7 +240,7 @@ export default function App() {
 
   const activeResources = useMemo(() => getDefaultResourcesForDataSource(corpusDataSource, corpusResources), [corpusDataSource, corpusResources]);
   const skillLibraryResources = useMemo(() => skillLibraryItems.map(mapSkillListItemToResource), [skillLibraryItems]);
-  const mcpLibraryResources = useMemo(() => mcpServiceItems.map(mapMcpServiceItemToResource), [mcpServiceItems]);
+  const mcpLibraryResources = useMemo(() => mcpServiceItems.flatMap(mapMcpServiceItemToResources), [mcpServiceItems]);
   const skillLibraryItemById = useMemo(() => new Map(skillLibraryItems.map((item) => [item.id, item])), [skillLibraryItems]);
   const mcpServiceItemById = useMemo(() => new Map(mcpServiceItems.map((item) => [item.id, item])), [mcpServiceItems]);
   const selectableResources = useMemo(() => [...activeResources, ...skillLibraryResources, ...mcpLibraryResources, ...legacySnapshotResources], [activeResources, legacySnapshotResources, mcpLibraryResources, skillLibraryResources]);

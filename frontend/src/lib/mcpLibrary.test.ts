@@ -9,6 +9,7 @@ import {
   getMcpLibrarySummary,
   getMcpServiceDetail,
   listMcpServiceItems,
+  mapMcpServiceItemToResources,
   mapMcpServiceItemToResource,
   mcpServiceNeedsAttention,
   sanitizeMcpDetailLoadError,
@@ -115,6 +116,27 @@ assert.equal(getMcpLibraryItemIdFromResource(mapped), "mcp:filesystem");
 assert.equal(mcpServiceNeedsAttention(serviceItem), true);
 assert(!JSON.stringify(mapped).includes("super-secret-token"));
 assert(!JSON.stringify(mapped).includes("https://"));
+
+const serviceAndToolResources = mapMcpServiceItemToResources({
+  ...serviceItem,
+  toolHintCount: 2,
+  toolHints: [
+    { name: "read_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" },
+    { name: "write_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" }
+  ]
+});
+assert.equal(serviceAndToolResources.length, 3);
+assert.equal(serviceAndToolResources[0].capabilityType, "mcp-server");
+assert.deepEqual(
+  serviceAndToolResources.slice(1).map((resource) => resource.capabilityType),
+  ["mcp-client", "mcp-client"]
+);
+assert.deepEqual(
+  serviceAndToolResources.slice(1).map((resource) => resource.metadata?.mcpLibraryItemId),
+  [serviceItem.id, serviceItem.id]
+);
+assert.equal(getMcpLibraryItemIdFromResource(serviceAndToolResources[1]), serviceItem.id, "tool rows must open the parent MCP service detail");
+assert(!JSON.stringify(serviceAndToolResources).includes("super-secret-token"));
 
 const visibleMissingToolListItem: McpServiceItem = {
   ...serviceItem,

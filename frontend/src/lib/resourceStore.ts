@@ -180,6 +180,17 @@ export interface DiscoveryResultStats {
   storedLibraryCount: number;
 }
 
+export type ScanFlowStage = "idle" | "ready" | "scanning" | "completed" | "failed";
+
+export interface ScanFlowStatus {
+  stage: ScanFlowStage;
+  severity: "info" | "success" | "warning" | "error";
+  title: string;
+  summary: string;
+  skillsActionEnabled: boolean;
+  mcpActionEnabled: boolean;
+}
+
 export type ScanBatchStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "failed";
 export type ScanBatchSourceStatus = "idle" | "queued" | "running" | "completed" | "cancelled" | "failed";
 
@@ -415,6 +426,84 @@ export function buildPrivacyDataControlSummary(status: ResourceStoreStatus, summ
 export function buildSelectedBatchSourceIds(sources: PersistedScanSource[], selectedSourceIds: string[]): string[] {
   const selected = new Set(selectedSourceIds);
   return sources.filter((source) => source.enabled && selected.has(source.id)).map((source) => source.id);
+}
+
+export function buildDefaultSelectedSourceIds(sources: PersistedScanSource[]): string[] {
+  return sources.filter((source) => source.enabled && source.sourceKind === "custom-directory").map((source) => source.id);
+}
+
+export function buildScanFlowStatus(sources: PersistedScanSource[], selectedSourceIds: string[], batch: ScanBatchSnapshot | null, summary: ResourceLibrarySummary): ScanFlowStatus {
+  const hasSources = sources.length > 0;
+  const selectedCount = buildSelectedBatchSourceIds(sources, selectedSourceIds).length;
+  const hasResults = summary.resourceCount > 0;
+
+  if (batch) {
+    if (batch.status === "queued" || batch.status === "running" || batch.status === "cancelling") {
+      return {
+        stage: "scanning",
+        severity: "info",
+        title: "已开始查找",
+        summary: `已开始查找，只读取基本信息。正在处理 ${batch.totalSources} 个来源；已完成 ${batch.completedSources} 个。`,
+        skillsActionEnabled: false,
+        mcpActionEnabled: false
+      };
+    }
+
+    if (batch.status === "completed") {
+      const elapsedMs = Math.max(0, (batch.completedAtMs ?? batch.updatedAtMs) - batch.startedAtMs);
+      const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
+      return {
+        stage: "completed",
+        severity: hasResults ? "success" : "warning",
+        title: "查找完成",
+        summary: hasResults
+          ? `已完成 ${batch.completedSources} 个来源，保存 ${summary.resourceCount} 项本机元数据结果，跳过 ${summary.skippedEntryTotal} 项，失败 ${batch.failedSources} 个来源，用时 ${elapsedSeconds} 秒。`
+          : `查找已完成，用时 ${elapsedSeconds} 秒；没有保存可展示的技能或 MCP 结果，跳过 ${summary.skippedEntryTotal} 项，失败 ${batch.failedSources} 个来源。可以选择更具体的项目文件夹再试。`,
+        skillsActionEnabled: hasResults,
+        mcpActionEnabled: hasResults
+      };
+    }
+
+    return {
+      stage: "failed",
+      severity: batch.status === "failed" ? "error" : "warning",
+      title: batch.status === "failed" ? "查找失败" : "查找已取消",
+      summary: batch.error?.message ?? "没有继续查找。已保存的本地记录不会删除用户文件。",
+      skillsActionEnabled: hasResults,
+      mcpActionEnabled: hasResults
+    };
+  }
+
+  if (!hasSources) {
+    return {
+      stage: "idle",
+      severity: "info",
+      title: "添加查找位置",
+      summary: "先添加一个明确授权的文件夹。AIOS Desktop 不会自动查找整台电脑。",
+      skillsActionEnabled: false,
+      mcpActionEnabled: false
+    };
+  }
+
+  if (selectedCount === 0) {
+    return {
+      stage: "idle",
+      severity: "info",
+      title: "选择要查找的位置",
+      summary: "勾选一个已启用来源后，再点击开始查找。智能发现和高级发现来源不会默认选中。",
+      skillsActionEnabled: hasResults,
+      mcpActionEnabled: hasResults
+    };
+  }
+
+  return {
+    stage: "ready",
+    severity: "info",
+    title: "可以开始查找",
+    summary: `已选择 ${selectedCount} 个来源。点击开始后，只保存名称、类型、相对路径和安全摘要。`,
+    skillsActionEnabled: hasResults,
+    mcpActionEnabled: hasResults
+  };
 }
 
 export function patchSourceInList(sources: PersistedScanSource[], updated: PersistedScanSource): PersistedScanSource[] {

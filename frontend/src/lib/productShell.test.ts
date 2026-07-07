@@ -163,6 +163,7 @@ assert(productShellSource.includes("查找结果只保存在这台电脑上"), "
 assert(productShellSource.includes("不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值"), "Home guide must state sensitive values are not read");
 assert(productShellSource.includes("不执行脚本，也不启动或调用 MCP 工具"), "Home guide must state scripts and MCP tools are not run");
 assert(productShellSource.includes("添加文件夹不会自动扫描"), "Home guide must state folder adding does not auto-scan");
+assert(productShellSource.includes("继续到查找位置") && !productShellSource.includes("继续到查找位置并开始扫描"), "Home guide next step must not imply that navigation starts scanning");
 assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery/i.test(productShellSource.match(/homeFirstRunGuideCopy[\s\S]*?};/)?.[0] ?? ""), "Home guide copy must not expose banned first-class technical terms");
 
 assert(dashboardModuleSource.includes("Dialog"), "Home start action must render a first-run guide dialog");
@@ -170,6 +171,7 @@ assert(!dashboardModuleSource.includes("onClick={() => onViewChange(\"advanced\"
 assert(dashboardModuleSource.includes("addScanSources("), "Home folder-selection step must reuse the existing addScanSources client");
 assert(!dashboardModuleSource.includes("startScanSourcesBatch"), "Home guide must not start scanning automatically");
 assert(dashboardModuleSource.includes("onViewChange(\"custom-scan\")"), "Home guide must offer a next-step route to 查找位置");
+assert(dashboardModuleSource.includes("查看查找位置") && !dashboardModuleSource.includes("并开始扫描"), "Home dialog actions must not imply automatic scanning");
 
 assert(skillsModuleSource.includes("contentClassName=\"skills-module-scroll\""), "Skills must use a measured module content class");
 assert(!skillsModuleSource.includes("AiosTabBar"), "Skills must not use the rejected AiosTabBar");
@@ -177,6 +179,8 @@ assert(!skillsModuleSource.includes("AiosTabPanel"), "Skills must not use the re
 assert(skillsModuleSource.includes("AiosSectionRail"), "Skills library workspace must use a category rail");
 assert(skillsModuleSource.includes("AiosSegmentedSwitcher"), "Skills must use a segmented switcher");
 assert(skillsModuleSource.includes("data-aios-internal-scroll=\"true\""), "Skills must expose a measured internal list scroll container");
+assert(skillsModuleSource.includes("productVirtualListHeight"), "Skills virtual rows must use a deterministic measured height");
+assert(skillsModuleSource.includes("shouldShowProductRowsMismatchDiagnostic"), "Skills must diagnose summary-count/list-row mismatches");
 
 assert(mcpModuleSource.includes("contentClassName=\"mcp-module-scroll\""), "MCP must use a measured module content class");
 assert(!mcpModuleSource.includes("AiosTabBar"), "MCP must not use the rejected AiosTabBar");
@@ -189,6 +193,7 @@ assert(mcpModuleSource.includes("mcp-browser-panel"), "MCP resources and empty s
 assert(mcpModuleSource.includes("data-aios-internal-scroll=\"true\""), "MCP must expose an internal scroll container");
 assert(mcpModuleSource.includes("useContentPanelSwapMotion"), "MCP section changes must use panel motion");
 assert(mcpModuleSource.includes("AiosContentPanel"), "MCP must keep section content inside the shared content panel primitive");
+assert(mcpModuleSource.includes("mcp-client"), "MCP product tool hints must render as selectable tool rows");
 assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery/i.test(mcpModuleSource), "MCP ordinary page must not expose banned technical terms as first-class copy");
 
 assert(!advancedModuleSource.includes("AiosTabBar"), "Advanced must not use the rejected AiosTabBar");

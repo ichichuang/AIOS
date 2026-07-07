@@ -1,4 +1,4 @@
-import { Alert, Box, Chip } from "@mui/material";
+import { Alert, Box, Chip, Typography } from "@mui/material";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { fallbackMcpToolHintsUnavailableText } from "../../lib/mcpLibrary";
@@ -19,7 +19,10 @@ export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosM
   const attentionCount = resources.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available")).length;
   const serviceResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-server"), [resources]);
   const toolResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-client"), [resources]);
-  const attentionResources = useMemo(() => resources.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available")), [resources]);
+  const attentionResources = useMemo(() => {
+    const candidates = useProductLibrary ? serviceResources : resources;
+    return candidates.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available"));
+  }, [resources, serviceResources, useProductLibrary]);
   const serviceCount = productCounts ? productCounts.serviceCount : serviceResources.length || resources.length;
   const toolHintCount = productCounts ? productCounts.toolHintCount : toolResources.length;
   const needsAttentionCount = productCounts ? productCounts.needsAttentionCount : attentionCount;
@@ -55,6 +58,7 @@ export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosM
   const active = sections.find((section) => section.value === activeSection) ?? sections[0];
   const sectionResources = active.resources;
   const groups = useMemo(() => getMcpGroups(sectionResources), [sectionResources]);
+  const productRowsMismatch = useProductLibrary && active.count > 0 && sectionResources.length === 0 && !mcpLibrary.loading && !mcpLibrary.error;
   const sectionOptions = useMemo(() => sections.map(({ value, label, count }) => ({ value, label, count })), [sections]);
   const handleSectionChange = useCallback((nextValue: string) => setActiveSection(nextValue as McpSection), []);
   useContentPanelSwapMotion(panelRef, activeSection);
@@ -126,7 +130,14 @@ export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosM
                 {fallbackMcpToolHintsUnavailableText}
               </Alert>
             )}
-            {groups.length === 0 ? (
+            {productRowsMismatch ? (
+              <Alert className="product-row-diagnostic" severity="warning" variant="outlined">
+                <Typography component="strong">统计显示已有 MCP 项，但当前列表没有可显示行。</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  请刷新本地记录或重新完成一次查找；AIOS Desktop 不启动服务、不连接端点、不调用工具。
+                </Typography>
+              </Alert>
+            ) : groups.length === 0 ? (
               <ModuleEmptyState {...moduleEmptyStateCopy("mcp")} />
             ) : (
               groups.map((group) => (

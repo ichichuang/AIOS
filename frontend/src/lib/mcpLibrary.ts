@@ -311,6 +311,48 @@ export function mapMcpServiceItemToResource(item: McpServiceItem): AiosResource 
   };
 }
 
+export function mapMcpServiceItemToResources(item: McpServiceItem): AiosResource[] {
+  const serviceResource = mapMcpServiceItemToResource(item);
+  const toolResources = sanitizeMcpToolHints(item.toolHints).map((tool, index) => mapMcpToolHintToResource(item, tool, index));
+  return [serviceResource, ...toolResources];
+}
+
+function mapMcpToolHintToResource(item: McpServiceItem, tool: McpToolHint, index: number): AiosResource {
+  const parent = mapMcpServiceItemToResource(item);
+  const safeToolName = safeMcpToolName(tool.name) || `tool-${index + 1}`;
+  const safePurpose = safeMcpDisplayText(tool.purpose, "已保存的工具名称线索。");
+  const safeServiceLabel = safeMcpDisplayText(tool.serviceLabel, parent.name);
+  const toolId = safeMcpReasonCode(`${item.id}:tool:${safeToolName}`);
+
+  return {
+    ...parent,
+    id: `mcp-library-tool:${toolId}`,
+    name: safeToolName,
+    zhName: safeToolName,
+    zhDescription: safePurpose,
+    zhCategory: `${safeServiceLabel} / MCP 工具线索`,
+    zhCapability: "MCP 工具线索",
+    capabilityType: "mcp-client",
+    description: safePurpose,
+    safetyProfile: {
+      ...parent.safetyProfile,
+      notes: [
+        safePurpose,
+        "这是已保存的工具名称线索；AIOS Desktop 不启动服务、不连接端点、不调用工具。"
+      ]
+    },
+    metadata: {
+      ...parent.metadata,
+      mcpToolHintName: safeToolName,
+      mcpToolHintPurpose: safePurpose,
+      mcpToolHintStatus: safeMcpDisplayText(tool.status, "unverified"),
+      toolHintCount: 1,
+      toolHints: [safeToolName],
+      toolHintsUnavailableExplanation: null
+    }
+  };
+}
+
 export function filterMcpServiceItems(items: readonly McpServiceItem[], query: string): McpServiceItem[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return [...items];

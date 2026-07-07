@@ -17,6 +17,7 @@ import {
   type SkillListItem,
   type SkillStatusFilter
 } from "./skillLibrary";
+import { productVirtualListHeight, shouldShowProductRowsMismatchDiagnostic } from "./productListRendering";
 import { fallbackResourceCorpusSummary } from "./resourceCorpus";
 
 const fallbackSummary = await getSkillLibrarySummary();
@@ -26,6 +27,17 @@ assert.equal(fallbackSummary, null);
 assert.deepEqual(fallbackItems, []);
 await assert.rejects(() => getSkillDetail("skill:missing"), /Tauri 桌面运行时/);
 assert.equal(fallbackSkillUsageText, "暂时无法判断使用方法。请在高级信息里查看来源。");
+assert.equal(productVirtualListHeight(0, 108), "0px");
+assert.equal(productVirtualListHeight(1, 108), "108px");
+assert.equal(productVirtualListHeight(20, 108), "min(864px, var(--aios-module-scroll-body-height, 864px))");
+assert.equal(
+  shouldShowProductRowsMismatchDiagnostic({ summaryCount: 1, rowCount: 0, query: "", statusFilterActive: false, loading: false, error: null }),
+  true
+);
+assert.equal(
+  shouldShowProductRowsMismatchDiagnostic({ summaryCount: 1, rowCount: 0, query: "writer", statusFilterActive: false, loading: false, error: null }),
+  false
+);
 
 const productSummary: SkillLibrarySummary = {
   generatedAtMs: 1_725_100_001_000,

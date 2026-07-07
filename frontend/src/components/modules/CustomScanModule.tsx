@@ -43,10 +43,12 @@ import {
 import {
   addScanSources,
   addDiscoveryScanSources,
+  buildDefaultSelectedSourceIds,
   buildPrivacyDataControlSummary,
   buildPersistedLibraryState,
   buildDiscoveryResultStats,
   buildSelectedBatchSourceIds,
+  buildScanFlowStatus,
   cancelScanBatch,
   clearResourceLibrary,
   fallbackResourceLibrarySummary,
@@ -89,7 +91,7 @@ import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 
-export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, onSelect }: AiosModuleProps) {
+export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, onSelect, onViewChange }: AiosModuleProps) {
   const [policy, setPolicy] = useState<ScannerPolicy>(fallbackScanPolicy);
   const [profiles, setProfiles] = useState<ScanProfileDefinition[]>(fallbackScanProfiles);
   const [activeScanModeId, setActiveScanModeId] = useState<ScanModeId>(DEFAULT_SCAN_MODE_ID);
@@ -142,7 +144,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, on
         const existingIds = new Set(nextSources.map((source) => source.id));
         const retained = current.filter((id) => existingIds.has(id));
         if (retained.length > 0) return retained;
-        return nextSources.filter((source) => source.enabled).map((source) => source.id);
+        return buildDefaultSelectedSourceIds(nextSources);
       });
       setLibraryError(null);
       refreshCorpus();
@@ -266,7 +268,6 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, on
         setError("未找到可扫描的发现来源。");
         return;
       }
-      setSelectedSourceIds((current) => Array.from(new Set([...current, ...sourceIds])));
       const started = await startScanSourcesBatch(sourceIds, { advancedConfirmationAccepted: advancedConfirmed });
       setBatchSnapshot(started.snapshot);
       await refreshResourceLibrary();
@@ -381,6 +382,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, on
   }, [refreshResourceLibrary]);
 
   const isLibraryReady = resourceStoreStatus.databaseReady;
+  const scanFlowStatus = useMemo(() => buildScanFlowStatus(persistedSources, selectedSourceIds, batchSnapshot, librarySummary), [batchSnapshot, librarySummary, persistedSources, selectedSourceIds]);
 
   return (
     <AiosModuleFrame
@@ -418,22 +420,51 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, on
         </Box>
       </AiosHeroPanel>
 
+      <Alert
+        className={`scan-flow-status scan-flow-status--${scanFlowStatus.stage}`}
+        data-aios-layout-fixed
+        severity={scanFlowStatus.severity}
+        variant="outlined"
+        action={
+          <Box className="scan-flow-actions">
+            {(scanFlowStatus.stage === "ready" || scanFlowStatus.stage === "scanning" || scanFlowStatus.stage === "failed") && (
+              <Button disabled={!canStartActiveScanMode} size="small" variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
+                开始查找
+              </Button>
+            )}
+            <Button disabled={!scanFlowStatus.skillsActionEnabled} size="small" variant="outlined" onClick={() => onViewChange("skills")}>
+              查看技能
+            </Button>
+            <Button disabled={!scanFlowStatus.mcpActionEnabled} size="small" variant="outlined" onClick={() => onViewChange("mcp")}>
+              查看 MCP
+            </Button>
+          </Box>
+        }
+      >
+        <Box className="scan-flow-copy">
+          <Typography component="strong">{scanFlowStatus.title}</Typography>
+          <Typography color="text.secondary" variant="body2">
+            {scanFlowStatus.summary}
+          </Typography>
+        </Box>
+      </Alert>
+
       <Box className="custom-scan-workspace" data-aios-motion-surface>
         <Box className="custom-scan-pane custom-scan-pane--sources" data-aios-internal-scroll="true">
           <AiosSection className="scan-control-section">
             <AiosSectionHeader
-              title="来源管理"
-              summary={activeScanMode.id === "custom-directory" ? "添加目录后手动选择并扫描；添加不会自动开始。" : "发现模式会先创建候选来源，再开始扫描。"}
+              title="添加查找位置"
+              summary={activeScanMode.id === "custom-directory" ? "添加目录后手动选择并开始查找；添加不会自动开始。" : "发现模式只在点击开始后创建候选来源。"}
             />
             <Paper className="scan-control-card" elevation={0} data-aios-hover-card data-aios-motion-surface data-motion="resource-card">
               <Box className="scan-control-heading">
                 <FolderOpenRounded fontSize="small" />
                 <Box className="scan-control-copy">
-                  <Typography component="strong">{activeScanMode.id === "custom-directory" ? "添加并扫描来源" : "启动发现扫描"}</Typography>
+                  <Typography component="strong">{activeScanMode.id === "custom-directory" ? "手动选择文件夹" : "启动发现查找"}</Typography>
                   <Typography color="text.secondary" variant="body2">
                     {activeScanMode.id === "custom-directory"
-                      ? "系统目录选择器可一次选择多个目录。"
-                      : "候选来源只在点击开始后解析。"}
+                      ? "系统目录选择器可一次选择多个目录；返回后仍需点击开始查找。"
+                      : "候选来源只在点击开始后解析，不会默认选择高级来源。"}
                   </Typography>
                 </Box>
               </Box>
@@ -460,7 +491,7 @@ export function CustomScanModule({ query, resourceCorpus, selectedId, onBack, on
                     </Button>
                   )}
                   <Button className="aios-action-button aios-action-button--primary" disabled={!canStartActiveScanMode} startIcon={<PlayArrowRounded />} variant="contained" onClick={activeScanMode.id === "custom-directory" ? handleStartBatch : handleStartDiscovery}>
-                    {activeScanMode.id === "custom-directory" ? "扫描所选" : "开始发现"}
+                    开始查找
                   </Button>
                   <Button className="aios-action-button aios-action-button--secondary" disabled={libraryBusyState !== "idle" || scanLocked} startIcon={<RefreshRounded />} variant="outlined" onClick={refreshResourceLibrary}>
                     刷新
