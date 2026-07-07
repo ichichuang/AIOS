@@ -23,18 +23,18 @@ const fallbackItems = await listMcpServiceItems();
 assert.equal(fallbackSummary, null);
 assert.deepEqual(fallbackItems, []);
 await assert.rejects(() => getMcpServiceDetail("mcp:missing"), /Tauri 桌面运行时/);
-assert.equal(fallbackMcpToolHintsUnavailableText, "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。");
+assert.equal(fallbackMcpToolHintsUnavailableText, "暂时无法读取工具列表。AIOS Desktop 不会启动服务来获取更多内容。");
 
 const productSummary: McpLibrarySummary = {
   generatedAtMs: 1_725_300_001_000,
   latestSearchOrScanTime: 1_725_300_001_000,
   counts: {
-    mcpConfigCount: 4,
-    serviceCount: 6,
-    verifiedServiceCount: 2,
-    unverifiedServiceCount: 4,
-    toolHintCount: 0,
-    needsAttentionCount: 4,
+    mcpConfigCount: 35,
+    serviceCount: 50,
+    verifiedServiceCount: 15,
+    unverifiedServiceCount: 35,
+    toolHintCount: 2,
+    needsAttentionCount: 49,
     sourceUnknownCount: 1,
     configUnreadableCount: 1
   },
@@ -55,9 +55,9 @@ const homeStats = buildHomeMcpLibraryStats(productSummary, {
   validators: 0,
   legacy: 0
 });
-assert.equal(homeStats.serviceCount, 6);
-assert.equal(homeStats.toolHintCount, 0);
-assert.equal(homeStats.needsAttentionCount, 4);
+assert.equal(homeStats.serviceCount, 50);
+assert.equal(homeStats.toolHintCount, 2);
+assert.equal(homeStats.needsAttentionCount, 49);
 assert.equal(homeStats.usingProductSummary, true);
 assert.notEqual(homeStats.serviceCount, homeStats.viewCounts.mcp, "MCP product totals must not come from filteredResources.length or view counts");
 
@@ -115,6 +115,23 @@ assert.equal(getMcpLibraryItemIdFromResource(mapped), "mcp:filesystem");
 assert.equal(mcpServiceNeedsAttention(serviceItem), true);
 assert(!JSON.stringify(mapped).includes("super-secret-token"));
 assert(!JSON.stringify(mapped).includes("https://"));
+
+const visibleMissingToolListItem: McpServiceItem = {
+  ...serviceItem,
+  id: "mcp:visible-missing-tools",
+  status: "visible",
+  commandName: "node",
+  requiredEnvNames: [],
+  attentionReasons: [
+    {
+      code: "missing-tool-list",
+      label: "工具列表不可用",
+      detail: fallbackMcpToolHintsUnavailableText,
+      severity: "low"
+    }
+  ]
+};
+assert.equal(mcpServiceNeedsAttention(visibleMissingToolListItem), true, "visible services still need attention when product detail flags a missing tool list");
 
 const remoteItem: McpServiceItem = {
   ...serviceItem,
@@ -218,6 +235,64 @@ const toolHintDetailModel = buildMcpServiceDetailViewModel({
 assert.equal(toolHintDetailModel.toolHintsText, "read_file、write_file");
 assert(!toolHintDetailModel.toolHintsText.includes("2 个"), "tool detail must show names, not fake counts");
 
+const unsafeDetailModel = buildMcpServiceDetailViewModel({
+  detail: {
+    ...detail,
+    configLocationHint: "/Users/example/secret-token-root/.env",
+    commandName: "node --token=super-secret-token",
+    requiredEnvNames: ["FILESYSTEM_ROOT=super-secret-token"],
+    remoteHostHint: "https://bearer-token:super-secret-token@api.example.com/path?token=super-secret-token",
+    attentionReasons: [
+      {
+        code: "unsafe-fixture",
+        label: "需要查看",
+        detail: "raw log stderr stack trace bearer super-secret-token",
+        severity: "high"
+      }
+    ],
+    findings: [
+      {
+        code: "unsafe-finding",
+        label: "需要查看",
+        detail: "stdout token=super-secret-token",
+        severity: "high"
+      }
+    ],
+    configSources: [
+      {
+        ...detail.configSources[0],
+        pathHint: "/Users/example/secret-token-root/.env",
+        rootPathHint: "/Users/example/secret-token-root"
+      }
+    ],
+    safeAdvancedMetadataSummary: [
+      { label: "命令", value: "node --token=super-secret-token" },
+      { label: "日志", value: "stderr stack trace bearer super-secret-token" }
+    ]
+  },
+  error: null,
+  fallbackItem: null,
+  loading: false
+});
+assertNoUnsafeMcpCopy(JSON.stringify(unsafeDetailModel));
+
+const unsafeMapped = mapMcpServiceItemToResource({
+  ...serviceItem,
+  configLocationHint: "/Users/example/secret-token-root/.env",
+  commandName: "node --token=super-secret-token",
+  requiredEnvNames: ["FILESYSTEM_ROOT=super-secret-token"],
+  remoteHostHint: "https://bearer-token:super-secret-token@api.example.com/path?token=super-secret-token",
+  attentionReasons: [
+    {
+      code: "unsafe-fixture",
+      label: "需要查看",
+      detail: "raw log stderr stack trace bearer super-secret-token",
+      severity: "high"
+    }
+  ]
+});
+assertNoUnsafeMcpCopy(JSON.stringify(unsafeMapped));
+
 const fallbackDetailModel = buildMcpServiceDetailViewModel({
   detail: null,
   error: sanitizeMcpDetailLoadError(new Error("/Users/example/secret-token-root token=super-secret-token")),
@@ -233,7 +308,7 @@ assert(!JSON.stringify(fallbackDetailModel).includes("super-secret-token"));
 
 const filteredBySource = filterMcpServiceItems([serviceItem, remoteItem], "Codex 配置");
 assert.deepEqual(filteredBySource.map((item) => item.id), ["mcp:remote-api"]);
-assert.equal(productSummary.counts.serviceCount, 6, "product totals remain separate from search result length");
+assert.equal(productSummary.counts.serviceCount, 50, "product totals remain separate from search result length");
 assert.equal(filteredBySource.length, 1);
 
 const mcpModuleSource = readFrontendFile("components/modules/McpModule.tsx");
@@ -257,4 +332,10 @@ console.log("mcpLibrary client tests passed");
 
 function readFrontendFile(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+function assertNoUnsafeMcpCopy(value: string): void {
+  for (const forbidden of ["super-secret-token", "secret-token-root", "token=", "bearer-token", "Bearer", "raw log", "stdout", "stderr", "stack trace", "https://", "node --"]) {
+    assert(!value.includes(forbidden), `MCP frontend copy must not expose unsafe fixture text: ${forbidden}`);
+  }
 }

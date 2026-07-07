@@ -153,7 +153,7 @@ export interface HomeMcpLibraryStats {
   viewCounts: Record<ResourceView, number>;
 }
 
-export const fallbackMcpToolHintsUnavailableText = "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
+export const fallbackMcpToolHintsUnavailableText = "暂时无法读取工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
 export const mcpSafetyText = "AIOS Desktop 只显示已保存的本机 MCP 基本信息；不启动服务、不连接端点、不调用 MCP 工具。";
 
 export async function getMcpLibrarySummary(): Promise<McpLibrarySummary | null> {
@@ -180,29 +180,35 @@ export function sanitizeMcpDetailLoadError(_error: unknown): string {
 export function buildMcpServiceDetailViewModel(input: McpServiceDetailViewInput): McpServiceDetailViewModel {
   const item = input.detail ?? input.fallbackItem;
   const mode: McpServiceDetailViewMode = input.detail ? "ready" : input.loading ? "loading" : "unavailable";
-  const title = item?.displayName?.trim() || "未命名 MCP 服务";
-  const toolHints = input.detail?.toolHints ?? item?.toolHints ?? [];
-  const attentionReasons = dedupeMcpAttentionReasons([...(item?.attentionReasons ?? []), ...(input.detail?.findings ?? [])]);
+  const title = safeMcpDisplayText(item?.displayName, "未命名 MCP 服务");
+  const toolHints = sanitizeMcpToolHints(input.detail?.toolHints ?? item?.toolHints ?? []);
+  const attentionReasons = sanitizeMcpAttentionReasons(dedupeMcpAttentionReasons([...(item?.attentionReasons ?? []), ...(input.detail?.findings ?? [])]));
+  const manualCheckSuggestions = (input.detail?.manualCheckSuggestions ?? [])
+    .map((suggestion) => safeMcpDisplayText(suggestion, "请在对应 AI 工具的 MCP 配置里人工查看来源。"))
+    .filter(Boolean);
+  const configSources = sanitizeMcpConfigSources(input.detail?.configSources ?? []);
+  const findings = sanitizeMcpAttentionReasons(input.detail?.findings ?? []);
+  const advancedRows = sanitizeMcpAdvancedRows(input.detail?.safeAdvancedMetadataSummary ?? []);
 
   return {
     mode,
     title,
-    whatItDoes: input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || (mode === "loading" ? "正在读取服务详情。" : "暂时无法判断这个服务具体提供哪些工具。"),
+    whatItDoes: safeMcpDisplayText(input.detail?.whatItDoes, "") || safeMcpDisplayText(item?.shortPurpose, "") || (mode === "loading" ? "正在读取服务详情。" : "暂时无法判断这个服务具体提供哪些工具。"),
     statusText: item?.status ? mcpStatusLabels[item.status] : "未检查",
-    sourceText: item?.sourceLabel?.trim() || "来源不明",
-    sourceKindText: item?.sourceKindLabel?.trim() || "来源不明",
-    configLocationText: item?.configLocationHint?.trim() || "暂时无法判断",
+    sourceText: safeMcpDisplayText(item?.sourceLabel, "来源不明"),
+    sourceKindText: safeMcpDisplayText(item?.sourceKindLabel, "来源不明"),
+    configLocationText: safeMcpPathHint(item?.configLocationHint) || "暂时无法判断",
     toolHintsText: formatMcpToolHints(toolHints, input.detail?.toolHintsUnavailableExplanation),
-    safetyText: input.detail?.safetySummary.text?.trim() || item?.safetyText?.trim() || mcpSafetyText,
-    commandNameText: item?.commandName?.trim() || "暂时无法判断",
+    safetyText: safeMcpDisplayText(input.detail?.safetySummary.text, "") || safeMcpDisplayText(item?.safetyText, "") || mcpSafetyText,
+    commandNameText: safeMcpCommandName(item?.commandName) || "暂时无法判断",
     transportText: item?.transport && item.transport !== "unknown" ? item.transport : "暂时无法判断",
-    requiredEnvNamesText: item?.requiredEnvNames?.length ? item.requiredEnvNames.join("、") : "暂时无法判断",
-    remoteHostText: item?.remoteHostHint?.trim() || "暂时无法判断",
+    requiredEnvNamesText: sanitizeMcpEnvNames(item?.requiredEnvNames ?? []).join("、") || "暂时无法判断",
+    remoteHostText: safeMcpRemoteHost(item?.remoteHostHint) || "暂时无法判断",
     attentionReasons,
-    manualCheckSuggestions: input.detail?.manualCheckSuggestions ?? [],
-    configSources: input.detail?.configSources ?? [],
-    findings: input.detail?.findings ?? [],
-    advancedRows: input.detail?.safeAdvancedMetadataSummary ?? [],
+    manualCheckSuggestions,
+    configSources,
+    findings,
+    advancedRows,
     notice: getMcpDetailNotice(mode, input.error)
   };
 }
@@ -238,13 +244,24 @@ export function getMcpLibraryItemIdFromResource(resource: AiosResource): string 
 export function mapMcpServiceItemToResource(item: McpServiceItem): AiosResource {
   const status = mapMcpStatus(item.status);
   const risk = mapMcpRisk(item.status, item.attentionReasons);
-  const toolHintText = item.toolHints.length > 0 ? item.toolHints.map((tool) => tool.name).join("、") : fallbackMcpToolHintsUnavailableText;
+  const displayName = safeMcpDisplayText(item.displayName, "未命名 MCP 服务");
+  const shortPurpose = safeMcpDisplayText(item.shortPurpose, "显示本机已保存的 MCP 服务配置线索。");
+  const sourceLabel = safeMcpDisplayText(item.sourceLabel, "来源不明");
+  const sourceKindLabel = safeMcpDisplayText(item.sourceKindLabel, "来源不明");
+  const configLocationHint = safeMcpPathHint(item.configLocationHint);
+  const toolHints = sanitizeMcpToolHints(item.toolHints);
+  const attentionReasons = sanitizeMcpAttentionReasons(item.attentionReasons);
+  const commandName = safeMcpCommandName(item.commandName);
+  const requiredEnvNames = sanitizeMcpEnvNames(item.requiredEnvNames);
+  const remoteHostHint = safeMcpRemoteHost(item.remoteHostHint);
+  const safetyText = safeMcpDisplayText(item.safetyText, mcpSafetyText);
+  const toolHintText = toolHints.length > 0 ? toolHints.map((tool) => tool.name).join("、") : fallbackMcpToolHintsUnavailableText;
   return {
     id: `mcp-library:${item.id}`,
-    name: item.displayName,
-    zhName: item.displayName,
-    zhDescription: item.shortPurpose,
-    zhCategory: `${item.sourceLabel} / MCP 服务`,
+    name: displayName,
+    zhName: displayName,
+    zhDescription: shortPurpose,
+    zhCategory: `${sourceLabel} / MCP 服务`,
     zhStatus: mcpStatusLabels[item.status],
     zhRisk: mcpRiskLabels[risk],
     zhCapability: "MCP 服务",
@@ -253,18 +270,18 @@ export function mapMcpServiceItemToResource(item: McpServiceItem): AiosResource 
     capabilityType: "mcp-server",
     status,
     risk,
-    path: item.configLocationHint,
-    paths: [item.configLocationHint].filter(Boolean),
-    description: item.shortPurpose,
+    path: configLocationHint,
+    paths: [configLocationHint].filter(Boolean),
+    description: shortPurpose,
     safetyProfile: {
       readOnly: true,
       writesGlobalState: false,
       secretExposureRisk: risk === "high" ? "medium" : "low",
       executionRisk: "low",
       notes: [
-        item.safetyText || mcpSafetyText,
+        safetyText || mcpSafetyText,
         "只显示环境变量名称，不读取或保存环境变量值。",
-        item.toolHints.length > 0 ? `已保存的工具名称线索：${toolHintText}` : fallbackMcpToolHintsUnavailableText
+        toolHints.length > 0 ? `已保存的工具名称线索：${toolHintText}` : fallbackMcpToolHintsUnavailableText
       ]
     },
     tokenPressure: {
@@ -277,18 +294,18 @@ export function mapMcpServiceItemToResource(item: McpServiceItem): AiosResource 
       corpusSource: "mcp-library-product",
       mcpLibraryItemId: item.id,
       mcpStatus: item.status,
-      sourceLabel: item.sourceLabel,
-      sourceKindLabel: item.sourceKindLabel,
-      configLocationHint: item.configLocationHint,
-      toolHintCount: item.toolHintCount,
-      toolHints: item.toolHints.map((tool) => tool.name),
-      toolHintsUnavailableExplanation: item.toolHints.length > 0 ? null : fallbackMcpToolHintsUnavailableText,
-      safetyText: item.safetyText,
-      attentionReasons: item.attentionReasons,
-      commandName: item.commandName,
+      sourceLabel,
+      sourceKindLabel,
+      configLocationHint,
+      toolHintCount: toolHints.length,
+      toolHints: toolHints.map((tool) => tool.name),
+      toolHintsUnavailableExplanation: toolHints.length > 0 ? null : fallbackMcpToolHintsUnavailableText,
+      safetyText,
+      attentionReasons,
+      commandName,
       transport: item.transport,
-      requiredEnvNames: item.requiredEnvNames,
-      remoteHostHint: item.remoteHostHint
+      requiredEnvNames,
+      remoteHostHint
     },
     updatedAt: normalizeTimestamp(item.updatedAt ?? item.lastSeenAt)
   };
@@ -301,12 +318,13 @@ export function filterMcpServiceItems(items: readonly McpServiceItem[], query: s
 }
 
 export function mcpServiceNeedsAttention(item: McpServiceItem): boolean {
-  return item.status !== "visible" && item.status !== "likelyAvailable";
+  return (item.status !== "visible" && item.status !== "likelyAvailable") || item.attentionReasons.length > 0;
 }
 
 function formatMcpToolHints(toolHints: readonly McpToolHint[], unavailableExplanation?: string): string {
-  if (toolHints.length > 0) return toolHints.map((tool) => tool.name).join("、");
-  return unavailableExplanation?.trim() || fallbackMcpToolHintsUnavailableText;
+  const names = sanitizeMcpToolHints(toolHints).map((tool) => tool.name);
+  if (names.length > 0) return names.join("、");
+  return safeMcpDisplayText(unavailableExplanation, fallbackMcpToolHintsUnavailableText);
 }
 
 function dedupeMcpAttentionReasons(reasons: readonly McpAttentionReason[]): McpAttentionReason[] {
@@ -345,6 +363,174 @@ function mcpItemSearchText(item: McpServiceItem): string {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function sanitizeMcpToolHints(toolHints: readonly McpToolHint[]): McpToolHint[] {
+  const seen = new Set<string>();
+  const output: McpToolHint[] = [];
+  for (const tool of toolHints) {
+    const name = safeMcpToolName(tool.name);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    output.push({
+      name,
+      purpose: safeMcpDisplayText(tool.purpose, "已保存的工具名称线索。"),
+      serviceLabel: safeMcpDisplayText(tool.serviceLabel, "MCP 服务"),
+      status: safeMcpDisplayText(tool.status, "unverified")
+    });
+  }
+  return output;
+}
+
+function sanitizeMcpAttentionReasons(reasons: readonly McpAttentionReason[]): McpAttentionReason[] {
+  return reasons.map((reason) => ({
+    code: safeMcpReasonCode(reason.code),
+    label: safeMcpDisplayText(reason.label, "需要查看"),
+    detail: safeMcpFindingDetail(reason.detail),
+    severity: safeMcpDisplayText(reason.severity, "medium")
+  }));
+}
+
+function sanitizeMcpConfigSources(sources: readonly McpConfigSourceSummary[]): McpConfigSourceSummary[] {
+  return sources.map((source) => ({
+    ...source,
+    id: safeMcpReasonCode(source.id),
+    sourceLabel: safeMcpDisplayText(source.sourceLabel, "来源不明"),
+    sourceKindLabel: safeMcpDisplayText(source.sourceKindLabel, "来源不明"),
+    pathHint: safeMcpPathHint(source.pathHint),
+    rootPathHint: source.rootPathHint ? safeMcpPathHint(source.rootPathHint) : null,
+    scanStatus: source.scanStatus ? safeMcpDisplayText(source.scanStatus, "未记录") : null
+  }));
+}
+
+function sanitizeMcpAdvancedRows(rows: readonly McpAdvancedMetadataRow[]): McpAdvancedMetadataRow[] {
+  return rows.map((row) => ({
+    label: safeMcpDisplayText(row.label, "高级信息"),
+    value: safeMcpDisplayText(row.value, "已隐藏敏感内容。")
+  }));
+}
+
+function sanitizeMcpEnvNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of names) {
+    const name = String(value).split("=")[0]?.trim() ?? "";
+    if (!isSafeMcpEnvName(name) || seen.has(name)) continue;
+    seen.add(name);
+    output.push(name);
+  }
+  return output;
+}
+
+function safeMcpDisplayText(value: string | null | undefined, fallback: string): string {
+  const text = value?.trim() ?? "";
+  if (!text) return fallback;
+  if (containsUnsafeMcpText(text) || containsUrl(text)) return fallback;
+  return text;
+}
+
+function safeMcpFindingDetail(value: string): string {
+  return safeMcpDisplayText(value, "已隐藏敏感内容。");
+}
+
+function safeMcpPathHint(value: string | null | undefined): string {
+  const text = value?.trim() ?? "";
+  if (!text) return "未记录";
+  if (containsUrl(text)) return safeMcpRemoteHost(text) ?? "[sensitive]";
+  if (containsRawMcpLogHint(text)) return "已隐藏敏感内容。";
+  return text
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((segment) => (isSecretLikeMcpSegment(segment) ? "[sensitive]" : segment))
+    .join("/");
+}
+
+function safeMcpCommandName(value: string | null | undefined): string {
+  const text = value?.trim() ?? "";
+  if (!text) return "";
+  const token = text.split(/\s+/)[0]?.replace(/\\/g, "/").split("/").at(-1)?.trim().replace(/^[`'",;(]+|[`'",;).]+$/g, "") ?? "";
+  if (!token || containsUnsafeMcpText(token) || containsUrl(token)) return "";
+  return token;
+}
+
+function safeMcpRemoteHost(value: string | null | undefined): string | null {
+  const text = value?.trim() ?? "";
+  if (!text) return null;
+  let host = "";
+  if (containsUrl(text)) {
+    try {
+      const match = text.match(/https?:\/\/[^\s"',;)]+/i);
+      host = match ? new URL(match[0]).hostname : "";
+    } catch {
+      host = "";
+    }
+  }
+  if (!host) {
+    host = text
+      .replace(/^[`'",;(]+|[`'",;).]+$/g, "")
+      .split("/")[0]
+      ?.split("@")
+      .at(-1)
+      ?.split(":")[0]
+      ?.trim() ?? "";
+  }
+  if (!host || containsUnsafeMcpText(host) || !/^[a-z0-9.-]+$/i.test(host)) return null;
+  return host;
+}
+
+function safeMcpToolName(value: string): string {
+  const text = value.trim();
+  if (!text || text.length > 80 || containsUnsafeMcpText(text)) return "";
+  return /^[A-Za-z0-9_.-]+$/.test(text) ? text : "";
+}
+
+function safeMcpReasonCode(value: string): string {
+  const text = value.trim();
+  if (!text || containsUnsafeMcpText(text)) return "redacted";
+  return text.replace(/[^A-Za-z0-9_.:-]/g, "-").slice(0, 120) || "redacted";
+}
+
+function isSafeMcpEnvName(value: string): boolean {
+  return /^[_A-Za-z][_A-Za-z0-9]{0,95}$/.test(value);
+}
+
+function containsUnsafeMcpText(value: string): boolean {
+  return containsRawMcpLogHint(value) || containsSecretLikeMcpText(value);
+}
+
+function containsRawMcpLogHint(value: string): boolean {
+  return /raw log|stdout|stderr|stack trace/i.test(value);
+}
+
+function containsSecretLikeMcpText(value: string): boolean {
+  return value
+    .replace(/\\/g, "/")
+    .split(/[/"'\s=:;,{}[\]()]+/)
+    .some(isSecretLikeMcpSegment);
+}
+
+function isSecretLikeMcpSegment(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  if (!lower || lower === "[sensitive]") return false;
+  return (
+    lower === ".env" ||
+    lower.endsWith(".env") ||
+    lower.includes("secret") ||
+    lower.includes("token") ||
+    lower.includes("credential") ||
+    lower.includes("password") ||
+    lower.includes("passwd") ||
+    lower.includes("private_key") ||
+    lower.includes("api_key") ||
+    lower.includes("apikey") ||
+    lower.includes("auth") ||
+    lower.includes("session") ||
+    lower.includes("cookie")
+  );
+}
+
+function containsUrl(value: string): boolean {
+  return /https?:\/\//i.test(value);
 }
 
 function mapMcpStatus(status: McpServiceStatus): ResourceStatus {

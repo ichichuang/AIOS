@@ -1744,7 +1744,7 @@ struct McpLibraryGroup {
 const MCP_SAFETY_TEXT: &str =
     "AIOS Desktop 只显示已保存的本机 MCP 基本信息；不会启动服务、不会连接端点、不会调用 MCP 工具。";
 const MCP_TOOL_HINTS_UNAVAILABLE_TEXT: &str =
-    "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
+    "暂时无法读取工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
 
 fn build_mcp_library_groups(conn: &Connection) -> Result<Vec<McpLibraryGroup>, ResourceStoreError> {
     let candidates = list_mcp_candidates_for_connection(conn)?;
@@ -1862,7 +1862,7 @@ fn mcp_library_counts(groups: &[McpLibraryGroup]) -> McpLibraryCounts {
             .filter(|candidate| candidate.resource.resource_kind == "mcp-config")
             .count() as u64;
         counts.tool_hint_count += item.tool_hint_count;
-        if mcp_status_needs_attention(&item.status) {
+        if mcp_service_needs_attention(&item) {
             counts.needs_attention_count += 1;
         }
         if item.status == McpServiceStatus::SourceUnknown {
@@ -2096,6 +2096,10 @@ fn mcp_status_needs_attention(status: &McpServiceStatus) -> bool {
     )
 }
 
+fn mcp_service_needs_attention(item: &McpServiceItem) -> bool {
+    mcp_status_needs_attention(&item.status) || !item.attention_reasons.is_empty()
+}
+
 fn mcp_status_label(status: &McpServiceStatus) -> &'static str {
     match status {
         McpServiceStatus::Visible => "可见",
@@ -2109,6 +2113,15 @@ fn mcp_status_label(status: &McpServiceStatus) -> &'static str {
 
 fn mcp_attention_reasons_for_group(group: &McpLibraryGroup) -> Vec<McpAttentionReason> {
     let mut reasons = Vec::new();
+    let primary = select_primary_mcp_candidate(group);
+    if merged_mcp_tool_hints(group, &primary.display_name).is_empty() {
+        reasons.push(mcp_attention_reason(
+            "missing-tool-list",
+            "工具列表不可用",
+            MCP_TOOL_HINTS_UNAVAILABLE_TEXT,
+            "low",
+        ));
+    }
     if group.candidates.len() > 1 {
         reasons.push(mcp_attention_reason(
             "duplicate-service-clues",
@@ -2766,7 +2779,7 @@ fn extract_assignment_value(description: &str, keys: &[&str]) -> Option<String> 
 fn mcp_manual_check_suggestions(item: &McpServiceItem) -> Vec<String> {
     let mut suggestions = vec![
         "请确认相关工具已经安装。".to_string(),
-        "请在对应 AI 工具的 MCP 配置里查看来源。".to_string(),
+        "请在对应 AI 工具的 MCP 配置里人工查看来源。".to_string(),
     ];
     if !item.required_env_names.is_empty() {
         suggestions.push("请确认需要的环境变量已经在你的 AI 工具里配置。".to_string());
@@ -6172,16 +6185,20 @@ mod tests {
         let summary = get_mcp_library_summary_for_path(&db_path).expect("mcp summary should load");
         let items = list_mcp_service_items_for_path(&db_path).expect("mcp items should load");
 
-        assert_eq!(summary.counts.mcp_config_count, 4);
-        assert_eq!(summary.counts.service_count, 6);
-        assert_eq!(summary.counts.verified_service_count, 2);
-        assert_eq!(summary.counts.unverified_service_count, 4);
-        assert_eq!(summary.counts.tool_hint_count, 0);
-        assert_eq!(summary.counts.needs_attention_count, 4);
+        assert!(
+            count_mcp_related_fixture_resources(&db_path) >= 50,
+            "P2C MCP acceptance fixture must simulate realistic scale"
+        );
+        assert_eq!(summary.counts.mcp_config_count, 35);
+        assert_eq!(summary.counts.service_count, 50);
+        assert_eq!(summary.counts.verified_service_count, 15);
+        assert_eq!(summary.counts.unverified_service_count, 35);
+        assert_eq!(summary.counts.tool_hint_count, 2);
+        assert_eq!(summary.counts.needs_attention_count, 49);
         assert_eq!(summary.counts.source_unknown_count, 1);
         assert_eq!(summary.counts.config_unreadable_count, 1);
         assert_eq!(summary.counts.service_count, items.len() as u64);
-        assert_eq!(summary.latest_search_or_scan_time, Some(1_725_100_036_000));
+        assert_eq!(summary.latest_search_or_scan_time, Some(1_725_100_042_000));
         assert!(summary.metadata_only);
         assert!(!summary.content_storage_enabled);
 
@@ -6190,6 +6207,12 @@ mod tests {
                 .iter()
                 .all(|item| !item.display_name.contains("not-promoted")),
             "unknown-local-resource rows must not be promoted into the MCP product list"
+        );
+        assert!(
+            items
+                .iter()
+                .all(|item| !item.display_name.contains("unknown-local-")),
+            "fixture-scale unknown local MCP-looking rows must not be promoted into services"
         );
 
         let filesystem = items
@@ -6216,6 +6239,63 @@ mod tests {
             .expect("project config clue should be visible");
         assert_eq!(project_config.status, McpServiceStatus::Visible);
         assert!(project_config.tool_hints.is_empty());
+        assert!(project_config
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "missing-tool-list"));
+
+        let static_tools = items
+            .iter()
+            .find(|item| item.display_name == "static-tools")
+            .expect("static tool hints should produce a verified service");
+        assert_eq!(static_tools.status, McpServiceStatus::LikelyAvailable);
+        assert_eq!(static_tools.tool_hint_count, 2);
+        assert_eq!(
+            static_tools
+                .tool_hints
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["read_file", "write_file"]
+        );
+        assert!(!static_tools
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "missing-tool-list"));
+
+        let local_stdio = items
+            .iter()
+            .find(|item| item.display_name == "local-stdio-00")
+            .expect("local stdio services should be represented");
+        assert_eq!(local_stdio.status, McpServiceStatus::LikelyAvailable);
+        assert!(local_stdio
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "missing-tool-list"));
+
+        let unsafe_unverified = items
+            .iter()
+            .find(|item| item.display_name == "unverified-remote.json")
+            .expect("unsafe unverified config clue should be represented");
+        assert_eq!(unsafe_unverified.status, McpServiceStatus::NeedsAttention);
+        assert_eq!(
+            unsafe_unverified.remote_host_hint.as_deref(),
+            Some("unverified.example.com")
+        );
+        assert!(unsafe_unverified
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "remote-host"));
+
+        let unchecked = items
+            .iter()
+            .find(|item| item.display_name == "unchecked-00")
+            .expect("unchecked services should be represented");
+        assert_eq!(unchecked.status, McpServiceStatus::Unchecked);
+        assert!(unchecked
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "unchecked-source"));
 
         let unknown = items
             .iter()
@@ -6267,7 +6347,7 @@ mod tests {
         assert!(detail.item.tool_hints.is_empty());
         assert_eq!(
             detail.tool_hints_unavailable_explanation,
-            "暂时无法判断工具列表。AIOS Desktop 不会启动服务来获取更多内容。"
+            "暂时无法读取工具列表。AIOS Desktop 不会启动服务来获取更多内容。"
         );
         assert!(detail
             .manual_check_suggestions
@@ -6283,10 +6363,32 @@ mod tests {
             .config_sources
             .iter()
             .all(|source| !source.path_hint.starts_with("/Users/example")));
+        assert_eq!(detail.config_sources.len(), 2);
+        assert!(detail.config_sources.iter().all(|source| source.verified));
+        assert!(detail
+            .item
+            .attention_reasons
+            .iter()
+            .any(|reason| reason.code == "missing-tool-list"));
         assert!(detail
             .findings
             .iter()
             .all(|finding| finding.detail == "已隐藏敏感内容。"));
+
+        let project = items
+            .iter()
+            .find(|item| item.display_name == "servers.json")
+            .expect("project config clue should exist");
+        let project_detail = get_mcp_service_detail_for_path(&db_path, &project.id)
+            .expect("project config detail should load");
+        assert!(project_detail
+            .config_sources
+            .iter()
+            .all(|source| !source.verified));
+        assert!(project_detail
+            .manual_check_suggestions
+            .iter()
+            .any(|suggestion| suggestion.contains("人工查看来源")));
 
         let remote = items
             .iter()
@@ -6996,7 +7098,173 @@ mod tests {
         )
         .expect("remote mcp fixture should persist");
 
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-static-tools",
+                37,
+                codex_mcp_source(),
+                vec![mcp_resource(
+                    "static-tools",
+                    "mcp-server",
+                    "mcp/static-tools.server.json",
+                    "mcp/static-tools.server.json",
+                    "Codex MCP metadata for static-tools. Command=node; transport=stdio; env names=.; tools=read_file write_file bearer-token.",
+                    "low",
+                    1_725_300_007_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("static tool mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-local-stdio-scale",
+                39,
+                codex_mcp_source(),
+                (0..10)
+                    .map(|index| {
+                        let name = format!("local-stdio-{index:02}");
+                        let path = format!("mcp/{name}.server.json");
+                        mcp_resource(
+                            &name,
+                            "mcp-server",
+                            &path,
+                            &path,
+                            &format!(
+                                "Codex MCP metadata for {name}. Command=node; transport=stdio; env names=."
+                            ),
+                            "low",
+                            1_725_300_010_000 + index,
+                            false,
+                            vec!["metadata-only", "mcp-not-executed"],
+                        )
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("local stdio scale mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-project-config-scale",
+                40,
+                project_mcp_source(),
+                (0..30)
+                    .map(|index| {
+                        let name = format!("project-config-{index:02}.json");
+                        let path = format!(".mcp/services/{name}");
+                        mcp_resource(
+                            &name,
+                            "mcp-config",
+                            &path,
+                            &path,
+                            "路径或文件名匹配 MCP 配置元数据。",
+                            "medium",
+                            1_725_300_020_000 + index,
+                            false,
+                            vec!["metadata-only", "mcp-not-executed"],
+                        )
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("project config scale mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-unverified-remote",
+                41,
+                manual_mcp_source(),
+                vec![mcp_resource(
+                    "unverified-remote.json",
+                    "mcp-config",
+                    "manual-mcp/unverified-remote.json",
+                    "manual-mcp/unverified-remote.json",
+                    "MCP config clue. transport=http; remote=https://bearer-token:super-secret-token@unverified.example.com/path?token=super-secret-token.",
+                    "medium",
+                    1_725_300_030_000,
+                    false,
+                    vec!["metadata-only", "mcp-not-executed"],
+                )],
+            ),
+        )
+        .expect("unverified remote mcp fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job(
+                "job-mcp-unknown-local-scale",
+                42,
+                project_mcp_source(),
+                (0..5)
+                    .map(|index| {
+                        let name = format!("unknown-local-{index:02}-mcp.json");
+                        let path = format!(".mcp/unknown/{name}");
+                        mcp_resource(
+                            &name,
+                            "unknown-local-resource",
+                            &path,
+                            &path,
+                            "unknown local MCP-looking metadata that must stay out of product MCP services",
+                            "low",
+                            1_725_300_040_000 + index,
+                            false,
+                            vec!["metadata-only"],
+                        )
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("unknown local scale fixture should persist");
+
+        persist_scan_job_for_path(
+            db_path,
+            skill_library_job_with_status(
+                "job-mcp-unchecked-scale",
+                "running",
+                43,
+                codex_mcp_source(),
+                (0..2)
+                    .map(|index| {
+                        let name = format!("unchecked-{index:02}");
+                        let path = format!("mcp/{name}.server.json");
+                        mcp_resource(
+                            &name,
+                            "mcp-server",
+                            &path,
+                            &path,
+                            &format!(
+                                "Codex MCP metadata for {name}. Command=node; transport=stdio; env names=."
+                            ),
+                            "low",
+                            1_725_300_050_000 + index,
+                            false,
+                            vec!["metadata-only", "mcp-not-executed"],
+                        )
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("unchecked scale mcp fixture should persist");
+
         insert_mcp_fixture_raw_findings(db_path);
+    }
+
+    fn count_mcp_related_fixture_resources(db_path: &PathBuf) -> u64 {
+        let conn = rusqlite::Connection::open(db_path).expect("db should open");
+        conn.query_row(
+            "SELECT COUNT(*) FROM resources
+             WHERE resource_kind IN ('mcp-config', 'mcp-server', 'unknown-local-resource')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("mcp fixture resource count should load")
     }
 
     fn mcp_resource(
@@ -7057,6 +7325,21 @@ mod tests {
             ],
         )
         .expect("mcp raw log finding should persist");
+        conn.execute(
+            "INSERT INTO resource_findings (
+                id, resource_id, scan_job_id, finding_kind, severity, message, safe_detail_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "finding:mcp-stack-trace",
+                resource_id,
+                "job-mcp-codex",
+                "stack-trace",
+                "high",
+                "stderr stack trace token=super-secret-token",
+                "{\"stderr\":\"stack trace token=super-secret-token\"}",
+            ],
+        )
+        .expect("mcp stack trace finding should persist");
     }
 
     fn assert_no_mcp_fixture_secrets(serialized: &str) {
@@ -7065,8 +7348,12 @@ mod tests {
             "bearer super-secret-token",
             "bearer-token",
             "raw log",
+            "stdout",
+            "stderr",
+            "stack trace",
             "worker stdout",
             "token=",
+            "--token",
             "https://",
             "/Users/example",
             "secret-token-root",
