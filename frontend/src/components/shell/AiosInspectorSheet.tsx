@@ -1,7 +1,7 @@
 import { Box, Divider, IconButton, Typography, useMediaQuery, useTheme } from "@mui/material";
 import Drawer from "@mui/material/Drawer";
 import CloseRounded from "@mui/icons-material/CloseRounded";
-import { useRef } from "react";
+import { lazy, Suspense, useRef } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import type { ResourceView } from "../../lib/filtering";
 import type { McpServiceDetailRuntimeState } from "../../lib/mcpLibrary";
@@ -10,7 +10,8 @@ import type { SkillCapabilityClassification } from "../../lib/skillCapabilityCla
 import type { SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { useInspectorMotion, useSmoothHoverSurfaceMotion } from "../../lib/useAiosMotion";
 import type { AiosResource } from "../../types/inventory";
-import { ResourceInspector } from "../inspector/ResourceInspector";
+
+const ResourceInspector = lazy(() => import("../inspector/ResourceInspector").then((module) => ({ default: module.ResourceInspector })));
 
 interface AiosInspectorSheetProps {
   activeView: ResourceView;
@@ -81,8 +82,21 @@ function InspectorBody({ activeView, resource, skillIdentity, skillCapability, m
       </Box>
       <Divider />
       <Box className="inspector-scroll">
-        <ResourceInspector activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} />
+        <Suspense fallback={<InspectorLoadingFallback />}>
+          <ResourceInspector activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} />
+        </Suspense>
       </Box>
+    </Box>
+  );
+}
+
+function InspectorLoadingFallback() {
+  return (
+    <Box className="inspector-loading-panel" role="status" aria-busy="true" aria-live="polite">
+      <Typography component="strong">正在加载详情</Typography>
+      <Typography color="text.secondary" variant="body2">
+        正在准备当前资源的详细信息...
+      </Typography>
     </Box>
   );
 }

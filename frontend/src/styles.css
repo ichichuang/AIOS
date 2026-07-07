@@ -468,6 +468,20 @@
   border-radius: 24px;
 }
 
+.module-loading-panel {
+  border: 1px solid var(--aios-outline);
+  background: var(--aios-surface);
+}
+
+.module-loading-body {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-content: center;
+  padding: 20px;
+  text-align: center;
+}
+
 .module-header {
   display: flex;
   align-items: center;
@@ -2835,6 +2849,16 @@
   align-content: start;
   gap: 10px;
   padding-right: 1px;
+}
+
+.inspector-loading-panel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--aios-surface);
 }
 
 .inspector-panel {

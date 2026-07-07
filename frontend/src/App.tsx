@@ -1,20 +1,10 @@
 import { Box, Typography } from "@mui/material";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { AiosConsoleShell } from "./components/shell/AiosConsoleShell";
-import { AdvancedModule } from "./components/modules/AdvancedModule";
 import { DashboardModule } from "./components/modules/DashboardModule";
-import { CustomScanModule } from "./components/modules/CustomScanModule";
-import { LegacyModule } from "./components/modules/LegacyModule";
-import { McpModule } from "./components/modules/McpModule";
-import { PoliciesModule } from "./components/modules/PoliciesModule";
-import { ProjectPacksModule } from "./components/modules/ProjectPacksModule";
-import { ReportsModule } from "./components/modules/ReportsModule";
-import { ScriptsModule } from "./components/modules/ScriptsModule";
-import { SkillsModule } from "./components/modules/SkillsModule";
-import { ValidatorsModule } from "./components/modules/ValidatorsModule";
 import type { AiosModuleProps, ResourceSelectionContext } from "./components/modules/moduleUtils";
 import { zhCN } from "./i18n/zh-CN";
-import { buildResourceDisplayMap, filterResourceList, getDefaultResourcesForDataSource, getModuleResourcesForDataSource, getViewCountsForDataSource, type ResourceView } from "./lib/filtering";
+import { buildResourceDisplayMap, filterResourceList, getDefaultResourcesForDataSource, getModuleResourcesForDataSource, getViewCountsForDataSource, VIEW_LABELS, type ResourceView } from "./lib/filtering";
 import { loadInventory } from "./lib/loadInventory";
 import { markAiosPerf } from "./lib/perf";
 import {
@@ -67,6 +57,17 @@ import { getAdvancedSubviewParent } from "./lib/productShell";
 import { useModuleSwapMotion, useSelectedCardEmphasisMotion } from "./lib/useAiosMotion";
 
 import type { AiosInventory, AiosResource } from "./types/inventory";
+
+const AdvancedModule = lazy(() => import("./components/modules/AdvancedModule").then((module) => ({ default: module.AdvancedModule })));
+const CustomScanModule = lazy(() => import("./components/modules/CustomScanModule").then((module) => ({ default: module.CustomScanModule })));
+const LegacyModule = lazy(() => import("./components/modules/LegacyModule").then((module) => ({ default: module.LegacyModule })));
+const McpModule = lazy(() => import("./components/modules/McpModule").then((module) => ({ default: module.McpModule })));
+const PoliciesModule = lazy(() => import("./components/modules/PoliciesModule").then((module) => ({ default: module.PoliciesModule })));
+const ProjectPacksModule = lazy(() => import("./components/modules/ProjectPacksModule").then((module) => ({ default: module.ProjectPacksModule })));
+const ReportsModule = lazy(() => import("./components/modules/ReportsModule").then((module) => ({ default: module.ReportsModule })));
+const ScriptsModule = lazy(() => import("./components/modules/ScriptsModule").then((module) => ({ default: module.ScriptsModule })));
+const SkillsModule = lazy(() => import("./components/modules/SkillsModule").then((module) => ({ default: module.SkillsModule })));
+const ValidatorsModule = lazy(() => import("./components/modules/ValidatorsModule").then((module) => ({ default: module.ValidatorsModule })));
 
 export default function App() {
   const [inventory, setInventory] = useState<AiosInventory | null>(null);
@@ -518,9 +519,31 @@ export default function App() {
       onViewChange={handleViewChange}
     >
       <Box ref={moduleRef} className="module-transition-scope">
-        {renderModule(renderedView, moduleProps)}
+        <Suspense fallback={<ModuleLoadingFallback view={renderedView} />}>{renderModule(renderedView, moduleProps)}</Suspense>
       </Box>
     </AiosConsoleShell>
+  );
+}
+
+function ModuleLoadingFallback({ view }: { view: ResourceView }) {
+  return (
+    <Box className="module-surface module-loading-panel" role="status" aria-busy="true" aria-live="polite">
+      <Box className="module-header">
+        <Box className="module-header-title">
+          <Typography component="h2" variant="h2">
+            {VIEW_LABELS[view]}
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            正在加载模块
+          </Typography>
+        </Box>
+      </Box>
+      <Box className="module-loading-body">
+        <Typography color="text.secondary" variant="body2">
+          正在准备内容...
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
