@@ -65,8 +65,13 @@ interface InspectorBodyProps {
 
 function InspectorBody({ activeView, resource, skillIdentity, skillCapability, mcpDetailState, skillDetailState, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  const quietHover = activeView === "skills";
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
-  useSmoothHoverSurfaceMotion(bodyRef, resource?.id ?? "empty", { selector: ".inspector-panel, .aios-inspector-section, .copy-button", scale: 1.006, y: -1 });
+  useSmoothHoverSurfaceMotion(bodyRef, resource?.id ?? "empty", {
+    selector: quietHover ? ":not(*)" : ".inspector-panel, .aios-inspector-section, .copy-button",
+    scale: 1.006,
+    y: -1
+  });
 
   return (
     <Box className="inspector-body" ref={bodyRef} data-aios-motion-surface>

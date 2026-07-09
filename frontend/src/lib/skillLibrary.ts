@@ -112,12 +112,16 @@ export interface SkillDetailViewModel {
   title: string;
   originalName: string;
   whatItDoes: string;
+  whatItDoesKnown: boolean;
   whenToUse: string;
+  whenToUseKnown: boolean;
   aliasesText: string | null;
   tagsText: string | null;
   capabilitiesText: string | null;
   availableInToolsText: string;
+  availableInToolsKnown: boolean;
   howToUse: string;
+  howToUseKnown: boolean;
   sourceText: string;
   statusText: string;
   usageKnown: boolean;
@@ -125,7 +129,9 @@ export interface SkillDetailViewModel {
   sourceSummaries: SkillSourceSummary[];
   duplicateSources: SkillSourceSummary[];
   advancedRows: SkillAdvancedMetadataRow[];
+  safetyRows: SkillAdvancedMetadataRow[];
   notice: string | null;
+  unknownNotice: string | null;
 }
 
 export interface SkillLibraryModuleState {
@@ -188,6 +194,14 @@ export function sanitizeSkillDetailLoadError(_error: unknown): string {
   return "无法读取技能详情。请在高级信息里查看来源。";
 }
 
+const PLACEHOLDER_NOTICE_PREFIX = "暂时无法判断";
+
+function isKnownSkillText(value: string | null | undefined): value is string {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && !trimmed.startsWith(PLACEHOLDER_NOTICE_PREFIX);
+}
+
 export function buildSkillDetailViewModel(input: SkillDetailViewInput): SkillDetailViewModel {
   const item = input.detail ?? input.fallbackItem;
   const mode: SkillDetailViewMode = input.detail ? "ready" : input.loading ? "loading" : "unavailable";
@@ -198,20 +212,38 @@ export function buildSkillDetailViewModel(input: SkillDetailViewInput): SkillDet
       : fallbackSkillUsageText;
   const usageKnown = input.detail?.usageSummary.usageKnown ?? false;
   const availableInTools = input.detail?.usageSummary.availableInTools ?? item?.availableInTools ?? [];
+  const visibleTools = availableInTools.filter((tool) => tool && tool !== "Unknown");
+  const availableInToolsKnown = visibleTools.length > 0;
   const attentionReasons = dedupeSkillAttentionReasons([...(item?.attentionReasons ?? []), ...(input.detail?.findings ?? [])]);
   const title = item?.displayName?.trim() || item?.originalName?.trim() || "未命名技能";
+
+  const whatItDoesRaw = input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || "";
+  const whatItDoesKnown = isKnownSkillText(whatItDoesRaw);
+  const whenToUseRaw = input.detail?.whenToUse?.trim() || "";
+  const whenToUseKnown = isKnownSkillText(whenToUseRaw);
+  const howToUseKnown = isKnownSkillText(usageText) && usageText.trim() !== fallbackSkillUsageText;
+
+  const hasUnknownFields = mode === "ready" && (!whatItDoesKnown || !whenToUseKnown || !availableInToolsKnown || !howToUseKnown);
 
   return {
     mode,
     title,
     originalName: item?.originalName?.trim() || title,
-    whatItDoes: input.detail?.whatItDoes?.trim() || item?.shortPurpose?.trim() || "暂时无法判断它能做什么。请在高级信息里查看来源。",
-    whenToUse: input.detail?.whenToUse?.trim() || (mode === "loading" ? "正在读取适用场景。" : "暂时无法判断适合什么时候用。请在高级信息里查看来源。"),
+    whatItDoes: whatItDoesKnown ? whatItDoesRaw : "暂时无法判断它能做什么。请在高级信息里查看来源。",
+    whatItDoesKnown,
+    whenToUse: whenToUseKnown
+      ? whenToUseRaw
+      : mode === "loading"
+        ? "正在读取适用场景。"
+        : "暂时无法判断适合什么时候用。请在高级信息里查看来源。",
+    whenToUseKnown,
     aliasesText: formatSkillMetadataList(item?.aliases),
     tagsText: formatSkillMetadataList(item?.tags),
     capabilitiesText: formatSkillMetadataList(item?.capabilities),
-    availableInToolsText: formatSkillTools(availableInTools),
-    howToUse: usageText?.trim() || fallbackSkillUsageText,
+    availableInToolsText: availableInToolsKnown ? visibleTools.join("、") : "暂时无法判断",
+    availableInToolsKnown,
+    howToUse: howToUseKnown ? usageText.trim() : fallbackSkillUsageText,
+    howToUseKnown,
     sourceText: item?.sourceLabel?.trim() || "来源不明",
     statusText: item?.status ? skillStatusLabels[item.status] : "未检查",
     usageKnown,
@@ -219,7 +251,9 @@ export function buildSkillDetailViewModel(input: SkillDetailViewInput): SkillDet
     sourceSummaries: input.detail?.sourceSummaries ?? [],
     duplicateSources: input.detail?.relatedDuplicateSources ?? [],
     advancedRows: input.detail?.safeAdvancedMetadataSummary ?? [],
-    notice: getSkillDetailNotice(mode, input.error)
+    safetyRows: input.detail?.safeAdvancedMetadataSummary ?? [],
+    notice: getSkillDetailNotice(mode, input.error),
+    unknownNotice: hasUnknownFields ? "该技能的部分说明暂时无法判断。可在来源与高级信息中查看已记录的线索。" : null
   };
 }
 

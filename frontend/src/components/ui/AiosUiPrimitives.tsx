@@ -7,11 +7,16 @@ import { useAiosLayoutModuleContentRef, useAiosLayoutModuleHeaderRef, useAiosLay
 import {
   useAccordionRevealMotion,
   useEmptyStateRevealMotion,
-  useHoverCardLiftMotion,
   useListRowStaggerMotion,
   useSegmentedIndicatorMotion,
+  useSmoothHoverSurfaceMotion,
   useVisibleCardRevealMotion
 } from "../../lib/useAiosMotion";
+import type { RefObject } from "react";
+
+function useOptionalHoverCardLiftMotion(scope: RefObject<HTMLElement>, dependency: unknown, disabled: boolean): void {
+  useSmoothHoverSurfaceMotion(scope, dependency, disabled ? { selector: ":not(*)" } : undefined);
+}
 
 export interface AiosUsageChip {
   label: string;
@@ -45,9 +50,22 @@ interface AiosModuleFrameProps {
   ariaLabel?: string;
   backButton?: ReactNode;
   motionKey?: unknown;
+  disableHoverMotion?: boolean;
 }
 
-export function AiosModuleFrame({ view, summary, count, actions, children, className, contentClassName, ariaLabel, backButton, motionKey }: AiosModuleFrameProps) {
+export function AiosModuleFrame({
+  view,
+  summary,
+  count,
+  actions,
+  children,
+  className,
+  contentClassName,
+  ariaLabel,
+  backButton,
+  motionKey,
+  disableHoverMotion = false
+}: AiosModuleFrameProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const moduleHeaderRef = useAiosLayoutModuleHeaderRef();
   const moduleContentRef = useAiosLayoutModuleContentRef();
@@ -63,7 +81,7 @@ export function AiosModuleFrame({ view, summary, count, actions, children, class
   useVisibleCardRevealMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
   useListRowStaggerMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
   useEmptyStateRevealMotion(contentRef, motionKey ?? `${view}:${count ?? "none"}`);
-  useHoverCardLiftMotion(contentRef, motionKey ?? view);
+  useOptionalHoverCardLiftMotion(contentRef, motionKey ?? view, disableHoverMotion);
 
   useEffect(() => {
     requestMeasure();
@@ -241,13 +259,15 @@ export function AiosSectionRail({
   options,
   value,
   onChange,
-  className
+  className,
+  disableItemHover = false
 }: {
   ariaLabel: string;
   options: AiosSectionRailOption[];
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  disableItemHover?: boolean;
 }) {
   const handleClick = useCallback(
     (nextValue: string) => () => {
@@ -273,9 +293,8 @@ export function AiosSectionRail({
             role="tab"
             aria-selected={active}
             data-section-rail-active={active ? "true" : undefined}
-            data-aios-hover-card
-            data-aios-motion-surface
             data-aios-selected-surface={active ? "true" : undefined}
+            {...(disableItemHover ? {} : { "data-aios-hover-card": "true", "data-aios-motion-surface": "true" })}
             onClick={handleClick(option.value)}
           >
             <Typography component="span">{option.label}</Typography>

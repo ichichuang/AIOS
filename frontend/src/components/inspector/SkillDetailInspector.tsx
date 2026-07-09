@@ -2,7 +2,6 @@ import { Box, Chip, Typography } from "@mui/material";
 import { memo } from "react";
 import {
   buildSkillDetailViewModel,
-  fallbackSkillUsageText,
   type SkillDetail,
   type SkillDetailViewModel,
   type SkillListItem,
@@ -25,6 +24,7 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
     ...view.advancedRows,
     ...sourceRows.map((row) => ({ ...row, label: `来源 ${row.label}` }))
   ];
+  const hasAdvancedContent = advancedRows.length > 0 || duplicateRows.length > 0;
 
   return (
     <Box className="inspector-panel-stack skill-detail-inspector">
@@ -58,13 +58,21 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
           </Box>
         )}
 
-        <DetailTextBlock title="它能做什么" value={view.whatItDoes} />
-        <DetailTextBlock title="适合什么时候用" value={view.whenToUse} />
-        {view.capabilitiesText && <DetailTextBlock title="能力线索" value={view.capabilitiesText} />}
-        {view.tagsText && <DetailTextBlock title="标签" value={view.tagsText} />}
-        {view.aliasesText && <DetailTextBlock title="别名" value={view.aliasesText} />}
-        <DetailTextBlock title="可在哪些 AI 工具中使用" value={view.availableInToolsText} />
-        <DetailTextBlock title="如何使用" value={view.howToUse || fallbackSkillUsageText} muted={!view.usageKnown} />
+        {view.unknownNotice && !view.notice && (
+          <Box className="inspector-boundary-callout info">
+            <Box className="inspector-boundary-callout-copy">
+              <Typography component="strong">部分说明待补充</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {view.unknownNotice}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
+        {view.whatItDoesKnown && <DetailTextBlock title="它能做什么" value={view.whatItDoes} />}
+        {view.whenToUseKnown && <DetailTextBlock title="适合什么时候用" value={view.whenToUse} />}
+        {view.howToUseKnown && <DetailTextBlock title="如何使用" value={view.howToUse} />}
+        {view.availableInToolsKnown && <DetailTextBlock title="可在哪些 AI 工具中使用" value={view.availableInToolsText} />}
       </Box>
 
       <Box className="inspector-panel skill-detail-secondary-panel">
@@ -82,20 +90,47 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
             </Box>
           </Box>
         )}
+        {(view.aliasesText || view.tagsText || view.capabilitiesText) && (
+          <Box className="skill-detail-section">
+            <Typography className="inspector-field-label" component="p">
+              元数据线索
+            </Typography>
+            <AiosTechnicalDetails
+              rows={[
+                ...(view.aliasesText ? [{ label: "别名", value: view.aliasesText }] : []),
+                ...(view.tagsText ? [{ label: "标签", value: view.tagsText }] : []),
+                ...(view.capabilitiesText ? [{ label: "能力", value: view.capabilitiesText }] : [])
+              ]}
+            />
+          </Box>
+        )}
       </Box>
 
-      <Box className="inspector-technical-stack" aria-label="高级来源信息">
-        <AiosInspectorSection title="高级来源信息">
-          <AiosTechnicalDetails rows={advancedRows.length > 0 ? advancedRows : [{ label: "详情状态", value: "暂时没有更多来源信息。" }]}>
-            {duplicateRows.length > 0 && (
-              <Box className="skill-detail-advanced-duplicates">
-                <Typography variant="body2">重复来源路径提示</Typography>
-                <AiosTechnicalDetails rows={duplicateRows} />
-              </Box>
-            )}
-          </AiosTechnicalDetails>
-        </AiosInspectorSection>
-      </Box>
+      {view.safetyRows.length > 0 && (
+        <Box className="inspector-panel" aria-label="安全边界">
+          <Box className="skill-detail-section">
+            <Typography className="inspector-field-label" component="p">
+              安全边界
+            </Typography>
+            <AiosTechnicalDetails rows={view.safetyRows} />
+          </Box>
+        </Box>
+      )}
+
+      {hasAdvancedContent && (
+        <Box className="inspector-technical-stack" aria-label="高级来源信息">
+          <AiosInspectorSection title="高级来源信息">
+            <AiosTechnicalDetails rows={advancedRows}>
+              {duplicateRows.length > 0 && (
+                <Box className="skill-detail-advanced-duplicates">
+                  <Typography variant="body2">重复来源路径提示</Typography>
+                  <AiosTechnicalDetails rows={duplicateRows} />
+                </Box>
+              )}
+            </AiosTechnicalDetails>
+          </AiosInspectorSection>
+        </Box>
+      )}
     </Box>
   );
 });

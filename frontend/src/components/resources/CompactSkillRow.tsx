@@ -44,7 +44,6 @@ function CompactSkillRowComponent({ ariaAttributes, index, style, rows, selected
       <Box
         aria-pressed={selected}
         className={selected ? "compact-skill-row-inner selected" : "compact-skill-row-inner"}
-        data-aios-hover-card
         data-resource-id={resource.id}
         data-aios-selected-surface={selected ? "true" : undefined}
         role="button"

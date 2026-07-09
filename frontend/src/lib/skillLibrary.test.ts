@@ -236,6 +236,34 @@ assert(!JSON.stringify(fallbackDetailModel).includes("/Users/example"));
 assert(!JSON.stringify(fallbackDetailModel).includes("super-secret-token"));
 assert(!Object.keys(detailModel).includes("visibleCount"));
 
+const sparseDetail: SkillDetail = {
+  ...sourceUnknownItem,
+  whatItDoes: "",
+  whenToUse: null,
+  howToUse: null,
+  usageSummary: {
+    usageKnown: false,
+    usageText: fallbackSkillUsageText,
+    availableInTools: ["Unknown"]
+  },
+  sourceSummaries: [],
+  relatedDuplicateSources: [],
+  safeAdvancedMetadataSummary: [],
+  findings: []
+};
+const unknownDetailModel = buildSkillDetailViewModel({
+  detail: sparseDetail,
+  error: null,
+  fallbackItem: sourceUnknownItem,
+  loading: false
+});
+assert.equal(unknownDetailModel.mode, "ready");
+assert.equal(unknownDetailModel.whatItDoesKnown, false);
+assert.equal(unknownDetailModel.whenToUseKnown, false);
+assert.equal(unknownDetailModel.availableInToolsKnown, false);
+assert.equal(unknownDetailModel.howToUseKnown, false);
+assert.ok(unknownDetailModel.unknownNotice, "unknown fields must produce a single consolidated notice instead of repeating placeholder text in every section");
+
 const searchableItems: SkillListItem[] = [
   item,
   sourceUnknownItem,
@@ -402,6 +430,22 @@ for (const requiredStatusLabel of ["全部", "可用", "需要处理", "重复",
 assert(skillsModuleSource.includes("没有匹配结果"), "Skills must show a user-friendly search-empty state");
 assert(skillsModuleSource.includes("当前筛选没有结果"), "Skills must show a user-friendly filter-empty state");
 assert(skillsModuleSource.includes("productVirtualListHeight"), "Skills layout must retain deterministic height helper");
+
+assert(skillsModuleSource.includes("groupSkillLibraryItemsByCapability"), "Skills product library must group by capability/category first");
+assert(!skillsModuleSource.includes("groupSkillLibraryItemsBySource"), "Skills product library must not use source-first grouping as the default skeleton");
+assert(skillsModuleSource.includes("disableHoverMotion"), "Skills module must disable noisy hover/lift motion");
+assert(skillsModuleSource.includes("disableItemHover"), "Skills category rail must disable item hover lift");
+assert(!skillRowSource.includes("data-aios-hover-card"), "Skill rows must not register hover-card lift motion");
+assert(skillRowSource.includes("capability-chip"), "Skill rows must expose functional category chips");
+assert(skillRowSource.includes("tool-chip"), "Skill rows must expose available AI tool chips");
+assert(skillRowSource.includes("source-chip"), "Skill rows must keep source as secondary metadata");
+
+const inspectorSource = readFrontendFile("components/inspector/SkillDetailInspector.tsx");
+assert(inspectorSource.includes("它能做什么"));
+assert(inspectorSource.includes("适合什么时候用"));
+assert(inspectorSource.includes("如何使用"));
+assert(inspectorSource.includes("可在哪些 AI 工具中使用"));
+assert(inspectorSource.includes("安全边界"));
 
 console.log("skillLibrary client tests passed");
 
