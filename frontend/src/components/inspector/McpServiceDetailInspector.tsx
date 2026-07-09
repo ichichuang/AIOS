@@ -1,8 +1,12 @@
 import { Box, Chip, Typography } from "@mui/material";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import {
+  buildMcpCompactDetailFields,
   buildMcpServiceDetailViewModel,
   fallbackMcpToolHintsUnavailableText,
+  isUnknownMcpValue,
+  mcpStaticSourceLabel,
+  mcpUnverifiedLabel,
   type McpConfigSourceSummary,
   type McpServiceDetail,
   type McpServiceDetailViewModel,
@@ -19,11 +23,12 @@ interface McpServiceDetailInspectorProps {
 
 export const McpServiceDetailInspector = memo(function McpServiceDetailInspector({ detail, fallbackItem, loading, error }: McpServiceDetailInspectorProps) {
   const view = buildMcpServiceDetailViewModel({ detail, fallbackItem, loading, error });
+  const compactFields = useMemo(() => buildMcpCompactDetailFields(view), [view]);
   const sourceRows = buildConfigSourceRows(view.configSources);
-  const advancedRows = [
-    ...view.advancedRows,
-    ...sourceRows.map((row) => ({ ...row, label: `来源 ${row.label}` }))
-  ];
+  const hasAdvancedRows = view.advancedRows.length > 0 || sourceRows.length > 0;
+  const showWhatItDoes = !isUnknownMcpValue(view.whatItDoes) && view.whatItDoes !== fallbackMcpToolHintsUnavailableText;
+  const showConfigLocation = !isUnknownMcpValue(view.configLocationText);
+  const showToolHints = !isUnknownMcpValue(view.toolHintsText) && view.toolHintsText !== fallbackMcpToolHintsUnavailableText;
 
   return (
     <Box className="inspector-panel-stack mcp-detail-inspector">
@@ -36,9 +41,6 @@ export const McpServiceDetailInspector = memo(function McpServiceDetailInspector
             <Typography component="h3" variant="h3">
               {view.title}
             </Typography>
-            <Box className="code-pill inspector-code" component="code" title={view.title}>
-              {view.title}
-            </Box>
           </Box>
           <Box className="inspector-primary-actions">
             <Chip className={statusChipClassName(view.statusText)} label={view.statusText} size="small" />
@@ -47,10 +49,10 @@ export const McpServiceDetailInspector = memo(function McpServiceDetailInspector
         </Box>
 
         <Box className="inspector-context-grid" aria-label="MCP 服务摘要">
-          <DetailContextItem label="服务名称" value={view.title} />
           <DetailContextItem label="状态" value={view.statusText} />
-          <DetailContextItem label="来源" value={view.sourceText} />
+          <DetailContextItem label="来源" value={`${mcpStaticSourceLabel} · ${view.sourceText}`} />
           <DetailContextItem label="工具线索" value={view.toolHintsText} />
+          <DetailContextItem label="验证说明" value={mcpUnverifiedLabel} />
         </Box>
 
         {view.notice && (
@@ -64,28 +66,31 @@ export const McpServiceDetailInspector = memo(function McpServiceDetailInspector
           </Box>
         )}
 
-        <DetailTextBlock title="它能做什么" value={view.whatItDoes} muted={view.whatItDoes === fallbackMcpToolHintsUnavailableText} />
-        <DetailTextBlock title="配置位置" value={view.configLocationText} code />
-        <DetailTextBlock title="工具线索" value={view.toolHintsText} muted={view.toolHintsText === fallbackMcpToolHintsUnavailableText} />
+        {showWhatItDoes && <DetailTextBlock title="它能做什么" value={view.whatItDoes} />}
+        {showConfigLocation && <DetailTextBlock title="配置位置" value={view.configLocationText} code />}
+        {showToolHints && <DetailTextBlock title="工具线索" value={view.toolHintsText} />}
         <DetailTextBlock title="安全说明" value={view.safetyText} />
       </Box>
 
       <Box className="inspector-panel skill-detail-secondary-panel">
-        <Box className="inspector-context-grid" aria-label="安全配置线索">
-          <DetailContextItem label="命令名称" value={view.commandNameText} />
-          <DetailContextItem label="传输方式" value={view.transportText} />
-          <DetailContextItem label="环境变量名" value={view.requiredEnvNamesText} />
-          <DetailContextItem label="远程主机" value={view.remoteHostText} />
-        </Box>
+        {compactFields.length > 0 && (
+          <Box className="inspector-context-grid" aria-label="安全配置线索">
+            {compactFields.map((field) => (
+              <DetailContextItem key={field.label} label={field.label} value={field.value} />
+            ))}
+          </Box>
+        )}
         <AttentionReasonList view={view} />
         <ManualSuggestionList view={view} />
       </Box>
 
-      <Box className="inspector-technical-stack" aria-label="高级来源信息">
-        <AiosInspectorSection title="高级来源信息">
-          <AiosTechnicalDetails rows={advancedRows.length > 0 ? advancedRows : [{ label: "详情状态", value: "暂时没有更多来源信息。" }]} />
-        </AiosInspectorSection>
-      </Box>
+      {hasAdvancedRows && (
+        <Box className="inspector-technical-stack" aria-label="高级来源信息">
+          <AiosInspectorSection title="高级来源信息">
+            <AiosTechnicalDetails rows={collapseAdvancedRows(view.advancedRows, sourceRows)} />
+          </AiosInspectorSection>
+        </Box>
+      )}
     </Box>
   );
 });
@@ -121,52 +126,44 @@ function DetailTextBlock({ title, value, code = false, muted = false }: { title:
 }
 
 function AttentionReasonList({ view }: { view: McpServiceDetailViewModel }) {
+  if (view.attentionReasons.length === 0) return null;
+
   return (
     <Box className="skill-detail-section">
       <Typography className="inspector-field-label" component="p">
         需要处理的原因
       </Typography>
-      {view.attentionReasons.length > 0 ? (
-        <Box className="skill-detail-reason-list" component="ul">
-          {view.attentionReasons.map((reason) => (
-            <li key={reason.code || reason.label}>
-              <Typography component="strong">{reason.label}</Typography>
-              <Typography color="text.secondary" variant="body2">
-                {reason.detail}
-              </Typography>
-            </li>
-          ))}
-        </Box>
-      ) : (
-        <Typography color="text.secondary" variant="body2">
-          当前没有需要处理的原因。
-        </Typography>
-      )}
+      <Box className="skill-detail-reason-list" component="ul">
+        {view.attentionReasons.map((reason) => (
+          <li key={reason.code || reason.label}>
+            <Typography component="strong">{reason.label}</Typography>
+            <Typography color="text.secondary" variant="body2">
+              {reason.detail}
+            </Typography>
+          </li>
+        ))}
+      </Box>
     </Box>
   );
 }
 
 function ManualSuggestionList({ view }: { view: McpServiceDetailViewModel }) {
+  if (view.manualCheckSuggestions.length === 0) return null;
+
   return (
     <Box className="skill-detail-section">
       <Typography className="inspector-field-label" component="p">
         人工检查建议
       </Typography>
-      {view.manualCheckSuggestions.length > 0 ? (
-        <Box className="skill-detail-reason-list" component="ul">
-          {view.manualCheckSuggestions.map((suggestion) => (
-            <li key={suggestion}>
-              <Typography color="text.secondary" variant="body2">
-                {suggestion}
-              </Typography>
-            </li>
-          ))}
-        </Box>
-      ) : (
-        <Typography color="text.secondary" variant="body2">
-          请在对应 AI 工具的 MCP 配置里人工查看来源。
-        </Typography>
-      )}
+      <Box className="skill-detail-reason-list" component="ul">
+        {view.manualCheckSuggestions.map((suggestion) => (
+          <li key={suggestion}>
+            <Typography color="text.secondary" variant="body2">
+              {suggestion}
+            </Typography>
+          </li>
+        ))}
+      </Box>
     </Box>
   );
 }
@@ -174,15 +171,21 @@ function ManualSuggestionList({ view }: { view: McpServiceDetailViewModel }) {
 function buildConfigSourceRows(sources: readonly McpConfigSourceSummary[]): AiosTechnicalDetailRow[] {
   return sources.flatMap((source, index) => {
     const prefix = `${index + 1}`;
-    return [
-      { label: `${prefix} 标签`, value: source.sourceLabel || "来源不明" },
-      { label: `${prefix} 类型`, value: source.sourceKindLabel || "来源不明" },
-      { label: `${prefix} 路径提示`, value: source.pathHint || "未记录", code: Boolean(source.pathHint) },
-      { label: `${prefix} 根目录提示`, value: source.rootPathHint || "未记录", code: Boolean(source.rootPathHint) },
-      { label: `${prefix} 记录状态`, value: source.scanStatus || "未记录" },
-      { label: `${prefix} 问题数`, value: source.findingCount }
-    ];
+    const rows: AiosTechnicalDetailRow[] = [];
+    rows.push({ label: `${prefix} 标签`, value: source.sourceLabel || "来源不明" });
+    rows.push({ label: `${prefix} 类型`, value: source.sourceKindLabel || "来源不明" });
+    if (source.pathHint) rows.push({ label: `${prefix} 路径提示`, value: source.pathHint, code: true });
+    if (source.rootPathHint) rows.push({ label: `${prefix} 根目录提示`, value: source.rootPathHint, code: true });
+    if (source.scanStatus) rows.push({ label: `${prefix} 记录状态`, value: source.scanStatus });
+    if (source.findingCount > 0) rows.push({ label: `${prefix} 问题数`, value: source.findingCount });
+    return rows;
   });
+}
+
+function collapseAdvancedRows(advancedRows: readonly AiosTechnicalDetailRow[], sourceRows: readonly AiosTechnicalDetailRow[]): AiosTechnicalDetailRow[] {
+  const rows = [...advancedRows, ...sourceRows.map((row) => ({ ...row, label: `来源 ${row.label}` }))];
+  if (rows.length === 0) return [{ label: "详情状态", value: "暂时没有更多来源信息。" }];
+  return rows.filter((row) => !isUnknownMcpValue(String(row.value)));
 }
 
 function statusChipClassName(statusText: string): string {

@@ -155,6 +155,10 @@ export interface HomeMcpLibraryStats {
 
 export const fallbackMcpToolHintsUnavailableText = "暂时无法读取工具列表。AIOS Desktop 不会启动服务来获取更多内容。";
 export const mcpSafetyText = "AIOS Desktop 只显示已保存的本机 MCP 基本信息；不启动服务、不连接端点、不调用 MCP 工具。";
+export const mcpStaticSourceLabel = "来自本地配置记录";
+export const mcpUnverifiedLabel = "未进行实时连接验证";
+export const mcpUnknownValue = "暂时无法判断";
+export const mcpNotRecordedValue = "未记录";
 
 export async function getMcpLibrarySummary(): Promise<McpLibrarySummary | null> {
   if (!isTauriRuntimeAvailable()) return null;
@@ -193,7 +197,10 @@ export function buildMcpServiceDetailViewModel(input: McpServiceDetailViewInput)
   return {
     mode,
     title,
-    whatItDoes: safeMcpDisplayText(input.detail?.whatItDoes, "") || safeMcpDisplayText(item?.shortPurpose, "") || (mode === "loading" ? "正在读取服务详情。" : "暂时无法判断这个服务具体提供哪些工具。"),
+    whatItDoes:
+      safeMcpDisplayText(input.detail?.whatItDoes, "") ||
+      safeMcpDisplayText(item?.shortPurpose, "") ||
+      (mode === "loading" ? "正在读取服务详情。" : "AIOS Desktop 未启动服务，暂时无法判断这个服务具体提供哪些工具。"),
     statusText: item?.status ? mcpStatusLabels[item.status] : "未检查",
     sourceText: safeMcpDisplayText(item?.sourceLabel, "来源不明"),
     sourceKindText: safeMcpDisplayText(item?.sourceKindLabel, "来源不明"),
@@ -605,6 +612,29 @@ function formatScanTime(value: number | null | undefined): string {
     timeStyle: "short",
     hour12: false
   }).format(new Date(value));
+}
+
+export function isUnknownMcpValue(value: string | null | undefined): boolean {
+  if (!value) return true;
+  const text = String(value).trim();
+  return text.length === 0 || text === mcpUnknownValue || text === mcpNotRecordedValue;
+}
+
+export function formatMcpToolHintSummary(toolHints: readonly McpToolHint[], unavailableExplanation?: string): string {
+  const hints = sanitizeMcpToolHints(toolHints);
+  if (hints.length === 0) {
+    return safeMcpDisplayText(unavailableExplanation, fallbackMcpToolHintsUnavailableText);
+  }
+  return `${hints.length} 个工具线索：${hints.map((hint) => hint.name).join("、")}`;
+}
+
+export function buildMcpCompactDetailFields(view: McpServiceDetailViewModel): Array<{ label: string; value: string }> {
+  const fields: Array<{ label: string; value: string }> = [];
+  if (!isUnknownMcpValue(view.commandNameText)) fields.push({ label: "命令名称", value: view.commandNameText });
+  if (!isUnknownMcpValue(view.transportText)) fields.push({ label: "传输方式", value: view.transportText });
+  if (!isUnknownMcpValue(view.requiredEnvNamesText)) fields.push({ label: "环境变量名", value: view.requiredEnvNamesText });
+  if (!isUnknownMcpValue(view.remoteHostText)) fields.push({ label: "远程主机", value: view.remoteHostText });
+  return fields;
 }
 
 export const mcpStatusLabels: Record<McpServiceStatus, string> = {

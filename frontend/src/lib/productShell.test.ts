@@ -193,7 +193,10 @@ assert(mcpModuleSource.includes("mcp-browser-panel"), "MCP resources and empty s
 assert(mcpModuleSource.includes("data-aios-internal-scroll=\"true\""), "MCP must expose an internal scroll container");
 assert(mcpModuleSource.includes("useContentPanelSwapMotion"), "MCP section changes must use panel motion");
 assert(mcpModuleSource.includes("AiosContentPanel"), "MCP must keep section content inside the shared content panel primitive");
-assert(mcpModuleSource.includes("mcp-client"), "MCP product tool hints must render as selectable tool rows");
+assert(mcpModuleSource.includes("McpServiceRow"), "MCP default browsing must render service-first rows");
+assert(!mcpModuleSource.includes("McpClientHintRow"), "MCP default list must not render separate selectable tool rows");
+assert(mcpModuleSource.includes("mcp-service-list"), "MCP must expose a deterministic service-first list");
+assert(!mcpModuleSource.includes("groupMcpItemsByStatus"), "MCP default grouping must not be status-first");
 assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery/i.test(mcpModuleSource), "MCP ordinary page must not expose banned technical terms as first-class copy");
 
 assert(!advancedModuleSource.includes("AiosTabBar"), "Advanced must not use the rejected AiosTabBar");

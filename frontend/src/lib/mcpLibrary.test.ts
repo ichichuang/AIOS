@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildMcpCompactDetailFields,
   buildMcpServiceDetailViewModel,
   buildHomeMcpLibraryStats,
   fallbackMcpToolHintsUnavailableText,
   filterMcpServiceItems,
+  formatMcpToolHintSummary,
   getMcpLibraryItemIdFromResource,
   getMcpLibrarySummary,
   getMcpServiceDetail,
+  isUnknownMcpValue,
   listMcpServiceItems,
   mapMcpServiceItemToResources,
   mapMcpServiceItemToResource,
   mcpServiceNeedsAttention,
+  mcpStaticSourceLabel,
+  mcpUnverifiedLabel,
   sanitizeMcpDetailLoadError,
   type McpLibrarySummary,
   type McpServiceDetail,
@@ -333,11 +338,36 @@ assert.deepEqual(filteredBySource.map((item) => item.id), ["mcp:remote-api"]);
 assert.equal(productSummary.counts.serviceCount, 50, "product totals remain separate from search result length");
 assert.equal(filteredBySource.length, 1);
 
+assert.equal(isUnknownMcpValue("暂时无法判断"), true);
+assert.equal(isUnknownMcpValue("未记录"), true);
+assert.equal(isUnknownMcpValue(""), true);
+assert.equal(isUnknownMcpValue("npx"), false);
+assert.equal(formatMcpToolHintSummary([], fallbackMcpToolHintsUnavailableText), fallbackMcpToolHintsUnavailableText);
+assert.equal(formatMcpToolHintSummary(serviceItem.toolHints), fallbackMcpToolHintsUnavailableText);
+assert.ok(formatMcpToolHintSummary([
+  { name: "read_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" },
+  { name: "write_file", purpose: "已保存的工具名称线索。", serviceLabel: "filesystem", status: "unverified" }
+]).startsWith("2 个工具线索"), "tool hint summary must count and name hints");
+
+const compactFields = buildMcpCompactDetailFields(detailModel);
+assert.ok(compactFields.some((field) => field.label === "命令名称" && field.value === "npx"), "compact fields must include known command");
+assert.ok(!compactFields.some((field) => field.label === "远程主机"), "compact fields must omit unknown remote host");
+
+const unknownDetailModel = buildMcpServiceDetailViewModel({
+  detail: { ...detail, whatItDoes: "", shortPurpose: "", commandName: null, transport: "unknown", requiredEnvNames: [], remoteHostHint: null },
+  error: null,
+  fallbackItem: null,
+  loading: false
+});
+assert.ok(unknownDetailModel.whatItDoes.includes("未启动服务"), "what-it-does fallback must honestly state no service was started");
+assert.deepEqual(buildMcpCompactDetailFields(unknownDetailModel), [], "compact fields must be empty when all technical fields are unknown");
+
 const mcpModuleSource = readFrontendFile("components/modules/McpModule.tsx");
 const mcpLibrarySource = readFrontendFile("lib/mcpLibrary.ts");
 const mcpDetailInspectorSource = readFrontendFile("components/inspector/McpServiceDetailInspector.tsx");
 const appSource = readFrontendFile("App.tsx");
 const resourceInspectorSource = readFrontendFile("components/inspector/ResourceInspector.tsx");
+const inspectorSheetSource = readFrontendFile("components/shell/AiosInspectorSheet.tsx");
 for (const forbidden of ["已启动", "已连接", "调用了 MCP 工具", "resource corpus", "SQLite state", "raw scan diagnostics"]) {
   assert(!`${mcpModuleSource}\n${mcpLibrarySource}\n${mcpDetailInspectorSource}`.includes(forbidden), `ordinary MCP copy must not claim unsafe behavior or expose ${forbidden}`);
 }
@@ -354,10 +384,24 @@ const mcpServiceRowSource = readFrontendFile("components/resources/McpServiceRow
 assert(!mcpModuleSource.includes("AiosAccordionPanel"), "MCP service list must not use heavy accordion groups");
 assert(mcpModuleSource.includes("mcp-service-list"), "MCP module must render a deterministic service list");
 assert(mcpModuleSource.includes("McpServiceRow"), "MCP module must render dedicated service rows");
-assert(mcpModuleSource.includes("showToolHints"), "MCP tool hints must be rendered as subordinate rows");
-assert(mcpServiceRowSource.includes("mapMcpServiceItemToResource"), "MCP service rows must map to real service items");
+assert(!mcpModuleSource.includes("McpClientHintRow"), "MCP default list must not render separate selectable tool rows");
+assert(mcpServiceRowSource.includes("mcp-tool-hint-chip"), "MCP service rows must render subordinate tool hint chips");
+assert(mcpServiceRowSource.includes("mcpStaticSourceLabel"), "MCP service rows must expose static source metadata");
+assert(mcpServiceRowSource.includes("mcp-service-row-meta"), "MCP service rows must keep source as secondary footer metadata");
+assert(mcpServiceRowSource.includes("未读取工具线索"), "MCP service rows must use a concise tool-count fallback instead of repeating the full unavailable explanation");
+assert(!mcpServiceRowSource.includes("data-aios-hover-card"), "MCP high-frequency browsing rows must not use hover-card lift motion");
+assert(mcpServiceRowSource.includes("data-aios-list-row"), "MCP service rows must remain list rows for stagger reveal");
+assert(mcpModuleSource.includes("disableHoverMotion"), "MCP module frame must disable hover lift motion");
+assert(inspectorSheetSource.includes('activeView === "mcp"'), "MCP inspector sheet must use quiet hover motion");
 assert(mcpServiceRowSource.includes("fallbackMcpToolHintsUnavailableText"), "MCP service rows must surface static/unverified tool hint copy");
 assert(mcpLibrarySource.includes('"unverified"'), "MCP tool hints must remain marked as unverified in the library mapper");
+assert(mcpLibrarySource.includes("mcpStaticSourceLabel"), "MCP library must expose static source label copy");
+assert(mcpLibrarySource.includes("mcpUnverifiedLabel"), "MCP library must expose unverified label copy");
+assert(mcpDetailInspectorSource.includes("mcpStaticSourceLabel"), "MCP detail inspector must render static source label");
+assert(mcpDetailInspectorSource.includes("mcpUnverifiedLabel"), "MCP detail inspector must render unverified label");
+assert(mcpDetailInspectorSource.includes("isUnknownMcpValue"), "MCP detail inspector must hide unknown technical fields");
+assert(!mcpDetailInspectorSource.includes("当前没有需要处理的原因"), "MCP detail inspector must not show empty attention fallback copy");
+assert(!mcpDetailInspectorSource.includes("请在对应 AI 工具的 MCP 配置里人工查看来源。"), "MCP detail inspector must not show generic manual-check fallback copy");
 assert(mcpModuleSource.includes("没有匹配结果"), "MCP must show a user-friendly search-empty state");
 
 console.log("mcpLibrary client tests passed");

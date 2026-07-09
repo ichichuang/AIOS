@@ -65,7 +65,7 @@ interface InspectorBodyProps {
 
 function InspectorBody({ activeView, resource, skillIdentity, skillCapability, mcpDetailState, skillDetailState, visibleCount, showClose = false, onClose }: InspectorBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const quietHover = activeView === "skills";
+  const quietHover = activeView === "skills" || activeView === "mcp";
   useInspectorMotion(bodyRef, resource?.id ?? "empty");
   useSmoothHoverSurfaceMotion(bodyRef, resource?.id ?? "empty", {
     selector: quietHover ? ":not(*)" : ".inspector-panel, .aios-inspector-section, .copy-button",

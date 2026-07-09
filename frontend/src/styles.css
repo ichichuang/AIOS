@@ -5241,7 +5241,7 @@
 
 .mcp-service-row:hover {
   background: var(--aios-surface);
-  box-shadow: inset 0 0 0 1px var(--aios-selected-border), 0 8px 18px color-mix(in srgb, var(--aios-text) 5%, transparent);
+  box-shadow: inset 0 0 0 1px var(--aios-selected-border);
 }
 
 .mcp-service-row.selected,
@@ -5253,7 +5253,7 @@
 
 .mcp-service-row-main {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   align-content: center;
   min-width: 0;
 }
@@ -5295,13 +5295,40 @@
   -webkit-line-clamp: 2;
 }
 
+.mcp-service-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.mcp-service-row-source,
+.mcp-service-row-tool-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mcp-service-row-source {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mcp-service-row-tool-count {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
 .mcp-service-tool-hints {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding-top: 2px;
 }
 
 .mcp-tool-hint-chip {
@@ -5321,6 +5348,12 @@
 .mcp-tool-hints-unavailable {
   font-size: 12px;
   line-height: 1.4;
+}
+
+.mcp-tool-hints-more {
+  padding: 2px 4px;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .mcp-fallback-list {

@@ -1,11 +1,10 @@
 import { Alert, Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import SearchRounded from "@mui/icons-material/SearchRounded";
-import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import {
   fallbackMcpToolHintsUnavailableText,
   filterMcpServiceItems,
-  mapMcpServiceItemToResources,
   mcpServiceNeedsAttention,
   type McpServiceItem
 } from "../../lib/mcpLibrary";
@@ -108,6 +107,7 @@ export const McpModule = memo(function McpModule({ mcpLibrary, query, resources,
       summary={zhCN.moduleSummaries.mcp}
       count={serviceCount}
       ariaLabel={moduleAriaLabel("mcp")}
+      disableHoverMotion
       motionKey={`mcp:${panelMotionKey}`}
       actions={
         <>
@@ -117,19 +117,19 @@ export const McpModule = memo(function McpModule({ mcpLibrary, query, resources,
         </>
       }
     >
-      <Box className="mcp-service-overview" data-aios-layout-fixed data-aios-motion-surface>
+      <Box className="mcp-service-overview" data-aios-layout-fixed>
         <Alert className="mcp-local-reminder" severity="info" variant="outlined">
           这里只读展示本机配置摘要；AIOS Desktop 不启动服务、不连接远程端点、不调用 MCP 工具。
         </Alert>
         <Box className="mcp-service-toolbar skill-filter-row">
           <ToggleButtonGroup aria-label="MCP 服务筛选" className="skill-filter-toggle" exclusive size="small" value={statusMode} onChange={handleStatusChange}>
             <ToggleButton value="all">全部服务</ToggleButton>
-            <ToggleButton value="attention">需关注</ToggleButton>
+            <ToggleButton value="attention">需关注 {attentionCount > 0 ? `(${attentionCount})` : ""}</ToggleButton>
           </ToggleButtonGroup>
           <Box className="skill-filter-search-state">
             <SearchRounded fontSize="small" />
             <Typography color="text.secondary" variant="body2" noWrap>
-              {normalizedQuery ? `当前搜索：${normalizedQuery}` : "使用顶部搜索框筛选 MCP 服务名称、来源和工具。"}
+              {normalizedQuery ? `当前搜索：${normalizedQuery}` : "搜索 MCP 服务名称、来源或工具线索。"}
             </Typography>
           </Box>
         </Box>
@@ -140,8 +140,15 @@ export const McpModule = memo(function McpModule({ mcpLibrary, query, resources,
         )}
       </Box>
 
-      <Box className="mcp-service-workspace aios-two-pane" data-aios-motion-surface>
-        <AiosSectionRail ariaLabel="MCP 来源" options={sourceRailOptions} value={activeSourceKey} onChange={handleSourceChange} />
+      <Box className="mcp-service-workspace aios-two-pane">
+        <AiosSectionRail
+          ariaLabel="来源筛选"
+          className="mcp-source-rail"
+          disableItemHover
+          options={sourceRailOptions}
+          value={activeSourceKey}
+          onChange={handleSourceChange}
+        />
         <Box className="aios-pane aios-pane-scroll mcp-browser-panel" ref={panelRef} data-aios-internal-scroll="true">
           <AiosContentPanel className="mcp-content-panel" active>
             <AiosSectionHeader
@@ -169,7 +176,7 @@ export const McpModule = memo(function McpModule({ mcpLibrary, query, resources,
             ) : (
               <Box className="mcp-service-list" role="list">
                 {visibleItems.map((item) => (
-                  <McpServiceGroup key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
+                  <McpServiceRow key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
                 ))}
               </Box>
             )}
@@ -179,78 +186,6 @@ export const McpModule = memo(function McpModule({ mcpLibrary, query, resources,
     </AiosModuleFrame>
   );
 });
-
-function McpServiceGroup({
-  item,
-  selectedId,
-  onSelect
-}: {
-  item: McpServiceItem;
-  selectedId: string | null;
-  onSelect: AiosModuleProps["onSelect"];
-}) {
-  const serviceAndTools = useMemo(() => mapMcpServiceItemToResources(item), [item]);
-  const [serviceResource, ...toolResources] = serviceAndTools;
-  const hasToolHints = toolResources.length > 0;
-
-  return (
-    <Box className="mcp-service-group" data-aios-list-row role="listitem">
-      <McpServiceRow item={item} selectedId={selectedId} showToolHints={false} onSelect={onSelect} />
-      {hasToolHints ? (
-        <Box className="mcp-client-hints" role="list" aria-label={`${item.displayName} 工具线索`}>
-          {toolResources.map((toolResource) => (
-            <McpClientHintRow key={toolResource.id} resource={toolResource} selectedId={selectedId} onSelect={onSelect} />
-          ))}
-        </Box>
-      ) : null}
-    </Box>
-  );
-}
-
-function McpClientHintRow({
-  resource,
-  selectedId,
-  onSelect
-}: {
-  resource: AiosResource;
-  selectedId: string | null;
-  onSelect: AiosModuleProps["onSelect"];
-}) {
-  const selected = resource.id === selectedId;
-  const handleSelect = useCallback(() => onSelect(resource), [onSelect, resource]);
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      handleSelect();
-    },
-    [handleSelect]
-  );
-  const hint = (resource.metadata?.mcpToolHintName as string | undefined) || resource.name;
-  const purpose = resource.description || "已保存的工具名称线索。";
-
-  return (
-    <Box
-      aria-pressed={selected}
-      className={selected ? "mcp-client-row selected" : "mcp-client-row"}
-      data-aios-hover-card
-      data-aios-list-row
-      data-aios-selected-surface={selected ? "true" : undefined}
-      role="button"
-      tabIndex={0}
-      title={`${hint}: ${purpose}`}
-      onClick={handleSelect}
-      onKeyDown={handleKeyDown}
-    >
-      <Typography className="mcp-client-row-name" component="span" variant="body2">
-        {hint}
-      </Typography>
-      <Typography className="mcp-client-row-purpose" color="text.secondary" component="span" variant="body2">
-        {purpose}
-      </Typography>
-    </Box>
-  );
-}
 
 function McpListEmptyState({
   query,
@@ -282,7 +217,7 @@ function McpListEmptyState({
       <ModuleEmptyState
         title="当前筛选没有结果"
         body="这个筛选条件下没有 MCP 服务。"
-        hints={["可重置筛选查看全部服务。", "需关注的服务会在对应标签下列出。", "不会修改任何来源。"]}
+        hints={["可重置筛选查看全部服务。", "需关注的服务会在对应标签下列出。", "来源筛选只影响当前列表展示。"]}
         action={onResetFilters ? { label: "重置筛选", onClick: onResetFilters } : undefined}
       />
     );
@@ -290,8 +225,8 @@ function McpListEmptyState({
 
   return (
     <ModuleEmptyState
-      title="还没有找到 MCP 工具"
-      body="开始查找后，这里会显示本机已配置的 MCP 服务和工具。"
+      title="还没有找到 MCP 服务"
+      body="开始查找后，这里会显示本机已保存的 MCP 服务和工具线索。"
       hints={["MCP 是一种让 AI 应用连接外部工具的方式。", "AIOS Desktop 不会启动 MCP 服务。", "AIOS Desktop 不会调用 MCP 工具。"]}
     />
   );
