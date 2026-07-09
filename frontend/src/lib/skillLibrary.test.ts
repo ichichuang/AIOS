@@ -435,6 +435,10 @@ assert(skillsModuleSource.includes("groupSkillLibraryItemsByCapability"), "Skill
 assert(!skillsModuleSource.includes("groupSkillLibraryItemsBySource"), "Skills product library must not use source-first grouping as the default skeleton");
 assert(skillsModuleSource.includes("disableHoverMotion"), "Skills module must disable noisy hover/lift motion");
 assert(skillsModuleSource.includes("disableItemHover"), "Skills category rail must disable item hover lift");
+assert(skillsModuleSource.includes("skill-filter-primary-controls"), "Skills toolbar must group browse/status controls as one wrapping unit");
+assert(skillsModuleSource.includes("skill-filter-source-controls"), "Skills toolbar must keep source facets in a separate secondary wrapping unit");
+assert(skillsModuleSource.includes('aria-label="技能筛选"'), "Skills status filters must remain visible and user-facing");
+assert(skillsModuleSource.includes('aria-label="来源筛选"'), "Skills source filters must remain visible and user-facing");
 assert(!skillRowSource.includes("data-aios-hover-card"), "Skill rows must not register hover-card lift motion");
 assert(skillRowSource.includes("capability-chip"), "Skill rows must expose functional category chips");
 assert(skillRowSource.includes("tool-chip"), "Skill rows must expose available AI tool chips");
@@ -465,6 +469,12 @@ const stylesSource = readFrontendFile("styles.css");
 assert(stylesSource.includes(".aios-console-shell--skills"), "Styles must include the Skills inspector width override selector");
 assert(stylesSource.includes("--aios-inspector-width: 340px"), "Styles must narrow the inspector width for Skills");
 assert(stylesSource.includes(".inspector-code--secondary"), "Styles must include the de-emphasized original-name class");
+assert(stylesSource.includes(".skill-filter-primary-controls"), "Styles must include grouped Skills toolbar primary controls");
+assert(stylesSource.includes(".skill-filter-source-controls"), "Styles must include grouped Skills toolbar source controls");
+assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .skill-filter-primary-controls"), "Skills inspector-open toolbar must give filters enough row width");
+assert(stylesSource.includes("flex-wrap: wrap"), "Skills toolbar controls must wrap as groups instead of squeezing labels");
+assert(stylesSource.includes("white-space: nowrap"), "Skills toolbar filter labels must stay on one line");
+assert(stylesSource.includes("overflow-x: auto"), "Skills toolbar filters must remain accessible when space is constrained");
 
 console.log("skillLibrary client tests passed");
 

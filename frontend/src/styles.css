@@ -2068,14 +2068,24 @@
 }
 
 .skill-filter-toggle.MuiToggleButtonGroup-root {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--aios-outline);
   border-radius: 999px;
   background: var(--aios-surface);
   padding: 2px;
+  scrollbar-width: none;
+}
+
+.skill-filter-toggle.MuiToggleButtonGroup-root::-webkit-scrollbar {
+  display: none;
 }
 
 .skill-filter-toggle .MuiToggleButton-root {
+  flex: 0 0 auto;
   min-height: 28px;
   border: 0;
   border-radius: 999px !important;
@@ -2084,6 +2094,7 @@
   font-weight: 700;
   padding: 4px 12px;
   text-transform: none;
+  white-space: nowrap;
 }
 
 .skill-filter-toggle .MuiToggleButton-root.Mui-selected,
@@ -3830,12 +3841,39 @@
 .skill-filter-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px 12px;
   min-width: 0;
   border-radius: 18px;
   background: color-mix(in srgb, var(--aios-surface) 74%, transparent);
   padding: 8px 10px;
+}
+
+.skill-filter-primary-controls,
+.skill-filter-source-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.skill-filter-primary-controls {
+  flex: 1 1 560px;
+}
+
+.skill-filter-source-controls {
+  flex: 1 1 320px;
+}
+
+.aios-console-shell--skills.inspector-open .skill-filter-primary-controls,
+.aios-console-shell--skills.inspector-open .skill-filter-source-controls {
+  flex: 1 1 100%;
+}
+
+.aios-console-shell--skills.inspector-open .skill-filter-primary-controls {
+  flex-wrap: wrap;
 }
 
 .skill-filter-search-state {
@@ -4514,6 +4552,16 @@
     flex-direction: column;
   }
 
+  .skill-filter-primary-controls,
+  .skill-filter-source-controls {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .skill-filter-primary-controls {
+    flex-wrap: wrap;
+  }
+
   .skill-filter-toggle.MuiToggleButtonGroup-root {
     align-self: flex-start;
   }
@@ -4866,10 +4914,18 @@
   display: flex;
   flex: 0 0 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--aios-surface-muted) 82%, var(--aios-surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aios-outline) 34%, transparent);
+  scrollbar-width: none;
+}
+
+.aios-segmented-switcher::-webkit-scrollbar {
+  display: none;
 }
 
 .aios-segmented-track {
@@ -4897,6 +4953,7 @@
   z-index: 1;
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
   min-height: 34px;
   min-width: 0;
@@ -4906,6 +4963,7 @@
   font-weight: 800;
   padding: 6px 14px;
   text-transform: none;
+  white-space: nowrap;
   transition:
     background-color var(--aios-transition-hover),
     color var(--aios-transition-hover);

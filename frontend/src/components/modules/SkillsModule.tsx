@@ -366,23 +366,27 @@ export const SkillsModule = memo(function SkillsModule({
     >
       <Box className="skill-library-toolbar" data-aios-layout-fixed>
         <Box className="skill-filter-row">
-          <AiosSegmentedSwitcher ariaLabel="技能浏览方式" options={effectiveLibraryTabOptions} value={libraryTab} onChange={handleLibraryTabChange} />
-          <ToggleButtonGroup aria-label="技能筛选" className="skill-filter-toggle" exclusive size="small" value={statusFilterMode} onChange={handleQualityFilterChange}>
-            {effectiveStatusFilterOptions.map((option) => (
-              <ToggleButton key={option.value} value={option.value}>
-                {option.label}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-          {useProductLibrary && productSourceOptions.length > 1 && (
-            <ToggleButtonGroup aria-label="来源筛选" className="skill-filter-toggle skill-source-filter" exclusive size="small" value={sourceFilter} onChange={handleSourceFilterChange}>
-              <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
-              {productSourceOptions.map((source) => (
-                <ToggleButton key={source} value={source}>
-                  {source}
+          <Box className="skill-filter-primary-controls">
+            <AiosSegmentedSwitcher ariaLabel="技能浏览方式" options={effectiveLibraryTabOptions} value={libraryTab} onChange={handleLibraryTabChange} />
+            <ToggleButtonGroup aria-label="技能筛选" className="skill-filter-toggle" exclusive size="small" value={statusFilterMode} onChange={handleQualityFilterChange}>
+              {effectiveStatusFilterOptions.map((option) => (
+                <ToggleButton key={option.value} value={option.value}>
+                  {option.label}
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
+          </Box>
+          {useProductLibrary && productSourceOptions.length > 1 && (
+            <Box className="skill-filter-source-controls">
+              <ToggleButtonGroup aria-label="来源筛选" className="skill-filter-toggle skill-source-filter" exclusive size="small" value={sourceFilter} onChange={handleSourceFilterChange}>
+                <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
+                {productSourceOptions.map((source) => (
+                  <ToggleButton key={source} value={source}>
+                    {source}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
           )}
         </Box>
         <Box className="skill-filter-search-state">
