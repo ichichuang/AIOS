@@ -248,6 +248,16 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
       badge: "旧入口示例"
     };
   }
+
+  if (activeView === "skills") {
+    return {
+      title: "选择技能查看详情",
+      summary: "选中技能后可查看用途、使用方法、可用工具与来源。",
+      hints: ["点击左侧列表中的技能。", "来源信息保留在详情下方。"],
+      badge: "Skills"
+    };
+  }
+
   if (visibleCount === 0) {
     return {
       title: `${moduleName} 为空`,
@@ -256,10 +266,7 @@ function getEmptyInspectorGuide(activeView: ResourceView, visibleCount: number):
       badge: "空资源库"
     };
   }
-  const promptCopyHint =
-    activeView === "skills"
-      ? "选中含提示词的资源后，可复制 Codex / Claude 调用。"
-      : "此模块默认不提供提示词复制，仅展示只读详情。";
+  const promptCopyHint = "此模块默认不提供提示词复制，仅展示只读详情。";
 
   return {
     title: `选择${moduleName}资源`,

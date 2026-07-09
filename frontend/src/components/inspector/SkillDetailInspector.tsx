@@ -37,7 +37,7 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
             <Typography component="h3" variant="h3">
               {view.title}
             </Typography>
-            <Box className="code-pill inspector-code" component="code" title={view.originalName}>
+            <Box className="code-pill inspector-code inspector-code--secondary" component="code" title={view.originalName}>
               {view.originalName}
             </Box>
           </Box>
@@ -76,8 +76,8 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
       </Box>
 
       <Box className="inspector-panel skill-detail-secondary-panel">
-        <DetailTextBlock title="来源" value={formatSourceSummary(view)} />
-        <AttentionReasonList view={view} />
+        {view.sourceSummaries.length > 0 && <DetailTextBlock title="来源" value={formatSourceSummary(view)} />}
+        {view.attentionReasons.length > 0 && <AttentionReasonList view={view} />}
         {view.duplicateSources.length > 0 && (
           <Box className="skill-detail-section">
             <Typography className="inspector-field-label" component="p">
@@ -154,28 +154,22 @@ function AttentionReasonList({ view }: { view: SkillDetailViewModel }) {
       <Typography className="inspector-field-label" component="p">
         需要处理的原因
       </Typography>
-      {view.attentionReasons.length > 0 ? (
-        <Box className="skill-detail-reason-list" component="ul">
-          {view.attentionReasons.map((reason) => (
-            <li key={reason.code || reason.label}>
-              <Typography component="strong">{reason.label}</Typography>
-              <Typography color="text.secondary" variant="body2">
-                {reason.detail}
-              </Typography>
-            </li>
-          ))}
-        </Box>
-      ) : (
-        <Typography color="text.secondary" variant="body2">
-          当前没有需要处理的原因。
-        </Typography>
-      )}
+      <Box className="skill-detail-reason-list" component="ul">
+        {view.attentionReasons.map((reason) => (
+          <li key={reason.code || reason.label}>
+            <Typography component="strong">{reason.label}</Typography>
+            <Typography color="text.secondary" variant="body2">
+              {reason.detail}
+            </Typography>
+          </li>
+        ))}
+      </Box>
     </Box>
   );
 }
 
 function SourceSummaryLine({ source }: { source: SkillSourceSummary }) {
-  const tools = source.availableInTools.filter((tool) => tool !== "Unknown").join("、") || "工具未知";
+  const tools = source.availableInTools.filter((tool) => tool !== "Unknown").join("、") || "未记录";
   return (
     <Box className="skill-detail-source-line">
       <Typography component="strong">{source.sourceLabel || "来源不明"}</Typography>
@@ -195,14 +189,18 @@ function formatSourceSummary(view: SkillDetailViewModel): string {
 function buildSourceRows(sources: readonly SkillSourceSummary[]): AiosTechnicalDetailRow[] {
   return sources.flatMap((source, index) => {
     const prefix = `${index + 1}`;
-    return [
+    const knownTools = source.availableInTools.filter((tool) => tool !== "Unknown").join("、") || null;
+    const rows: AiosTechnicalDetailRow[] = [
       { label: `${prefix} 标签`, value: source.sourceLabel || "来源不明" },
-      { label: `${prefix} 类型`, value: source.sourceKindLabel || "来源不明" },
-      { label: `${prefix} 可用工具`, value: source.availableInTools.filter((tool) => tool !== "Unknown").join("、") || "暂时无法判断" },
+      { label: `${prefix} 类型`, value: source.sourceKindLabel || "来源不明" }
+    ];
+    if (knownTools) rows.push({ label: `${prefix} 可用工具`, value: knownTools });
+    rows.push(
       { label: `${prefix} 路径提示`, value: source.pathHint || "未记录", code: Boolean(source.pathHint) },
       { label: `${prefix} 记录状态`, value: source.scanStatus || "未记录" },
       { label: `${prefix} 问题数`, value: source.findingCount }
-    ];
+    );
+    return rows;
   });
 }
 

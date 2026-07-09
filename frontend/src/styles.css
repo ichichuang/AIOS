@@ -8,6 +8,10 @@
   overflow: hidden;
 }
 
+.aios-console-shell--skills {
+  --aios-inspector-width: 340px;
+}
+
 .aios-navigation-rail,
 .aios-top-command-bar,
 .module-surface,
@@ -2845,6 +2849,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.inspector-code--secondary {
+  max-width: max-content;
+  border-color: transparent;
+  background: transparent;
+  color: var(--aios-muted);
+  font-size: 11px;
+  padding-left: 0;
 }
 
 .inspector-scroll {

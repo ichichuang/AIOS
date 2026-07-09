@@ -69,7 +69,10 @@ export function AiosConsoleShell({
 
   return (
     <AiosLayoutProvider value={metrics}>
-      <Box ref={rootRef} className={inspectorOpen ? "aios-console-shell inspector-open" : "aios-console-shell"}>
+      <Box
+        ref={rootRef}
+        className={`aios-console-shell ${inspectorOpen ? "inspector-open" : ""} ${activeView === "skills" ? "aios-console-shell--skills" : ""}`.trim()}
+      >
         <AiosNavigationRail activeView={activeView} viewCounts={viewCounts} onChange={onViewChange} />
         <Box ref={mainRef} className="aios-console-main">
           <Box ref={topBarRef}>

@@ -447,6 +447,25 @@ assert(inspectorSource.includes("如何使用"));
 assert(inspectorSource.includes("可在哪些 AI 工具中使用"));
 assert(inspectorSource.includes("安全边界"));
 
+const skillDetailInspectorSource = readFrontendFile("components/inspector/SkillDetailInspector.tsx");
+assert(!skillDetailInspectorSource.includes("当前没有需要处理的原因"), "Skill detail must not show an unconditional empty attention-reasons fallback");
+assert(skillDetailInspectorSource.includes("view.attentionReasons.length > 0"), "Skill detail must conditionally render attention reasons");
+assert(!skillDetailInspectorSource.includes("暂时无法判断"), "Skill detail must not repeat the unknown fallback placeholder in source rows");
+assert(skillDetailInspectorSource.includes("view.sourceSummaries.length > 0"), "Skill detail must conditionally render the source section");
+assert(skillDetailInspectorSource.includes("inspector-code--secondary"), "Skill detail must de-emphasize the technical original name");
+assert(!skillDetailInspectorSource.includes("data-aios-hover-card"), "Skill detail inspector must not register hover-card lift motion");
+
+const resourceInspectorSource = readFrontendFile("components/inspector/ResourceInspector.tsx");
+assert(resourceInspectorSource.includes("选择技能查看详情"), "Resource inspector empty guide must provide compact Skills-specific guidance");
+
+const consoleShellSource = readFrontendFile("components/shell/AiosConsoleShell.tsx");
+assert(consoleShellSource.includes("aios-console-shell--skills"), "Console shell must apply a Skills-specific layout class for inspector width");
+
+const stylesSource = readFrontendFile("styles.css");
+assert(stylesSource.includes(".aios-console-shell--skills"), "Styles must include the Skills inspector width override selector");
+assert(stylesSource.includes("--aios-inspector-width: 340px"), "Styles must narrow the inspector width for Skills");
+assert(stylesSource.includes(".inspector-code--secondary"), "Styles must include the de-emphasized original-name class");
+
 console.log("skillLibrary client tests passed");
 
 function readFrontendFile(relativePath: string): string {
