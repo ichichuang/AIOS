@@ -1,67 +1,104 @@
-import { Alert, Box, Chip, Typography } from "@mui/material";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Alert, Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import SearchRounded from "@mui/icons-material/SearchRounded";
+import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { zhCN } from "../../i18n/zh-CN";
-import { fallbackMcpToolHintsUnavailableText } from "../../lib/mcpLibrary";
+import {
+  fallbackMcpToolHintsUnavailableText,
+  filterMcpServiceItems,
+  mapMcpServiceItemToResources,
+  mcpServiceNeedsAttention,
+  type McpServiceItem
+} from "../../lib/mcpLibrary";
 import { useContentPanelSwapMotion } from "../../lib/useAiosMotion";
-import { ResourceGroup } from "../resources/ResourceGroup";
-import { AiosContentPanel, AiosModuleFrame, AiosSection, AiosSectionHeader, AiosSectionRail, AiosUsageCard } from "../ui/AiosUiPrimitives";
+import type { AiosResource } from "../../types/inventory";
+import { McpServiceRow } from "../resources/McpServiceRow";
+import { AiosContentPanel, AiosModuleFrame, AiosSectionHeader, AiosSectionRail } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
-import { getMcpGroups, moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
+import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
 import { ModuleEmptyState } from "./ModuleEmptyState";
 
-type McpSection = "services" | "tools" | "attention";
+type McpStatusFilter = "all" | "attention";
 
-export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosModuleProps) {
-  const [activeSection, setActiveSection] = useState<McpSection>("services");
+interface McpSourceGroup {
+  key: string;
+  title: string;
+  rows: McpServiceItem[];
+}
+
+export const McpModule = memo(function McpModule({ mcpLibrary, query, resources, selectedId, onClearSelection, onQueryChange, onSelect }: AiosModuleProps) {
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [statusMode, setStatusMode] = useState<McpStatusFilter>("all");
   const panelRef = useRef<HTMLDivElement>(null);
+  const normalizedQuery = query.trim();
   const useProductLibrary = mcpLibrary.summary !== null;
   const productCounts = mcpLibrary.summary?.counts ?? null;
-  const attentionCount = resources.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available")).length;
-  const serviceResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-server"), [resources]);
-  const toolResources = useMemo(() => resources.filter((resource) => resource.capabilityType === "mcp-client"), [resources]);
-  const attentionResources = useMemo(() => {
-    const candidates = useProductLibrary ? serviceResources : resources;
-    return candidates.filter((resource) => resource.risk !== "low" || (resource.status !== "ok" && resource.status !== "active" && resource.status !== "available"));
-  }, [resources, serviceResources, useProductLibrary]);
-  const serviceCount = productCounts ? productCounts.serviceCount : serviceResources.length || resources.length;
-  const toolHintCount = productCounts ? productCounts.toolHintCount : toolResources.length;
-  const needsAttentionCount = productCounts ? productCounts.needsAttentionCount : attentionCount;
-  const sections = useMemo(
-    () => [
-      {
-        value: "services",
-        label: "服务",
-        count: serviceCount,
-        title: "MCP 服务",
-        summary: "本机已配置的服务摘要；这里只展示用途、来源和边界，不启动服务。",
-        resources: serviceResources.length > 0 ? serviceResources : resources
-      },
-      {
-        value: "tools",
-        label: "工具",
-        count: toolHintCount,
-        title: "工具能力",
-        summary: useProductLibrary ? "只统计已经安全保存的工具名称线索；无法判断时不会启动服务补全。" : "服务暴露的工具线索；AIOS Desktop 只展示配置摘要，不调用工具。",
-        resources: toolResources
-      },
-      {
-        value: "attention",
-        label: "需关注",
-        count: needsAttentionCount,
-        title: "需要复核",
-        summary: "权限、状态或边界需要人工查看的 MCP 条目。",
-        resources: attentionResources
-      }
-    ],
-    [attentionResources, needsAttentionCount, resources, serviceCount, serviceResources, toolHintCount, toolResources, useProductLibrary]
+  const serviceCount = productCounts ? productCounts.serviceCount : mcpLibrary.items.length || resources.filter((resource) => resource.capabilityType === "mcp-server").length;
+  const toolHintCount = productCounts ? productCounts.toolHintCount : 0;
+  const attentionCount = productCounts ? productCounts.needsAttentionCount : mcpLibrary.items.filter((item) => mcpServiceNeedsAttention(item)).length;
+
+  const items = mcpLibrary.items;
+  const statusFilteredItems = useMemo(() => {
+    if (statusMode === "all") return items;
+    return items.filter((item) => mcpServiceNeedsAttention(item));
+  }, [items, statusMode]);
+
+  const queryFilteredItems = useMemo(() => filterMcpServiceItems(statusFilteredItems, normalizedQuery), [normalizedQuery, statusFilteredItems]);
+
+  const sourceGroups = useMemo(() => groupMcpItemsBySource(queryFilteredItems), [queryFilteredItems]);
+  const activeSourceKey = getValidSourceKey(sourceGroups, sourceFilter) ?? "all";
+  const visibleItems = useMemo(() => {
+    if (activeSourceKey === "all") return queryFilteredItems;
+    return queryFilteredItems.filter((item) => (item.sourceLabel || "来源不明") === activeSourceKey);
+  }, [activeSourceKey, queryFilteredItems]);
+
+  const sourceRailOptions = useMemo(() => {
+    const options = [{ value: "all", label: "全部来源", count: queryFilteredItems.length }];
+    for (const group of sourceGroups) {
+      options.push({ value: group.title, label: group.title, count: group.rows.length });
+    }
+    return options;
+  }, [queryFilteredItems.length, sourceGroups]);
+
+  const productRowsMismatch =
+    useProductLibrary &&
+    serviceCount > 0 &&
+    visibleItems.length === 0 &&
+    !normalizedQuery &&
+    activeSourceKey === "all" &&
+    statusMode === "all" &&
+    !mcpLibrary.loading &&
+    !mcpLibrary.error;
+
+  const panelMotionKey = `${statusMode}:${activeSourceKey}:${visibleItems.length}:${normalizedQuery ? "query" : "all"}`;
+  useContentPanelSwapMotion(panelRef, panelMotionKey);
+
+  const handleStatusChange = useCallback(
+    (_event: React.MouseEvent<HTMLElement>, nextMode: McpStatusFilter | null) => {
+      if (!nextMode || nextMode === statusMode) return;
+      setStatusMode(nextMode);
+      setSourceFilter("all");
+      onClearSelection();
+    },
+    [onClearSelection, statusMode]
   );
-  const active = sections.find((section) => section.value === activeSection) ?? sections[0];
-  const sectionResources = active.resources;
-  const groups = useMemo(() => getMcpGroups(sectionResources), [sectionResources]);
-  const productRowsMismatch = useProductLibrary && active.count > 0 && sectionResources.length === 0 && !mcpLibrary.loading && !mcpLibrary.error;
-  const sectionOptions = useMemo(() => sections.map(({ value, label, count }) => ({ value, label, count })), [sections]);
-  const handleSectionChange = useCallback((nextValue: string) => setActiveSection(nextValue as McpSection), []);
-  useContentPanelSwapMotion(panelRef, activeSection);
+
+  const handleSourceChange = useCallback(
+    (nextValue: string) => {
+      setSourceFilter(nextValue);
+      onClearSelection();
+    },
+    [onClearSelection]
+  );
+
+  const handleClearSearch = useCallback(() => {
+    onQueryChange?.("");
+  }, [onQueryChange]);
+
+  const handleResetFilters = useCallback(() => {
+    setStatusMode("all");
+    setSourceFilter("all");
+    onClearSelection();
+  }, [onClearSelection]);
 
   return (
     <AiosModuleFrame
@@ -69,84 +106,214 @@ export function McpModule({ mcpLibrary, resources, selectedId, onSelect }: AiosM
       contentClassName="mcp-module-scroll"
       view="mcp"
       summary={zhCN.moduleSummaries.mcp}
-      count={active.count}
+      count={serviceCount}
       ariaLabel={moduleAriaLabel("mcp")}
-      motionKey={`mcp:${activeSection}:${sectionResources.length}`}
+      motionKey={`mcp:${panelMotionKey}`}
       actions={
         <>
           <Chip label="不启动服务" variant="outlined" size="small" />
           <Chip label="不连接端点" variant="outlined" size="small" />
-          <Chip label="不调用工具" variant="outlined" size="small" />
+          <Chip label="不调用 MCP 工具" variant="outlined" size="small" />
         </>
       }
     >
       <Box className="mcp-service-overview" data-aios-layout-fixed data-aios-motion-surface>
-        <AiosSection className="mcp-intro-section">
-          <Box className="mcp-intro-text">
-            <p>MCP 让 AI 应用可以连接本机工具或服务，比如读取文件、调用浏览器或操作其他程序。这里只显示本机已经配置的 MCP 服务信息，不会实际连接或运行它们。</p>
+        <Alert className="mcp-local-reminder" severity="info" variant="outlined">
+          这里只读展示本机配置摘要；AIOS Desktop 不启动服务、不连接远程端点、不调用 MCP 工具。
+        </Alert>
+        <Box className="mcp-service-toolbar skill-filter-row">
+          <ToggleButtonGroup aria-label="MCP 服务筛选" className="skill-filter-toggle" exclusive size="small" value={statusMode} onChange={handleStatusChange}>
+            <ToggleButton value="all">全部服务</ToggleButton>
+            <ToggleButton value="attention">需关注</ToggleButton>
+          </ToggleButtonGroup>
+          <Box className="skill-filter-search-state">
+            <SearchRounded fontSize="small" />
+            <Typography color="text.secondary" variant="body2" noWrap>
+              {normalizedQuery ? `当前搜索：${normalizedQuery}` : "使用顶部搜索框筛选 MCP 服务名称、来源和工具。"}
+            </Typography>
           </Box>
+        </Box>
+        {useProductLibrary && toolHintCount === 0 && (
           <Alert className="mcp-local-reminder" severity="info" variant="outlined">
-            这里只读展示本机配置摘要；AIOS Desktop 不启动服务、不连接远程端点、不调用 MCP 工具。
+            {fallbackMcpToolHintsUnavailableText}
           </Alert>
-          <Box className="mcp-summary-grid">
-            <AiosUsageCard
-              className="mcp-summary-card"
-              icon={null}
-              purpose="本机已配置的 MCP 服务数量。"
-              selected={activeSection === "services"}
-              technicalName={`${serviceCount} 个`}
-              title="MCP 服务"
-              onClick={() => setActiveSection("services")}
-            />
-            <AiosUsageCard
-              className="mcp-summary-card"
-              icon={null}
-              purpose="可安全识别的工具名称数量；无法判断时不会启动服务补全。"
-              selected={activeSection === "tools"}
-              technicalName={`${toolHintCount} 个`}
-              title="MCP 工具"
-              onClick={() => setActiveSection("tools")}
-            />
-            <AiosUsageCard
-              className="mcp-summary-card"
-              icon={null}
-              purpose="来源、权限或风险需要再确认的服务。"
-              selected={activeSection === "attention"}
-              technicalName={`${needsAttentionCount} 个`}
-              title="需要复核"
-              onClick={() => setActiveSection("attention")}
-            />
-          </Box>
-        </AiosSection>
+        )}
       </Box>
 
       <Box className="mcp-service-workspace aios-two-pane" data-aios-motion-surface>
-        <AiosSectionRail ariaLabel="MCP 浏览分类" options={sectionOptions} value={activeSection} onChange={handleSectionChange} />
+        <AiosSectionRail ariaLabel="MCP 来源" options={sourceRailOptions} value={activeSourceKey} onChange={handleSourceChange} />
         <Box className="aios-pane aios-pane-scroll mcp-browser-panel" ref={panelRef} data-aios-internal-scroll="true">
           <AiosContentPanel className="mcp-content-panel" active>
-            <AiosSectionHeader title={active.title} summary={active.summary} count={active.count} />
-            {useProductLibrary && activeSection === "tools" && toolHintCount === 0 && (
-              <Alert className="mcp-local-reminder" severity="info" variant="outlined">
-                {fallbackMcpToolHintsUnavailableText}
-              </Alert>
-            )}
+            <AiosSectionHeader
+              title="MCP 服务"
+              summary={`本机已保存的 MCP 服务配置摘要；共识别 ${serviceCount} 个服务${toolHintCount > 0 ? `、${toolHintCount} 个工具线索` : ""}。`}
+              count={visibleItems.length}
+            />
             {productRowsMismatch ? (
               <Alert className="product-row-diagnostic" severity="warning" variant="outlined">
-                <Typography component="strong">统计显示已有 MCP 项，但当前列表没有可显示行。</Typography>
+                <Typography component="strong">统计显示已有 MCP 服务，但当前列表没有可显示行。</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  请刷新本地记录或重新完成一次查找；AIOS Desktop 不启动服务、不连接端点、不调用工具。
+                  请刷新本地记录或重新完成一次查找；AIOS Desktop 不启动服务、不连接端点、不调用 MCP 工具。
                 </Typography>
               </Alert>
-            ) : groups.length === 0 ? (
+            ) : items.length === 0 ? (
               <ModuleEmptyState {...moduleEmptyStateCopy("mcp")} />
+            ) : visibleItems.length === 0 ? (
+              <McpListEmptyState
+                query={query}
+                statusFilterActive={statusMode !== "all"}
+                sourceFilterActive={activeSourceKey !== "all"}
+                onClearSearch={handleClearSearch}
+                onResetFilters={handleResetFilters}
+              />
             ) : (
-              groups.map((group) => (
-                <ResourceGroup key={group.title} accordion group={group} selectedId={selectedId} variant="mcp" onSelect={onSelect} />
-              ))
+              <Box className="mcp-service-list" role="list">
+                {visibleItems.map((item) => (
+                  <McpServiceGroup key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
+                ))}
+              </Box>
             )}
           </AiosContentPanel>
         </Box>
       </Box>
     </AiosModuleFrame>
   );
+});
+
+function McpServiceGroup({
+  item,
+  selectedId,
+  onSelect
+}: {
+  item: McpServiceItem;
+  selectedId: string | null;
+  onSelect: AiosModuleProps["onSelect"];
+}) {
+  const serviceAndTools = useMemo(() => mapMcpServiceItemToResources(item), [item]);
+  const [serviceResource, ...toolResources] = serviceAndTools;
+  const hasToolHints = toolResources.length > 0;
+
+  return (
+    <Box className="mcp-service-group" data-aios-list-row role="listitem">
+      <McpServiceRow item={item} selectedId={selectedId} showToolHints={false} onSelect={onSelect} />
+      {hasToolHints ? (
+        <Box className="mcp-client-hints" role="list" aria-label={`${item.displayName} 工具线索`}>
+          {toolResources.map((toolResource) => (
+            <McpClientHintRow key={toolResource.id} resource={toolResource} selectedId={selectedId} onSelect={onSelect} />
+          ))}
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function McpClientHintRow({
+  resource,
+  selectedId,
+  onSelect
+}: {
+  resource: AiosResource;
+  selectedId: string | null;
+  onSelect: AiosModuleProps["onSelect"];
+}) {
+  const selected = resource.id === selectedId;
+  const handleSelect = useCallback(() => onSelect(resource), [onSelect, resource]);
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleSelect();
+    },
+    [handleSelect]
+  );
+  const hint = (resource.metadata?.mcpToolHintName as string | undefined) || resource.name;
+  const purpose = resource.description || "已保存的工具名称线索。";
+
+  return (
+    <Box
+      aria-pressed={selected}
+      className={selected ? "mcp-client-row selected" : "mcp-client-row"}
+      data-aios-hover-card
+      data-aios-list-row
+      data-aios-selected-surface={selected ? "true" : undefined}
+      role="button"
+      tabIndex={0}
+      title={`${hint}: ${purpose}`}
+      onClick={handleSelect}
+      onKeyDown={handleKeyDown}
+    >
+      <Typography className="mcp-client-row-name" component="span" variant="body2">
+        {hint}
+      </Typography>
+      <Typography className="mcp-client-row-purpose" color="text.secondary" component="span" variant="body2">
+        {purpose}
+      </Typography>
+    </Box>
+  );
+}
+
+function McpListEmptyState({
+  query,
+  statusFilterActive,
+  sourceFilterActive,
+  onClearSearch,
+  onResetFilters
+}: {
+  query: string;
+  statusFilterActive: boolean;
+  sourceFilterActive: boolean;
+  onClearSearch?: () => void;
+  onResetFilters?: () => void;
+}) {
+  const queryActive = query.trim().length > 0;
+  if (queryActive) {
+    return (
+      <ModuleEmptyState
+        title="没有匹配结果"
+        body="换个关键词，或清除搜索后再试。"
+        hints={["搜索覆盖服务名称、来源、工具和状态。", "清除搜索后会恢复全部列表。", "不会触发新的查找。"]}
+        action={onClearSearch ? { label: "清除搜索", onClick: onClearSearch } : undefined}
+      />
+    );
+  }
+
+  if (statusFilterActive || sourceFilterActive) {
+    return (
+      <ModuleEmptyState
+        title="当前筛选没有结果"
+        body="这个筛选条件下没有 MCP 服务。"
+        hints={["可重置筛选查看全部服务。", "需关注的服务会在对应标签下列出。", "不会修改任何来源。"]}
+        action={onResetFilters ? { label: "重置筛选", onClick: onResetFilters } : undefined}
+      />
+    );
+  }
+
+  return (
+    <ModuleEmptyState
+      title="还没有找到 MCP 工具"
+      body="开始查找后，这里会显示本机已配置的 MCP 服务和工具。"
+      hints={["MCP 是一种让 AI 应用连接外部工具的方式。", "AIOS Desktop 不会启动 MCP 服务。", "AIOS Desktop 不会调用 MCP 工具。"]}
+    />
+  );
+}
+
+function groupMcpItemsBySource(items: readonly McpServiceItem[]): McpSourceGroup[] {
+  const rowsBySource = new Map<string, McpServiceItem[]>();
+  for (const item of items) {
+    const title = item.sourceLabel || "来源不明";
+    const rows = rowsBySource.get(title) ?? [];
+    rows.push(item);
+    rowsBySource.set(title, rows);
+  }
+  return [...rowsBySource.entries()].map(([title, rows]) => ({
+    key: `source:${title}`,
+    title,
+    rows
+  }));
+}
+
+function getValidSourceKey(groups: McpSourceGroup[], key: string | null): string | null {
+  if (!key) return null;
+  if (key === "all") return "all";
+  return groups.some((group) => group.title === key) ? key : null;
 }

@@ -607,7 +607,7 @@ function formatScanTime(value: number | null | undefined): string {
   }).format(new Date(value));
 }
 
-const mcpStatusLabels: Record<McpServiceStatus, string> = {
+export const mcpStatusLabels: Record<McpServiceStatus, string> = {
   visible: "可见",
   likelyAvailable: "可能可用",
   needsAttention: "需要处理",

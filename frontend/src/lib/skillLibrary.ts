@@ -156,6 +156,11 @@ export const skillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter;
   { value: "unchecked", label: "未检查" }
 ];
 
+export const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "needsAttention", label: "需要处理" }
+];
+
 export async function getSkillLibrarySummary(): Promise<SkillLibrarySummary | null> {
   if (!isTauriRuntimeAvailable()) return null;
   return invoke<SkillLibrarySummary>("get_skill_library_summary");
@@ -421,7 +426,7 @@ function formatScanTime(value: number | null | undefined): string {
   }).format(new Date(value));
 }
 
-const skillStatusLabels: Record<SkillStatus, string> = {
+export const skillStatusLabels: Record<SkillStatus, string> = {
   available: "可用",
   needsAttention: "需要处理",
   duplicate: "重复",

@@ -350,6 +350,16 @@ for (const forbiddenDependency of ["getResourceDisplay", "buildSkillDisplayEnric
   assert(!`${mcpDetailInspectorSource}\n${mcpLibrarySource}`.includes(forbiddenDependency), `MCP product detail must not rely on generic resource enrichment or ${forbiddenDependency}`);
 }
 
+const mcpServiceRowSource = readFrontendFile("components/resources/McpServiceRow.tsx");
+assert(!mcpModuleSource.includes("AiosAccordionPanel"), "MCP service list must not use heavy accordion groups");
+assert(mcpModuleSource.includes("mcp-service-list"), "MCP module must render a deterministic service list");
+assert(mcpModuleSource.includes("McpServiceRow"), "MCP module must render dedicated service rows");
+assert(mcpModuleSource.includes("showToolHints"), "MCP tool hints must be rendered as subordinate rows");
+assert(mcpServiceRowSource.includes("mapMcpServiceItemToResource"), "MCP service rows must map to real service items");
+assert(mcpServiceRowSource.includes("fallbackMcpToolHintsUnavailableText"), "MCP service rows must surface static/unverified tool hint copy");
+assert(mcpLibrarySource.includes('"unverified"'), "MCP tool hints must remain marked as unverified in the library mapper");
+assert(mcpModuleSource.includes("没有匹配结果"), "MCP must show a user-friendly search-empty state");
+
 console.log("mcpLibrary client tests passed");
 
 function readFrontendFile(relativePath: string): string {

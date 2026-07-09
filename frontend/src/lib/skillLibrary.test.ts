@@ -385,6 +385,24 @@ for (const forbidden of ["resource corpus", "SQLite state", "raw scan diagnostic
   assert(!ordinarySurfaceText.includes(forbidden), `ordinary Home/Skills skill surfaces must not expose ${forbidden}`);
 }
 
+const skillsModuleSource = readFrontendFile("components/modules/SkillsModule.tsx");
+const skillRowSource = readFrontendFile("components/resources/SkillRow.tsx");
+assert(!skillsModuleSource.includes('from "react-window"'), "Skills list must not depend on react-window virtualization");
+assert(!skillsModuleSource.includes("RowComponentProps"), "Skills list must not use virtual row component props");
+assert(!skillRowSource.includes("style={style"), "Skill rows must use normal document flow, not absolute virtual positioning");
+assert(skillsModuleSource.includes("compact-skill-static-list"), "Skills list must render a deterministic static list");
+assert(skillsModuleSource.includes("ProductSkillRow"), "Skills product rows must render real skill items");
+assert(skillsModuleSource.includes("LegacySkillRow"), "Skills fallback rows must render real resource rows");
+assert(skillsModuleSource.includes("shouldShowProductRowsMismatchDiagnostic"), "Skills must diagnose summary/list mismatches");
+const skillLibrarySource = readFrontendFile("lib/skillLibrary.ts");
+assert(skillsModuleSource.includes("skillStatusFilterOptions"), "Skills must use authoritative status filter options");
+for (const requiredStatusLabel of ["全部", "可用", "需要处理", "重复", "已损坏", "来源不明", "未检查"]) {
+  assert(skillLibrarySource.includes(requiredStatusLabel), `Skills status filter options must include ${requiredStatusLabel}`);
+}
+assert(skillsModuleSource.includes("没有匹配结果"), "Skills must show a user-friendly search-empty state");
+assert(skillsModuleSource.includes("当前筛选没有结果"), "Skills must show a user-friendly filter-empty state");
+assert(skillsModuleSource.includes("productVirtualListHeight"), "Skills layout must retain deterministic height helper");
+
 console.log("skillLibrary client tests passed");
 
 function readFrontendFile(relativePath: string): string {

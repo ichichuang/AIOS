@@ -1,7 +1,6 @@
 import { Alert, Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import { memo, useCallback, useEffect, useMemo, useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactElement } from "react";
-import { List } from "react-window";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { zhCN } from "../../i18n/zh-CN";
 import { markAiosPerf } from "../../lib/perf";
@@ -10,7 +9,7 @@ import { buildSkillCapabilitySearchTextMap, SKILL_CAPABILITY_CATEGORIES, type Sk
 import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import { buildSkillIdentityRows, filterSkillIdentityRows, type SkillIdentityRow } from "../../lib/skillIdentityModel";
 import { fallbackSkillUsageText, filterSkillLibraryItems, mapSkillListItemToResource, skillStatusFilterOptions, type SkillListItem, type SkillStatus, type SkillStatusFilter } from "../../lib/skillLibrary";
-import { CompactSkillRow, type CompactSkillRowProps } from "../resources/CompactSkillRow";
+import { LegacySkillRow, ProductSkillRow } from "../resources/SkillRow";
 import { AiosModuleFrame, AiosSectionHeader, AiosSectionRail, AiosSegmentedSwitcher } from "../ui/AiosUiPrimitives";
 import type { AiosModuleProps } from "./moduleUtils";
 import { moduleAriaLabel, moduleEmptyStateCopy } from "./moduleUtils";
@@ -38,7 +37,7 @@ const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter
   { value: "needsAttention", label: "需补全" }
 ];
 
-export const SkillsModule = memo(function SkillsModule({ displayById, query, resources, selectedId, skillCapabilityById, skillLibrary, onClearSelection, onSelect }: AiosModuleProps) {
+export const SkillsModule = memo(function SkillsModule({ displayById, query, resources, selectedId, skillCapabilityById, skillLibrary, onClearSelection, onQueryChange, onSelect }: AiosModuleProps) {
   const [libraryTab, setLibraryTab] = useState<SkillLibraryTab>("groups");
   const [statusFilterMode, setStatusFilterMode] = useState<SkillStatusFilter>("all");
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
@@ -96,7 +95,6 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     if (queryActive || libraryTab === "all") return queryResultRows;
     return renderedGroup ? filteredRowsByGroupKey.get(renderedGroup.key) ?? [] : [];
   }, [filteredRowsByGroupKey, libraryTab, queryActive, queryResultRows, renderedGroup]);
-  const rowProps = useMemo<CompactSkillRowProps>(() => ({ rows: visibleRows, selectedId, skillCapabilityById, showCapability: true, onSelect }), [onSelect, selectedId, skillCapabilityById, visibleRows]);
   const productGroups = useMemo(() => groupSkillLibraryItemsBySource(skillLibrary.items), [skillLibrary.items]);
   const productFilteredRowsByGroupKey = useMemo(
     () =>
@@ -134,7 +132,6 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     if (queryActive || libraryTab === "all") return productQueryResultRows;
     return productRenderedGroup ? productFilteredRowsByGroupKey.get(productRenderedGroup.key) ?? [] : [];
   }, [libraryTab, productFilteredRowsByGroupKey, productQueryResultRows, productRenderedGroup, queryActive]);
-  const visibleListHeight = productVirtualListHeight(visibleRows.length, ROW_HEIGHT);
   const productVisibleListHeight = productVirtualListHeight(productVisibleRows.length, ROW_HEIGHT);
   const productRowsMismatch = shouldShowProductRowsMismatchDiagnostic({
     summaryCount: skillLibrary.summary?.counts.dedupedSkillCount ?? 0,
@@ -197,6 +194,17 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
     [onClearSelection, startGroupTransition, useProductLibrary]
   );
 
+  const handleClearSearch = useCallback(() => {
+    onQueryChange?.("");
+  }, [onQueryChange]);
+
+  const handleResetFilters = useCallback(() => {
+    setStatusFilterMode("all");
+    setActiveGroupKey(null);
+    setRenderedGroupKey(null);
+    onClearSelection();
+  }, [onClearSelection]);
+
   const effectiveRenderedKey = useProductLibrary ? productRenderedKey : renderedKey;
   const effectiveVisibleRowsCount = useProductLibrary ? productVisibleRows.length : visibleRows.length;
   const effectiveTotalRowsCount = useProductLibrary ? (skillLibrary.summary?.counts.dedupedSkillCount ?? productVisibleRows.length) : visibleRows.length;
@@ -238,22 +246,16 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
       })),
     [productFilteredRowsByGroupKey, productGroups]
   );
-  const emptyCopy = moduleEmptyStateCopy("skills");
   const skillListShell = (
     <Box className="compact-skill-list-shell" data-aios-internal-scroll="true">
       {visibleRows.length === 0 ? (
-        <ModuleEmptyState {...emptyCopy} />
+        <SkillListEmptyState query={query} statusFilterActive={fallbackStatusFilterActive} onClearSearch={handleClearSearch} onResetFilters={handleResetFilters} />
       ) : (
-        <List
-          className="compact-skill-window"
-          defaultHeight={ROW_HEIGHT * Math.min(visibleRows.length, 8)}
-          overscanCount={4}
-          rowComponent={CompactSkillRow}
-          rowCount={visibleRows.length}
-          rowHeight={ROW_HEIGHT}
-          rowProps={rowProps}
-          style={{ height: visibleListHeight, width: "100%" }}
-        />
+        <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVirtualListHeight(visibleRows.length, ROW_HEIGHT) }}>
+          {visibleRows.map((row) => (
+            <LegacySkillRow key={(row as SkillIdentityRow).id} row={row as SkillIdentityRow} selectedId={selectedId} skillCapabilityById={skillCapabilityById} onSelect={onSelect} />
+          ))}
+        </Box>
       )}
     </Box>
   );
@@ -267,7 +269,7 @@ export const SkillsModule = memo(function SkillsModule({ displayById, query, res
           </Typography>
         </Alert>
       ) : productVisibleRows.length === 0 ? (
-        <ModuleEmptyState {...emptyCopy} />
+        <SkillListEmptyState query={query} statusFilterActive={productStatusFilterActive} onClearSearch={handleClearSearch} onResetFilters={handleResetFilters} />
       ) : (
         <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVisibleListHeight }}>
           {productVisibleRows.map((item) => (
@@ -347,6 +349,53 @@ function SkillListPanel({ children, count, summary, title }: { children: ReactEl
       <AiosSectionHeader count={count} summary={summary} title={title} />
       {children}
     </Box>
+  );
+}
+
+function SkillListEmptyState({
+  query,
+  statusFilterActive,
+  onClearSearch,
+  onResetFilters
+}: {
+  query: string;
+  statusFilterActive: boolean;
+  onClearSearch?: () => void;
+  onResetFilters?: () => void;
+}) {
+  const queryActive = query.trim().length > 0;
+  const emptyCopy = moduleEmptyStateCopy("skills");
+
+  if (queryActive) {
+    return (
+      <ModuleEmptyState
+        title="没有匹配结果"
+        body="换个关键词，或清除搜索后再试。"
+        hints={["搜索覆盖技能名称、用途、来源和可用工具。", "清除搜索后会恢复全部列表。", "不会触发新的查找。"]}
+      />
+    );
+  }
+
+  if (statusFilterActive) {
+    return (
+      <ModuleEmptyState
+        title="当前筛选没有结果"
+        body="这个状态下没有技能。"
+        hints={["可重置筛选查看全部技能。", "已损坏或来源不明的技能会在对应状态下列出。", "不会修改任何来源。"]}
+      />
+    );
+  }
+
+  return (
+    <ModuleEmptyState
+      title={emptyCopy.title}
+      body={emptyCopy.body}
+      hints={[
+        ...emptyCopy.hints,
+        ...(onClearSearch ? ["可清除搜索恢复全部列表。"] : []),
+        ...(onResetFilters ? ["可重置筛选查看所有状态。"] : [])
+      ]}
+    />
   );
 }
 

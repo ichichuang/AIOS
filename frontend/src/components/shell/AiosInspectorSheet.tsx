@@ -26,7 +26,7 @@ interface AiosInspectorSheetProps {
 
 export function AiosInspectorSheet({ activeView, resource, skillIdentity, skillCapability, mcpDetailState, skillDetailState, visibleCount, onMobileClose }: AiosInspectorSheetProps) {
   const theme = useTheme();
-  const isPersistent = useMediaQuery("(min-width: 1024px)");
+  const isPersistent = useMediaQuery("(min-width: 1320px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const body = <InspectorBody activeView={activeView} resource={resource} skillIdentity={skillIdentity} skillCapability={skillCapability} mcpDetailState={mcpDetailState} skillDetailState={skillDetailState} visibleCount={visibleCount} />;
 

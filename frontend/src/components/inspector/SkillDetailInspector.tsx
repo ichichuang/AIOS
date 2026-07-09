@@ -47,13 +47,6 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
           </Box>
         </Box>
 
-        <Box className="inspector-context-grid" aria-label="技能摘要">
-          <DetailContextItem label="技能名称" value={view.title} />
-          <DetailContextItem label="来源" value={view.sourceText} />
-          <DetailContextItem label="状态" value={view.statusText} />
-          <DetailContextItem label="可用工具" value={view.availableInToolsText} />
-        </Box>
-
         {view.notice && (
           <Box className={`inspector-boundary-callout ${view.mode === "loading" ? "info" : "warn"}`}>
             <Box className="inspector-boundary-callout-copy">
@@ -106,17 +99,6 @@ export const SkillDetailInspector = memo(function SkillDetailInspector({ detail,
     </Box>
   );
 });
-
-function DetailContextItem({ label, value }: { label: string; value: string }) {
-  return (
-    <Box className="inspector-context-item">
-      <Typography component="span">{label}</Typography>
-      <Typography component="strong" title={value}>
-        {value}
-      </Typography>
-    </Box>
-  );
-}
 
 function DetailTextBlock({ title, value, muted = false }: { title: string; value: string; muted?: boolean }) {
   return (
