@@ -51,7 +51,7 @@ export const McpServiceDetailInspector = memo(function McpServiceDetailInspector
         <Box className="inspector-context-grid" aria-label="MCP 服务摘要">
           <DetailContextItem label="状态" value={view.statusText} />
           <DetailContextItem label="来源" value={`${mcpStaticSourceLabel} · ${view.sourceText}`} />
-          <DetailContextItem label="工具线索" value={view.toolHintsText} />
+          <DetailContextItem label="工具名称线索" value={view.toolHintsText} />
           <DetailContextItem label="验证说明" value={mcpUnverifiedLabel} />
         </Box>
 
@@ -68,7 +68,7 @@ export const McpServiceDetailInspector = memo(function McpServiceDetailInspector
 
         {showWhatItDoes && <DetailTextBlock title="它能做什么" value={view.whatItDoes} />}
         {showConfigLocation && <DetailTextBlock title="配置位置" value={view.configLocationText} code />}
-        {showToolHints && <DetailTextBlock title="工具线索" value={view.toolHintsText} />}
+        {showToolHints && <DetailTextBlock title="工具名称线索" value={view.toolHintsText} />}
         <DetailTextBlock title="安全说明" value={view.safetyText} />
       </Box>
 

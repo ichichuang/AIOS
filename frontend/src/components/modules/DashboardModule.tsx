@@ -1,6 +1,9 @@
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
+import ComputerRounded from "@mui/icons-material/ComputerRounded";
+import ExtensionRounded from "@mui/icons-material/ExtensionRounded";
 import FolderOpenRounded from "@mui/icons-material/FolderOpenRounded";
+import HubRounded from "@mui/icons-material/HubRounded";
 import ManageSearchRounded from "@mui/icons-material/ManageSearchRounded";
 import SecurityRounded from "@mui/icons-material/SecurityRounded";
 import { useCallback, useState } from "react";
@@ -15,19 +18,17 @@ import type { AiosModuleProps } from "./moduleUtils";
 type HomeGuideIntent = "start" | "folder";
 type FolderAddState = "idle" | "adding" | "added" | "error";
 
-export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skillLibrary, viewCounts, onViewChange }: AiosModuleProps) {
+export function DashboardModule({ resourceCorpus, mcpLibrary, skillLibrary, viewCounts, onViewChange }: AiosModuleProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideIntent, setGuideIntent] = useState<HomeGuideIntent>("start");
   const [folderAddState, setFolderAddState] = useState<FolderAddState>("idle");
   const [folderAddMessage, setFolderAddMessage] = useState<string | null>(null);
-  const legacyAttentionCount = allResources.filter((resource) => resource.risk !== "low" || resource.status === "warn" || resource.status === "missing" || resource.status === "unknown").length;
   const homeSkillStats = buildHomeSkillLibraryStats(skillLibrary.summary, resourceCorpus.summary, viewCounts);
   const homeMcpStats = buildHomeMcpLibraryStats(mcpLibrary.summary, viewCounts);
-  const usingProductAttention = homeSkillStats.usingProductSummary || homeMcpStats.usingProductSummary;
-  const attentionCount = usingProductAttention ? homeSkillStats.needsAttentionCount + homeMcpStats.needsAttentionCount : legacyAttentionCount;
   const latestScanLabel = homeSkillStats.latestScanLabel !== "还没有查找记录" ? homeSkillStats.latestScanLabel : homeMcpStats.latestSearchOrScanLabel;
-  const hasResults = homeSkillStats.usingProductSummary || homeMcpStats.usingProductSummary ? (skillLibrary.summary?.counts.totalSkillCandidates ?? 0) > 0 || homeMcpStats.serviceCount > 0 || resourceCorpus.summary.resourceCount > 0 : resourceCorpus.summary.resourceCount > 0;
-  const mcpCountLabel = `${formatCount(homeMcpStats.serviceCount)} / ${formatCount(homeMcpStats.toolHintCount)}`;
+  const hasResults = homeSkillStats.usingProductSummary || homeMcpStats.usingProductSummary
+    ? (skillLibrary.summary?.counts.totalSkillCandidates ?? 0) > 0 || homeMcpStats.serviceCount > 0 || resourceCorpus.summary.resourceCount > 0
+    : resourceCorpus.summary.resourceCount > 0;
   const openGuide = useCallback((intent: HomeGuideIntent) => {
     setGuideIntent(intent);
     setGuideOpen(true);
@@ -66,7 +67,7 @@ export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skil
       view="dashboard"
       summary={homeCopy.summary}
       ariaLabel="AIOS Desktop 首页"
-      motionKey={`dashboard:${homeSkillStats.skillCount}:${viewCounts.mcp}:${attentionCount}`}
+      motionKey={`dashboard:${homeSkillStats.skillCount}:${homeMcpStats.serviceCount}`}
     >
       <AiosHeroPanel className="dashboard-hero">
         <Box className="dashboard-hero-copy">
@@ -74,7 +75,9 @@ export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skil
             {homeCopy.title}
           </Typography>
           <Typography className="dashboard-hero-summary" color="text.secondary" variant="body1">
-            {hasResults ? "这是当前整理好的本机结果，可从左侧进入技能或 MCP 查看详情。" : "开始查找后，这里会显示这台电脑上的 AI 技能和 MCP 工具。"}
+            {hasResults
+              ? "这是 AIOS Desktop 已整理的本地记录。可从下方进入技能或 MCP 查看详情。"
+              : "开始查找后，这里会显示这台电脑上的 AI 技能和 MCP 服务。"}
           </Typography>
 
           <Stack className="dashboard-hero-actions" direction="row">
@@ -86,64 +89,74 @@ export function DashboardModule({ allResources, resourceCorpus, mcpLibrary, skil
             </Button>
           </Stack>
         </Box>
-        <Box className="dashboard-hero-status" aria-label="首页摘要">
-          <Box className="dashboard-hero-stat">
-            <Typography component="strong">{formatCount(homeSkillStats.skillCount)}</Typography>
-            <Typography color="text.secondary" variant="body2">
-              AI 技能
-            </Typography>
-          </Box>
-          <Box className="dashboard-hero-stat">
-            <Typography component="strong">{mcpCountLabel}</Typography>
-            <Typography color="text.secondary" variant="body2">
-              MCP 服务 / 工具
-            </Typography>
-          </Box>
-          <Box className="dashboard-hero-stat">
-            <Typography component="strong">{latestScanLabel}</Typography>
-            <Typography color="text.secondary" variant="body2">
-              最近查找
-            </Typography>
-          </Box>
-        </Box>
       </AiosHeroPanel>
 
-      <AiosSection className="dashboard-summary-section">
-        <AiosSectionHeader title="当前概览" summary="只展示普通用户需要先看到的本机结果。" />
-        <Box className="dashboard-summary-grid">
-          <AiosUsageCard
-            className="dashboard-summary-card"
-            icon={null}
-            purpose="已识别或可使用的 AI 技能线索。"
-            selected={false}
-            technicalName={formatCount(homeSkillStats.skillCount)}
-            title="AI 技能"
-          />
-          <AiosUsageCard
-            className="dashboard-summary-card"
-            icon={null}
-            purpose="本机已配置的 MCP 服务，以及可安全识别的工具名称线索。"
-            selected={false}
-            technicalName={mcpCountLabel}
-            title="MCP 服务 / 工具"
-          />
-          <AiosUsageCard
-            className="dashboard-summary-card"
-            icon={null}
-            purpose="权限跳过、来源异常或需要人工查看的项目。"
-            selected={false}
-            technicalName={formatCount(attentionCount)}
-            title="需要处理"
-          />
-          <AiosUsageCard
-            className="dashboard-summary-card"
-            icon={null}
-            purpose="只显示 AIOS Desktop 自己保存的本机记录。"
-            selected={false}
-            technicalName={latestScanLabel}
-            title="最近一次查找"
-          />
+      <AiosSection className="dashboard-module-section dashboard-local-section">
+        <AiosSectionHeader title="本地整理的内容" summary="这些数字来自 AIOS Desktop 已保存的本地记录，不代表整台电脑的完整发现。" />
+        <Box className="dashboard-local-summary" aria-label="本地整理的内容概览">
+          <Box className="dashboard-local-summary-row">
+            <ExtensionRounded fontSize="small" />
+            <Typography>
+              已整理 <strong>{formatCount(homeSkillStats.skillCount)}</strong> 个 AI 技能
+            </Typography>
+          </Box>
+          <Box className="dashboard-local-summary-row">
+            <HubRounded fontSize="small" />
+            <Typography>
+              已记录 <strong>{formatCount(homeMcpStats.serviceCount)}</strong> 个 MCP 服务
+            </Typography>
+          </Box>
+          {homeMcpStats.toolHintCount > 0 && (
+            <Box className="dashboard-local-summary-row">
+              <HubRounded fontSize="small" />
+              <Typography>
+                另有约 <strong>{formatCount(homeMcpStats.toolHintCount)}</strong> 个 MCP 工具名称线索（未验证）
+              </Typography>
+            </Box>
+          )}
+          <Box className="dashboard-local-summary-row">
+            <ComputerRounded fontSize="small" />
+            <Typography>
+              最近查找：{latestScanLabel}
+            </Typography>
+          </Box>
         </Box>
+      </AiosSection>
+
+      <AiosSection className="dashboard-module-section dashboard-project-section">
+        <AiosSectionHeader title="项目能力" summary="AIOS 当前还不能可靠地区分项目专属的技能和 MCP 服务。" />
+        <Alert className="dashboard-empty-module-alert" severity="info" variant="outlined">
+          <Typography component="strong">暂未整理项目级 AI 能力</Typography>
+          <Typography color="text.secondary" variant="body2">
+            AIOS 当前还不能可靠地区分项目专属的技能和 MCP 服务。后续版本会在元数据模型支持时展示项目级能力。
+          </Typography>
+        </Alert>
+      </AiosSection>
+
+      <AiosSection className="dashboard-module-section dashboard-skills-section">
+        <AiosSectionHeader title="技能" summary="浏览已整理的 Skills，了解每个技能能做什么、适合什么时候使用。" />
+        <AiosUsageCard
+          className="dashboard-module-card dashboard-entry-card"
+          icon={<ExtensionRounded fontSize="small" />}
+          purpose="按任务和功能分类浏览；查看每个技能能做什么、适合什么时候用、可用于哪些 AI 工具。"
+          selected={false}
+          technicalName={`${formatCount(homeSkillStats.skillCount)} 个已整理的技能`}
+          title="查看全部技能"
+          onClick={() => onViewChange("skills")}
+        />
+      </AiosSection>
+
+      <AiosSection className="dashboard-module-section dashboard-mcp-section">
+        <AiosSectionHeader title="MCP" summary="浏览来自本地配置记录的 MCP 服务；工具名称线索未经实时验证。" />
+        <AiosUsageCard
+          className="dashboard-module-card dashboard-entry-card"
+          icon={<HubRounded fontSize="small" />}
+          purpose="按服务浏览本地配置记录；查看每个 MCP 服务提供什么能力、来自哪里。工具名称线索未经实时连接验证。"
+          selected={false}
+          technicalName={`${formatCount(homeMcpStats.serviceCount)} 个已记录的服务 · ${formatCount(homeMcpStats.toolHintCount)} 个工具名称线索`}
+          title="查看全部 MCP 服务"
+          onClick={() => onViewChange("mcp")}
+        />
       </AiosSection>
 
       <AiosSection className="dashboard-privacy-section">

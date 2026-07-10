@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
-    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/productShell.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/productListRendering.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillLibrary.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/mcpLibrary.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/customDirectoryScan.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceStore.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceCorpus.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/layoutMetrics.test.ts",
+    "test:unit": "node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/productShell.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/productListRendering.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillLibrary.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/mcpLibrary.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillCapabilityClassifier.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillIdentityModel.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/skillDisplayEnrichment.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/customDirectoryScan.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceStore.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/resourceCorpus.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/lib/layoutMetrics.test.ts && node --no-warnings --loader ./scripts/ts-extension-loader.mjs src/components/modules/DashboardModule.test.tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json",
     "preview": "vite preview --host 127.0.0.1"
   },
@@ -27,6 +27,7 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",
+    "esbuild": "0.21.5",
     "typescript": "5.6.3",
     "vite": "5.4.11"
   }

@@ -302,7 +302,7 @@ export function getCorpusSourceLabel(mode: ResourceCorpusSourceMode): string {
 export function getCorpusEmptyMessage(mode: ResourceCorpusSourceMode): string {
   if (mode === "dynamic-corpus") return "当前来源下没有匹配的本机结果。";
   if (mode === "legacy-snapshot") return "这是历史示例，不代表当前电脑查找结果。";
-  return "还没有查找这台电脑上的 AI 技能和 MCP 工具；请从首页开始查找或在高级里手动选择文件夹。";
+  return "还没有查找这台电脑上的 AI 技能和 MCP 服务；请从首页开始查找或在高级里手动选择文件夹。";
 }
 
 export function getScopeViewingLabel(scope: ResourceCorpusScope, mode: ResourceCorpusSourceMode): string {

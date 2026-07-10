@@ -111,10 +111,8 @@ export function buildProductShellTopBarSummary({
   skillSummary
 }: ProductShellTopBarSummaryInput): ProductShellTopBarSummary {
   const skillCount = normalizeCount(skillSummary?.counts.dedupedSkillCount);
-  const skillAttentionCount = normalizeCount(skillSummary?.counts.needsAttentionCount);
   const mcpServiceCount = normalizeCount(mcpSummary?.counts.serviceCount);
   const mcpToolHintCount = normalizeCount(mcpSummary?.counts.toolHintCount);
-  const mcpAttentionCount = normalizeCount(mcpSummary?.counts.needsAttentionCount);
   const hasProductSummary = Boolean(skillSummary || mcpSummary);
   const hasProductResults = skillCount > 0 || mcpServiceCount > 0 || mcpToolHintCount > 0;
 
@@ -122,7 +120,7 @@ export function buildProductShellTopBarSummary({
     if (activeView === "skills") {
       return {
         sourceLabel: "本机结果",
-        detailLabel: joinTopBarParts([`${skillCount} 个技能`, skillAttentionCount > 0 ? `${skillAttentionCount} 个需要处理` : null]),
+        detailLabel: `${skillCount} 个技能`,
         hasProductSummary,
         hasProductResults
       };
@@ -133,8 +131,7 @@ export function buildProductShellTopBarSummary({
         sourceLabel: "本机结果",
         detailLabel: joinTopBarParts([
           `${mcpServiceCount} 个 MCP 服务`,
-          mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null,
-          mcpAttentionCount > 0 ? `${mcpAttentionCount} 个需要处理` : null
+          mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null
         ]),
         hasProductSummary,
         hasProductResults
@@ -155,8 +152,7 @@ export function buildProductShellTopBarSummary({
       detailLabel: joinTopBarParts([
         `${skillCount} 个技能`,
         `${mcpServiceCount} 个 MCP 服务`,
-        mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null,
-        skillAttentionCount + mcpAttentionCount > 0 ? `${skillAttentionCount + mcpAttentionCount} 个需要处理` : null
+        mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null
       ]),
       hasProductSummary,
       hasProductResults
@@ -187,8 +183,8 @@ export function resolvePrimaryNavigationSearch(input: string): PrimaryNavigation
 }
 
 export const homeCopy = {
-  title: "查看这台电脑上的 AI 技能和 MCP 工具",
-  summary: "AIOS Desktop 把本机已经安装或配置的 AI 技能和 MCP 工具整理成简单清单。",
+  title: "查看这台电脑上的 AI 技能和 MCP 服务",
+  summary: "AIOS Desktop 把本机已经安装或配置的 AI 技能和 MCP 服务整理成简单清单，帮助你理解有哪些 AI 能力可用。",
   primaryActions: [
     { label: "开始查找", action: "open-first-run-guide" },
     { label: "手动选择文件夹", action: "open-folder-selection-guide" }
@@ -203,8 +199,8 @@ export const homeCopy = {
 
 export const homeFirstRunGuideCopy = {
   title: "开始查找本机 AI 技能",
-  intro: "AIOS 会查找这台电脑上的 AI 技能和 MCP 工具的基本信息。",
-  mcpExplanation: "MCP 是 AI 应用连接外部工具的一种方式；这里仅整理本机已配置服务和工具名称线索。",
+  intro: "AIOS 会查找这台电脑上的 AI 技能和 MCP 服务的基本信息。",
+  mcpExplanation: "MCP 是 AI 应用连接外部工具的一种方式；这里仅整理本机已配置服务和配置中识别到的工具名称线索。",
   safetyLine: "AIOS 只在本机整理元数据，不上传数据。",
   steps: [
     {

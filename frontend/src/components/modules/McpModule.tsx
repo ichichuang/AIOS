@@ -226,7 +226,7 @@ function McpListEmptyState({
   return (
     <ModuleEmptyState
       title="还没有找到 MCP 服务"
-      body="开始查找后，这里会显示本机已保存的 MCP 服务和工具线索。"
+      body="开始查找后，这里会显示本机已保存的 MCP 服务，以及配置中识别到的工具名称线索。"
       hints={["MCP 是一种让 AI 应用连接外部工具的方式。", "AIOS Desktop 不会启动 MCP 服务。", "AIOS Desktop 不会调用 MCP 工具。"]}
     />
   );

@@ -2,12 +2,15 @@
 
 状态：产品规划基线。
 
+**最高权威产品定义见 [AIOS Desktop 产品定义](./00-aios-desktop-product-definition.zh-CN.md)。** 本文档集其余文件围绕该定义展开；当其他文件与产品定义冲突时，以产品定义为准。
+
 这些文档重新定义 AIOS Desktop。它是一款简单的本地桌面应用，帮助用户查看、理解、整理和使用自己电脑上已经安装或配置的 AI 技能和 MCP 工具。
 
 本阶段只做产品规划和需求说明，不改运行时代码、扫描代码、界面代码、包配置、构建配置、工作流、标签、发行或生成文件。
 
 ## 文档目录
 
+- [权威产品定义](./00-aios-desktop-product-definition.zh-CN.md)
 - [产品定位](./01-product-positioning.zh-CN.md)
 - [用户需求](./02-user-requirements.zh-CN.md)
 - [用户旅程与首次使用流程](./03-user-journey-first-run.zh-CN.md)
@@ -25,6 +28,7 @@
 ## 规划原则
 
 - 普通用户永远是默认用户。
+- [AIOS Desktop 产品定义](./00-aios-desktop-product-definition.zh-CN.md) 是当前产品方向的唯一最高权威来源。
 - 高级开发者可以看到更多来源和问题细节，但这些内容不能压过普通用户的主要流程。
 - 主导航只保留：首页、技能、MCP、高级。
 - 用户最先看到的问题应该是：我有多少 AI 技能？每个技能做什么？从哪里来？哪个工具能用？怎么用？哪些需要处理？有哪些 MCP 工具可用？

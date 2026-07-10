@@ -48,11 +48,11 @@ assert.deepEqual(fallbackSourceMap, []);
 await assert.rejects(() => getResourceDetail("resource-1"), /Tauri 桌面运行时/);
 assert.equal(getCorpusSourceMode(fallbackSummary), "empty");
 assert.equal(getCorpusSourceLabel("empty"), "还没有查找");
-assert.equal(getCorpusEmptyMessage("empty"), "还没有查找这台电脑上的 AI 技能和 MCP 工具；请从首页开始查找或在高级里手动选择文件夹。");
+assert.equal(getCorpusEmptyMessage("empty"), "还没有查找这台电脑上的 AI 技能和 MCP 服务；请从首页开始查找或在高级里手动选择文件夹。");
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, false), true);
 assert.equal(shouldShowFirstRunOnboarding(fallbackSummary, true), false);
 assert.equal(moduleEmptyStateCopy("skills").body, "开始查找后，这里会显示技能名称、用途、来源和使用方法。");
-assert.equal(moduleEmptyStateCopy("mcp").body, "开始查找后，这里会显示本机已配置的 MCP 服务和工具。");
+assert.equal(moduleEmptyStateCopy("mcp").body, "开始查找后，这里会显示本机已保存的 MCP 服务，以及配置中识别到的工具名称线索。");
 
 const emptyLibraryView = buildLocalResourceLibraryViewState(fallbackSummary, globalCorpusScope, "empty");
 assert.equal(emptyLibraryView.statusLabel, "还没有查找");

@@ -170,8 +170,8 @@ export function moduleEmptyStateCopy(view: ResourceView): { title: string; body:
       };
     case "mcp":
       return {
-        title: "还没有找到 MCP 工具",
-        body: "开始查找后，这里会显示本机已配置的 MCP 服务和工具。",
+        title: "还没有找到 MCP 服务",
+        body: "开始查找后，这里会显示本机已保存的 MCP 服务，以及配置中识别到的工具名称线索。",
         hints: ["MCP 是一种让 AI 应用连接外部工具的方式。", "AIOS Desktop 不会启动 MCP 服务。", "AIOS Desktop 不会调用 MCP 工具。"]
       };
     case "advanced":
@@ -219,7 +219,7 @@ export function moduleEmptyStateCopy(view: ResourceView): { title: string; body:
     default:
       return {
         title: "还没有查找这台电脑上的 AI 技能",
-        body: "点击开始后，AIOS Desktop 会查找本机 AI 技能和 MCP 工具的基本信息。",
+        body: "点击开始后，AIOS Desktop 会查找本机 AI 技能和 MCP 服务的基本信息。",
         hints: ["结果只保存在这台电脑上。", "不会上传查找结果。", "查找必须由用户手动开始。"]
       };
   }

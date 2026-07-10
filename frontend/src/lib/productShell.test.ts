@@ -72,7 +72,7 @@ assert.deepEqual(
 
 const ordinaryHomePrimaryText = [homeCopy.title, homeCopy.summary, ...homeCopy.primaryActions.map((action) => action.label)].join(" ");
 const ordinaryHomeText = [ordinaryHomePrimaryText, ...homeCopy.safetyReminders].join(" ");
-assert.match(ordinaryHomeText, /查看这台电脑上的 AI 技能和 MCP 工具/);
+assert.match(ordinaryHomeText, /查看这台电脑上的 AI 技能和 MCP 服务/);
 assert.match(ordinaryHomeText, /开始查找/);
 assert.match(ordinaryHomeText, /手动选择文件夹/);
 assert.match(ordinaryHomeText, /结果只保存在这台电脑上/);
@@ -175,18 +175,31 @@ assert.equal(dashboardTopBarSummary.sourceLabel, "本机结果");
 assert.match(dashboardTopBarSummary.detailLabel, /7 个技能/);
 assert.match(dashboardTopBarSummary.detailLabel, /4 个 MCP 服务/);
 assert.match(dashboardTopBarSummary.detailLabel, /6 个工具线索/);
+assert(!dashboardTopBarSummary.detailLabel.includes("需要处理"), "Home top command bar detail label must not expose needsAttentionCount");
 assert(!dashboardTopBarSummary.detailLabel.includes("0 项"), "Home top command bar must not show legacy 0-count state when product data exists");
 assert.equal(
   buildProductShellTopBarSummary({ activeView: "skills", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel,
-  "7 个技能 · 2 个需要处理"
+  "7 个技能"
+);
+assert(
+  !buildProductShellTopBarSummary({ activeView: "skills", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel.includes("需要处理"),
+  "Skills top command bar detail label must not expose needsAttentionCount"
 );
 assert.equal(
   buildProductShellTopBarSummary({ activeView: "mcp", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel,
-  "4 个 MCP 服务 · 6 个工具线索 · 1 个需要处理"
+  "4 个 MCP 服务 · 6 个工具线索"
+);
+assert(
+  !buildProductShellTopBarSummary({ activeView: "mcp", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel.includes("需要处理"),
+  "MCP top command bar detail label must not expose needsAttentionCount"
 );
 assert.equal(
   buildProductShellTopBarSummary({ activeView: "dashboard", corpusSourceLabel: "还没有查找", mcpSummary: null, shownCount: 0, skillSummary: null }).detailLabel,
   "暂无技能或 MCP 结果"
+);
+assert.equal(
+  buildProductShellTopBarSummary({ activeView: "dashboard", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).sourceLabel,
+  "本机结果"
 );
 
 const homeGuideSafetyText = [homeFirstRunGuideCopy.safetyLine, ...homeFirstRunGuideCopy.safetyCommitments].join(" ");
@@ -239,6 +252,9 @@ const skillIdentitySource = readFile("lib/skillIdentityModel.ts");
 const skillRequirementsSource = readProjectFile("docs/product/06-skill-library-requirements.zh-CN.md");
 const mcpRequirementsSource = readProjectFile("docs/product/07-mcp-library-requirements.zh-CN.md");
 const acceptanceSource = readProjectFile("docs/product/09-product-acceptance-criteria.zh-CN.md");
+const canonicalProductDefinitionSource = readProjectFile("docs/product/00-aios-desktop-product-definition.zh-CN.md");
+const productReadmeSource = readProjectFile("docs/product/README.zh-CN.md");
+const documentationMapSource = readProjectFile("docs/product/10-documentation-map.zh-CN.md");
 
 assert(customScanModuleSource.includes("renderBackButton(\"custom-scan\""), "custom-scan must render the Advanced back arrow");
 assert(!customScanModuleSource.includes("AiosTabBar"), "custom-scan must not use the rejected AiosTabBar");
@@ -250,7 +266,7 @@ assert(!customScanModuleSource.includes("contentHeight - 140"), "custom-scan mus
 
 assert(productShellSource.includes("homeFirstRunGuideCopy"), "productShell must expose testable Home first-run guide copy");
 assert(productShellSource.includes("开始查找本机 AI 技能"), "Home guide title must be ordinary-user oriented");
-assert(productShellSource.includes("AIOS 会查找这台电脑上的 AI 技能和 MCP 工具的基本信息"), "Home guide must say what AIOS will find");
+assert(productShellSource.includes("AIOS 会查找这台电脑上的 AI 技能和 MCP 服务的基本信息"), "Home guide must say what AIOS will find");
 assert(productShellSource.includes("查找结果只保存在这台电脑上"), "Home guide must state local-only results");
 assert(productShellSource.includes("不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值"), "Home guide must state sensitive values are not read");
 assert(productShellSource.includes("不执行脚本，也不启动或调用 MCP 工具"), "Home guide must state scripts and MCP tools are not run");
@@ -264,6 +280,22 @@ assert(dashboardModuleSource.includes("addScanSources("), "Home folder-selection
 assert(!dashboardModuleSource.includes("startScanSourcesBatch"), "Home guide must not start scanning automatically");
 assert(dashboardModuleSource.includes("onViewChange(\"custom-scan\")"), "Home guide must offer a next-step route to 查找位置");
 assert(dashboardModuleSource.includes("查看查找位置") && !dashboardModuleSource.includes("并开始扫描"), "Home dialog actions must not imply automatic scanning");
+assert(dashboardModuleSource.includes("本地整理的内容"), "Home must expose a local organized-content overview");
+assert(dashboardModuleSource.includes("已整理"), "Home local overview must describe skill totals as organized local records");
+assert(dashboardModuleSource.includes("已记录"), "Home local overview must describe MCP totals as recorded local records");
+assert(!dashboardModuleSource.includes("本机 AI 能力概览"), "Home must not use the old computer-scope analytics heading");
+assert(dashboardModuleSource.includes("项目能力"), "Home must expose a project capability section");
+assert(dashboardModuleSource.includes("暂未整理项目级 AI 能力"), "Home project module must show the honest unavailable state");
+assert(dashboardModuleSource.includes("AIOS 当前还不能可靠地区分项目专属的技能和 MCP 服务"), "Home project module must explain why project capability is unavailable");
+assert(!dashboardModuleSource.includes("resourceCorpus.projectMap"), "Home must not use resourceCorpus.projectMap to render projects");
+assert(!dashboardModuleSource.includes("buildProjectOverviewEntries"), "Home must not build inferred project entries");
+assert(!dashboardModuleSource.includes("暂无可整理的项目级内容"), "Home must not keep the old project empty-state copy");
+assert(dashboardModuleSource.includes("查看全部技能"), "Home must provide a clear Skills entry action");
+assert(dashboardModuleSource.includes("查看全部 MCP 服务"), "Home must provide a clear MCP entry action");
+assert(!dashboardModuleSource.includes("需要处理"), "P6C Home must not expose an attention module");
+assert(!dashboardModuleSource.includes("needsAttentionCount"), "P6C Home must not derive any conclusion from needsAttentionCount");
+assert(!dashboardModuleSource.includes("当前概览"), "Home must not keep the old dense summary grid heading");
+assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery|Token 压力|元数据质量/i.test(dashboardModuleSource), "Home module source must not expose banned engineering terms");
 assert(topCommandBarSource.includes("summary.detailLabel"), "top command bar must render product summary details instead of a legacy shownCount-only label");
 assert(!topCommandBarSource.includes("{shownCount} 项"), "top command bar must not hard-code a legacy item count suffix");
 
@@ -301,6 +333,22 @@ assert(mcpRequirementsSource.includes("状态和来源只作为筛选、详情�
 assert(!mcpRequirementsSource.includes("默认分组:\n\n- 可见"), "MCP source of truth must not restore stale status-first defaults");
 assert(acceptanceSource.includes("技能默认浏览按任务和功能分类"), "acceptance must guard Skills category-first IA");
 assert(acceptanceSource.includes("MCP 默认浏览按服务展示"), "acceptance must guard MCP service-first IA");
+
+assert(canonicalProductDefinitionSource.includes("AIOS Desktop 产品定义"), "canonical product definition must exist");
+assert(canonicalProductDefinitionSource.includes("本地优先的桌面产品"), "canonical definition must state product identity");
+assert(canonicalProductDefinitionSource.includes("整理 AIOS 在当前电脑上已经可获得的 AI 技能与 MCP 服务配置记录"), "canonical definition must describe organizing existing local records");
+assert(canonicalProductDefinitionSource.includes("不是全磁盘扫描器"), "canonical definition must reject full-disk scanner identity");
+assert(canonicalProductDefinitionSource.includes("不是全磁盘扫描器"), "canonical definition must reject full-disk scanner identity");
+assert(canonicalProductDefinitionSource.includes("不是开发者诊断仪表板"), "canonical definition must reject developer diagnostics dashboard identity");
+assert(canonicalProductDefinitionSource.includes("一级导航"), "canonical definition must cover first-level navigation");
+assert(canonicalProductDefinitionSource.includes("电脑概览"), "canonical definition must define computer overview module");
+assert(canonicalProductDefinitionSource.includes("项目概览"), "canonical definition must define project overview module");
+assert(canonicalProductDefinitionSource.includes("需要处理"), "canonical definition must define attention module");
+assert(productReadmeSource.includes("00-aios-desktop-product-definition.zh-CN.md"), "product README must reference canonical definition");
+assert(documentationMapSource.includes("00-aios-desktop-product-definition.zh-CN.md"), "documentation map must reference canonical definition");
+assert(acceptanceSource.includes("00-aios-desktop-product-definition.zh-CN.md"), "acceptance criteria must reference canonical definition");
+assert(documentationMapSource.includes("docs/product/00-aios-desktop-product-definition.zh-CN.md"), "documentation precedence must use the real canonical file path");
+assert(documentationMapSource.includes("仓库治理与安全规则") || documentationMapSource.includes("先遵守仓库治理"), "documentation precedence must place governance and safety rules first");
 
 assert(!advancedModuleSource.includes("AiosTabBar"), "Advanced must not use the rejected AiosTabBar");
 assert(!advancedModuleSource.includes("AiosTabPanel"), "Advanced must not use the rejected AiosTabPanel");

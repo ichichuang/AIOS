@@ -62,10 +62,10 @@ export const zhCN = {
     legacy: "历史入口"
   },
   moduleSummaries: {
-    dashboard: "本机 AI 技能和 MCP 工具的简单汇总。",
+    dashboard: "本机 AI 技能和 MCP 服务的简单汇总。",
     "custom-scan": "高级支持：管理查找位置、跳过项、问题摘要和应用自己的本地记录。",
     skills: "查看本机已经识别出来的 AI 技能和它们的基本信息。",
-    mcp: "查看本机已经配置的 MCP 服务和工具摘要。",
+    mcp: "查看本机已经配置的 MCP 服务摘要。",
     advanced: "给需要排查的人查看查找位置、本地记录、开发者诊断和旧入口。",
     scripts: "高级支持：只读查看与技能或 MCP 相关的脚本线索，不执行脚本。",
     reports: "高级支持：查看历史报告摘要来源，帮助理解查找结果。",

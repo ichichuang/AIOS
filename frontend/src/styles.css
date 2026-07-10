@@ -986,6 +986,73 @@
   min-height: 92px;
 }
 
+.dashboard-module-section {
+  min-width: 0;
+  padding-top: 6px;
+}
+
+.dashboard-module-section .aios-section-header {
+  margin-bottom: 2px;
+}
+
+.dashboard-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.dashboard-module-card {
+  min-width: 0;
+}
+
+.dashboard-module-card .aios-usage-action {
+  min-height: 88px;
+}
+
+.dashboard-entry-card {
+  cursor: pointer;
+}
+
+.dashboard-entry-card .aios-usage-action {
+  min-height: 96px;
+}
+
+.dashboard-empty-module-alert {
+  border-radius: 14px;
+}
+
+.dashboard-local-summary {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--aios-outline);
+  border-radius: 14px;
+  background: var(--aios-surface);
+  padding: 14px 16px;
+}
+
+.dashboard-local-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--aios-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.dashboard-local-summary-row svg {
+  flex: none;
+  color: var(--aios-accent);
+  font-size: 18px;
+}
+
+.dashboard-local-summary-row strong {
+  color: var(--aios-text);
+  font-weight: 700;
+}
+
 .mcp-intro-section {
   display: grid;
   gap: 12px;
