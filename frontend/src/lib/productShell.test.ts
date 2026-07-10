@@ -5,18 +5,23 @@ import {
   advancedSupportSectionLabels,
   advancedSupportViews,
   advancedSubviewBackLabels,
+  buildProductShellTopBarSummary,
   getAdvancedSubviewParent,
   getPrimaryNavigationView,
   homeCopy,
+  homeFirstRunGuideCopy,
   primaryNavigationViews,
   resolvePrimaryNavigationSearch,
   topSearchCopy
 } from "./productShell";
 import { canStartScanMode, scanModeChangeStartsScan } from "./customDirectoryScan";
+import { buildHomeMcpLibraryStats, type McpLibrarySummary } from "./mcpLibrary";
 import { LOCAL_DATA_RESET_WARNING_COPY, WHAT_AIOS_NEVER_STORES_COPY } from "./resourceStore";
+import { buildHomeSkillLibraryStats, type SkillLibrarySummary } from "./skillLibrary";
 import { zhCN } from "../i18n/zh-CN";
 import { navigationGroups } from "../components/shell/moduleConfig";
 import { layoutCssVariableNames } from "./layoutMetrics";
+import { fallbackResourceCorpusSummary } from "./resourceCorpus";
 
 const oldFirstLevelViews = ["custom-scan", "scripts", "reports", "project-packs", "policies", "validators", "legacy"];
 const oldFirstClassLabels = ["Scripts", "Reports", "Project Packs", "Policies", "Validators", "Legacy", "脚本", "报告", "项目包", "策略", "验证器", "旧入口"];
@@ -109,6 +114,89 @@ assert.equal(canStartScanMode("advanced-full-disk", { hasSelectedSources: false,
 assert.match(WHAT_AIOS_NEVER_STORES_COPY, /密钥/);
 assert.match(LOCAL_DATA_RESET_WARNING_COPY, /不会删除用户文件/);
 
+const shellViewCounts = {
+  dashboard: 0,
+  skills: 0,
+  mcp: 0,
+  advanced: 0,
+  "custom-scan": 0,
+  scripts: 0,
+  reports: 0,
+  "project-packs": 0,
+  policies: 0,
+  validators: 0,
+  legacy: 0
+};
+const shellSkillSummary: SkillLibrarySummary = {
+  generatedAtMs: 1_725_100_001_000,
+  latestScanAtMs: 1_725_100_001_000,
+  latestSuccessfulScanAtMs: 1_725_100_001_000,
+  counts: {
+    totalSkillCandidates: 9,
+    dedupedSkillCount: 7,
+    availableSkillCount: 5,
+    needsAttentionCount: 2,
+    duplicateCount: 1,
+    brokenCount: 1,
+    sourceUnknownCount: 0,
+    uncheckedCount: 0
+  },
+  metadataOnly: true,
+  contentStorageEnabled: false
+};
+const shellMcpSummary: McpLibrarySummary = {
+  generatedAtMs: 1_725_300_001_000,
+  latestSearchOrScanTime: 1_725_300_001_000,
+  counts: {
+    mcpConfigCount: 3,
+    serviceCount: 4,
+    verifiedServiceCount: 0,
+    unverifiedServiceCount: 4,
+    toolHintCount: 6,
+    needsAttentionCount: 1,
+    sourceUnknownCount: 0,
+    configUnreadableCount: 0
+  },
+  metadataOnly: true,
+  contentStorageEnabled: false
+};
+const homeSkillStats = buildHomeSkillLibraryStats(shellSkillSummary, fallbackResourceCorpusSummary, shellViewCounts);
+const homeMcpStats = buildHomeMcpLibraryStats(shellMcpSummary, shellViewCounts);
+const dashboardTopBarSummary = buildProductShellTopBarSummary({
+  activeView: "dashboard",
+  corpusSourceLabel: "还没有查找",
+  mcpSummary: shellMcpSummary,
+  shownCount: 0,
+  skillSummary: shellSkillSummary
+});
+assert.equal(homeSkillStats.skillCount, 7);
+assert.equal(homeMcpStats.serviceCount, 4);
+assert.equal(dashboardTopBarSummary.sourceLabel, "本机结果");
+assert.match(dashboardTopBarSummary.detailLabel, /7 个技能/);
+assert.match(dashboardTopBarSummary.detailLabel, /4 个 MCP 服务/);
+assert.match(dashboardTopBarSummary.detailLabel, /6 个工具线索/);
+assert(!dashboardTopBarSummary.detailLabel.includes("0 项"), "Home top command bar must not show legacy 0-count state when product data exists");
+assert.equal(
+  buildProductShellTopBarSummary({ activeView: "skills", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel,
+  "7 个技能 · 2 个需要处理"
+);
+assert.equal(
+  buildProductShellTopBarSummary({ activeView: "mcp", corpusSourceLabel: "还没有查找", mcpSummary: shellMcpSummary, shownCount: 0, skillSummary: shellSkillSummary }).detailLabel,
+  "4 个 MCP 服务 · 6 个工具线索 · 1 个需要处理"
+);
+assert.equal(
+  buildProductShellTopBarSummary({ activeView: "dashboard", corpusSourceLabel: "还没有查找", mcpSummary: null, shownCount: 0, skillSummary: null }).detailLabel,
+  "暂无技能或 MCP 结果"
+);
+
+const homeGuideSafetyText = [homeFirstRunGuideCopy.safetyLine, ...homeFirstRunGuideCopy.safetyCommitments].join(" ");
+assert(homeGuideSafetyText.includes("AIOS 只在本机整理元数据"), "Home guide must explain local metadata-only organization");
+assert(homeGuideSafetyText.includes("不上传数据"), "Home guide must state data is not uploaded");
+assert(homeGuideSafetyText.includes("不读取密钥、token、密码或会话"), "Home guide must use ordinary sensitive-data wording");
+assert(homeGuideSafetyText.includes("不启动 MCP 服务"), "Home guide must state MCP services are not started");
+assert(homeGuideSafetyText.includes("不调用 MCP 工具"), "Home guide must state MCP tools are not called");
+assert(homeGuideSafetyText.includes("不扫描全盘或系统目录"), "Home guide must state broad/system scans are not performed");
+
 assert(ordinaryCustomScanText.includes("高级支持"), "custom-scan summary must be framed as advanced support");
 assert(!ordinaryCustomScanText.toLowerCase().includes("SQLite"), "custom-scan summary must not expose SQLite on ordinary pages");
 
@@ -143,10 +231,14 @@ const advancedOnlyModuleSources = new Map(
 );
 const primitivesSource = readFile("components/ui/AiosUiPrimitives.tsx");
 const productShellSource = readFile("lib/productShell.ts");
+const topCommandBarSource = readFile("components/shell/AiosTopCommandBar.tsx");
 const motionSource = readFile("lib/useAiosMotion.ts");
 const stylesSource = readFile("styles.css");
 const themeSource = readFile("theme/materialTheme.ts");
 const skillIdentitySource = readFile("lib/skillIdentityModel.ts");
+const skillRequirementsSource = readProjectFile("docs/product/06-skill-library-requirements.zh-CN.md");
+const mcpRequirementsSource = readProjectFile("docs/product/07-mcp-library-requirements.zh-CN.md");
+const acceptanceSource = readProjectFile("docs/product/09-product-acceptance-criteria.zh-CN.md");
 
 assert(customScanModuleSource.includes("renderBackButton(\"custom-scan\""), "custom-scan must render the Advanced back arrow");
 assert(!customScanModuleSource.includes("AiosTabBar"), "custom-scan must not use the rejected AiosTabBar");
@@ -172,6 +264,8 @@ assert(dashboardModuleSource.includes("addScanSources("), "Home folder-selection
 assert(!dashboardModuleSource.includes("startScanSourcesBatch"), "Home guide must not start scanning automatically");
 assert(dashboardModuleSource.includes("onViewChange(\"custom-scan\")"), "Home guide must offer a next-step route to 查找位置");
 assert(dashboardModuleSource.includes("查看查找位置") && !dashboardModuleSource.includes("并开始扫描"), "Home dialog actions must not imply automatic scanning");
+assert(topCommandBarSource.includes("summary.detailLabel"), "top command bar must render product summary details instead of a legacy shownCount-only label");
+assert(!topCommandBarSource.includes("{shownCount} 项"), "top command bar must not hard-code a legacy item count suffix");
 
 assert(skillsModuleSource.includes("contentClassName=\"skills-module-scroll\""), "Skills must use a measured module content class");
 assert(!skillsModuleSource.includes("AiosTabBar"), "Skills must not use the rejected AiosTabBar");
@@ -198,6 +292,15 @@ assert(!mcpModuleSource.includes("McpClientHintRow"), "MCP default list must not
 assert(mcpModuleSource.includes("mcp-service-list"), "MCP must expose a deterministic service-first list");
 assert(!mcpModuleSource.includes("groupMcpItemsByStatus"), "MCP default grouping must not be status-first");
 assert(!/resource corpus|SQLite state|raw scan diagnostics|governance|validators|policies|scripts|reports|project packs|legacy|runtime view|registry|scan scope|full-disk discovery/i.test(mcpModuleSource), "MCP ordinary page must not expose banned technical terms as first-class copy");
+
+assert(skillRequirementsSource.includes("默认浏览按任务和功能分类"), "Skills source of truth must preserve category-first browsing");
+assert(skillRequirementsSource.includes("来源只作为筛选、详情来源说明和高级来源视图"), "Skills source of truth must keep source as a secondary facet");
+assert(!skillRequirementsSource.includes("默认分组按用户能理解的来源展示"), "Skills source of truth must not restore stale source-first defaults");
+assert(mcpRequirementsSource.includes("默认浏览按 MCP 服务展示"), "MCP source of truth must preserve service-first browsing");
+assert(mcpRequirementsSource.includes("状态和来源只作为筛选、详情状态和高级来源视图"), "MCP source of truth must keep status/source as secondary facets");
+assert(!mcpRequirementsSource.includes("默认分组:\n\n- 可见"), "MCP source of truth must not restore stale status-first defaults");
+assert(acceptanceSource.includes("技能默认浏览按任务和功能分类"), "acceptance must guard Skills category-first IA");
+assert(acceptanceSource.includes("MCP 默认浏览按服务展示"), "acceptance must guard MCP service-first IA");
 
 assert(!advancedModuleSource.includes("AiosTabBar"), "Advanced must not use the rejected AiosTabBar");
 assert(!advancedModuleSource.includes("AiosTabPanel"), "Advanced must not use the rejected AiosTabPanel");
@@ -231,6 +334,13 @@ assert(motionSource.includes("prefers-reduced-motion: reduce"), "motion hooks mu
 assert(themeSource.includes("\"html, body, #root\"") && themeSource.includes("overflow: \"hidden\""), "page-level scroll must be disabled by the shell contract");
 assert(stylesSource.includes("--aios-module-scroll-body-height"), "CSS must consume measured internal scroll height");
 assert(stylesSource.includes(".custom-scan-workspace") && stylesSource.includes(".mcp-browser-panel") && stylesSource.includes(".compact-skill-list-shell"), "module internals must define scroll bodies");
+assert(stylesSource.includes("@media (max-width: 980px) and (min-width: 840px)"), "Skills inspector-open layout must keep a narrow-desktop override for the 900px visual contract");
+assert(stylesSource.includes(".aios-console-shell.inspector-open {\n    grid-template-columns: 1fr;\n  }"), "Inspector-open shell must override the compact desktop grid at sub-980px widths");
+assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .aios-two-pane"), "Skills inspector-open layout must override the sub-980px stacked two-pane rule");
+assert(stylesSource.includes("grid-template-columns: minmax(148px, 180px) minmax(0, 1fr);"), "Skills inspector-open narrow desktop layout must keep category browsing beside the list");
+assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .skill-filter-row {\n    flex-direction: row;"), "Skills inspector-open narrow desktop toolbar must override the sub-980px column layout");
+assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .skill-filter-row"), "Skills inspector-open narrow desktop toolbar must have a non-collapsing row rule");
+assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .skill-filter-primary-controls::-webkit-scrollbar"), "Skills inspector-open narrow desktop toolbar filters must remain accessible without forcing vertical collapse");
 assert(!stylesSource.includes(".aios-tabbar-shell"), "CSS must not retain the rejected tab-bar shell");
 assert(stylesSource.includes("@media (prefers-reduced-motion: reduce)"), "CSS interactions must respect reduced motion");
 assert(stylesSource.includes("--aios-transition-hover"), "CSS must expose a centralized hover transition contract");
@@ -244,4 +354,8 @@ console.log("productShell P0 tests passed");
 
 function readFile(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+function readProjectFile(relativePath: string): string {
+  return readFileSync(new URL(`../../../${relativePath}`, import.meta.url), "utf8");
 }

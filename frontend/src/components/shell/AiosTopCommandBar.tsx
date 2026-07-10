@@ -4,21 +4,18 @@ import SearchRounded from "@mui/icons-material/SearchRounded";
 import type { KeyboardEvent } from "react";
 import { zhCN } from "../../i18n/zh-CN";
 import { type ResourceView, VIEW_LABELS } from "../../lib/filtering";
-import { resolvePrimaryNavigationSearch, topSearchCopy } from "../../lib/productShell";
-import type { AiosInventory } from "../../types/inventory";
+import { resolvePrimaryNavigationSearch, topSearchCopy, type ProductShellTopBarSummary } from "../../lib/productShell";
 import labelIcon from "../../assets/image/label.png";
 
 interface AiosTopCommandBarProps {
   activeView: ResourceView;
-  inventory: AiosInventory;
   query: string;
-  shownCount: number;
-  sourceLabel: string;
+  summary: ProductShellTopBarSummary;
   onQueryChange: (query: string) => void;
   onViewChange: (view: ResourceView) => void;
 }
 
-export function AiosTopCommandBar({ activeView, query, shownCount, sourceLabel, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
+export function AiosTopCommandBar({ activeView, query, summary, onQueryChange, onViewChange }: AiosTopCommandBarProps) {
   const activeModuleLabel = VIEW_LABELS[activeView];
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -37,7 +34,7 @@ export function AiosTopCommandBar({ activeView, query, shownCount, sourceLabel, 
             {activeModuleLabel}
           </Typography>
           <Typography color="text.secondary" variant="body2">
-            {sourceLabel} · {shownCount} 项
+            {summary.sourceLabel} · {summary.detailLabel}
           </Typography>
         </Box>
       </Box>

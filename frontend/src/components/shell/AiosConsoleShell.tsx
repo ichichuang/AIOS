@@ -1,9 +1,9 @@
 import { Box } from "@mui/material";
 import type { ReactNode } from "react";
-import { AiosInventory, AiosResource } from "../../types/inventory";
+import { AiosResource } from "../../types/inventory";
 import type { ResourceView } from "../../lib/filtering";
-import { isAdvancedView } from "../../lib/productShell";
-import { getCorpusSourceLabel, type ResourceCorpusScope, type ResourceCorpusSourceMode, type ResourceCorpusSummary } from "../../lib/resourceCorpus";
+import { isAdvancedView, type ProductShellTopBarSummary } from "../../lib/productShell";
+import { type ResourceCorpusScope, type ResourceCorpusSourceMode, type ResourceCorpusSummary } from "../../lib/resourceCorpus";
 import type { McpServiceDetailRuntimeState } from "../../lib/mcpLibrary";
 import type { SkillDetailRuntimeState } from "../../lib/skillLibrary";
 import type { SkillCapabilityClassification } from "../../lib/skillCapabilityClassifier";
@@ -23,7 +23,6 @@ interface AiosConsoleShellProps {
   corpusMode: ResourceCorpusSourceMode;
   corpusScopes: ResourceCorpusScope[];
   corpusSummary: ResourceCorpusSummary;
-  inventory: AiosInventory;
   query: string;
   selectedResource: AiosResource | null;
   selectedSkillIdentity: SkillIdentityRow | null;
@@ -32,6 +31,7 @@ interface AiosConsoleShellProps {
   skillDetailState: SkillDetailRuntimeState | null;
   shownCount: number;
   inspectorVisibleCount?: number;
+  topBarSummary: ProductShellTopBarSummary;
   viewCounts: Record<ResourceView, number>;
   onClearSelection: () => void;
   onQueryChange: (query: string) => void;
@@ -48,7 +48,6 @@ export function AiosConsoleShell({
   corpusMode,
   corpusScopes,
   corpusSummary,
-  inventory,
   query,
   selectedResource,
   selectedSkillIdentity,
@@ -57,6 +56,7 @@ export function AiosConsoleShell({
   skillDetailState,
   shownCount,
   inspectorVisibleCount,
+  topBarSummary,
   viewCounts,
   onClearSelection,
   onQueryChange,
@@ -78,10 +78,8 @@ export function AiosConsoleShell({
           <Box ref={topBarRef}>
             <AiosTopCommandBar
               activeView={activeView}
-              inventory={inventory}
               query={query}
-              shownCount={shownCount}
-              sourceLabel={getCorpusSourceLabel(corpusMode)}
+              summary={topBarSummary}
               onQueryChange={onQueryChange}
               onViewChange={onViewChange}
             />

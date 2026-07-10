@@ -1,4 +1,6 @@
 import type { ResourceView } from "./filtering";
+import type { McpLibrarySummary } from "./mcpLibrary";
+import type { SkillLibrarySummary } from "./skillLibrary";
 
 export type PrimaryNavigationView = "dashboard" | "skills" | "mcp" | "advanced";
 export type AdvancedSupportView = "custom-scan" | "scripts" | "reports" | "project-packs" | "policies" | "validators" | "legacy";
@@ -17,6 +19,21 @@ export interface HomeFirstRunGuideStep {
   id: "choose-folder" | "review-location";
   title: string;
   summary: string;
+}
+
+export interface ProductShellTopBarSummary {
+  sourceLabel: string;
+  detailLabel: string;
+  hasProductSummary: boolean;
+  hasProductResults: boolean;
+}
+
+export interface ProductShellTopBarSummaryInput {
+  activeView: ResourceView;
+  corpusSourceLabel: string;
+  mcpSummary: McpLibrarySummary | null;
+  shownCount: number;
+  skillSummary: SkillLibrarySummary | null;
 }
 
 export const primaryNavigationViews: PrimaryNavigationView[] = ["dashboard", "skills", "mcp", "advanced"];
@@ -86,6 +103,83 @@ export const topSearchCopy = {
   ariaLabel: "搜索技能、MCP 和来源"
 };
 
+export function buildProductShellTopBarSummary({
+  activeView,
+  corpusSourceLabel,
+  mcpSummary,
+  shownCount,
+  skillSummary
+}: ProductShellTopBarSummaryInput): ProductShellTopBarSummary {
+  const skillCount = normalizeCount(skillSummary?.counts.dedupedSkillCount);
+  const skillAttentionCount = normalizeCount(skillSummary?.counts.needsAttentionCount);
+  const mcpServiceCount = normalizeCount(mcpSummary?.counts.serviceCount);
+  const mcpToolHintCount = normalizeCount(mcpSummary?.counts.toolHintCount);
+  const mcpAttentionCount = normalizeCount(mcpSummary?.counts.needsAttentionCount);
+  const hasProductSummary = Boolean(skillSummary || mcpSummary);
+  const hasProductResults = skillCount > 0 || mcpServiceCount > 0 || mcpToolHintCount > 0;
+
+  if (hasProductResults) {
+    if (activeView === "skills") {
+      return {
+        sourceLabel: "本机结果",
+        detailLabel: joinTopBarParts([`${skillCount} 个技能`, skillAttentionCount > 0 ? `${skillAttentionCount} 个需要处理` : null]),
+        hasProductSummary,
+        hasProductResults
+      };
+    }
+
+    if (activeView === "mcp") {
+      return {
+        sourceLabel: "本机结果",
+        detailLabel: joinTopBarParts([
+          `${mcpServiceCount} 个 MCP 服务`,
+          mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null,
+          mcpAttentionCount > 0 ? `${mcpAttentionCount} 个需要处理` : null
+        ]),
+        hasProductSummary,
+        hasProductResults
+      };
+    }
+
+    if (isAdvancedView(activeView)) {
+      return {
+        sourceLabel: "高级支持",
+        detailLabel: shownCount > 0 ? `${normalizeCount(shownCount)} 项高级信息` : "查看来源和问题详情",
+        hasProductSummary,
+        hasProductResults
+      };
+    }
+
+    return {
+      sourceLabel: "本机结果",
+      detailLabel: joinTopBarParts([
+        `${skillCount} 个技能`,
+        `${mcpServiceCount} 个 MCP 服务`,
+        mcpToolHintCount > 0 ? `${mcpToolHintCount} 个工具线索` : null,
+        skillAttentionCount + mcpAttentionCount > 0 ? `${skillAttentionCount + mcpAttentionCount} 个需要处理` : null
+      ]),
+      hasProductSummary,
+      hasProductResults
+    };
+  }
+
+  if (hasProductSummary) {
+    return {
+      sourceLabel: "本机结果",
+      detailLabel: "暂无技能或 MCP 结果",
+      hasProductSummary,
+      hasProductResults
+    };
+  }
+
+  return {
+    sourceLabel: corpusSourceLabel || "还没有查找",
+    detailLabel: shownCount > 0 ? `${normalizeCount(shownCount)} 项高级信息` : "暂无技能或 MCP 结果",
+    hasProductSummary,
+    hasProductResults
+  };
+}
+
 export function resolvePrimaryNavigationSearch(input: string): PrimaryNavigationView | null {
   const value = input.trim().toLowerCase();
   if (!value) return null;
@@ -111,7 +205,7 @@ export const homeFirstRunGuideCopy = {
   title: "开始查找本机 AI 技能",
   intro: "AIOS 会查找这台电脑上的 AI 技能和 MCP 工具的基本信息。",
   mcpExplanation: "MCP 是 AI 应用连接外部工具的一种方式；这里仅整理本机已配置服务和工具名称线索。",
-  safetyLine: "只保存基本信息，不读取密钥或文件正文。",
+  safetyLine: "AIOS 只在本机整理元数据，不上传数据。",
   steps: [
     {
       id: "choose-folder",
@@ -126,8 +220,9 @@ export const homeFirstRunGuideCopy = {
   ] satisfies HomeFirstRunGuideStep[],
   safetyCommitments: [
     "查找结果只保存在这台电脑上。",
-    "AIOS 不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值。",
-    "AIOS 不执行脚本，也不启动或调用 MCP 工具。",
+    "AIOS 不读取密钥、token、密码或会话；不读取密钥、令牌、密码、Cookie、登录会话或环境变量的值。",
+    "AIOS 不执行脚本，也不启动或调用 MCP 工具；不启动 MCP 服务，不调用 MCP 工具。",
+    "AIOS 不扫描全盘或系统目录；只会在你选择并确认的位置查找。",
     "添加文件夹不会自动扫描，用户仍需明确点击开始。"
   ],
   chooseFolderAction: "选择一个文件夹",
@@ -176,3 +271,11 @@ export const advancedSubviewBackLabels: Record<AdvancedSupportView, string> = {
   validators: "返回高级",
   legacy: "返回高级"
 };
+
+function normalizeCount(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function joinTopBarParts(parts: Array<string | null>): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" · ");
+}

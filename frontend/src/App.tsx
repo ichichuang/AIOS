@@ -17,6 +17,7 @@ import {
   getResourceDetail,
   getScanSourceResourceMap,
   globalCorpusScope,
+  getCorpusSourceLabel,
   isDynamicCorpusResource,
   listResourceCorpusScopes,
   listResourcesByScope,
@@ -53,7 +54,7 @@ import {
   type SkillListItem
 } from "./lib/skillLibrary";
 import { buildSkillCapabilityClassificationMap, type SkillCapabilityClassification } from "./lib/skillCapabilityClassifier";
-import { getAdvancedSubviewParent } from "./lib/productShell";
+import { buildProductShellTopBarSummary, getAdvancedSubviewParent } from "./lib/productShell";
 import { useModuleSwapMotion, useSelectedCardEmphasisMotion } from "./lib/useAiosMotion";
 
 import type { AiosInventory, AiosResource } from "./types/inventory";
@@ -493,6 +494,13 @@ export default function App() {
       : renderedView === "mcp" && mcpLibrarySummary
         ? mcpLibrarySummary.counts.serviceCount
         : filteredResources.length;
+  const topBarSummary = buildProductShellTopBarSummary({
+    activeView,
+    corpusSourceLabel: getCorpusSourceLabel(shellCorpusMode),
+    mcpSummary: mcpLibrarySummary,
+    shownCount: shellShownCount,
+    skillSummary: skillLibrarySummary
+  });
 
   return (
     <AiosConsoleShell
@@ -503,7 +511,6 @@ export default function App() {
       corpusMode={shellCorpusMode}
       corpusScopes={corpusScopes}
       corpusSummary={corpusSummary}
-      inventory={displayInventory}
       query={query}
       selectedResource={selectedResource}
       selectedSkillIdentity={selectedSkillIdentity}
@@ -512,6 +519,7 @@ export default function App() {
       skillDetailState={skillDetailState}
       shownCount={shellShownCount}
       inspectorVisibleCount={shellShownCount}
+      topBarSummary={topBarSummary}
       viewCounts={moduleProps.viewCounts}
       onClearSelection={clearSelection}
       onQueryChange={handleQueryChange}
