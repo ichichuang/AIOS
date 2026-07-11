@@ -220,4 +220,94 @@
 
 - `SkillListItem` 和 `SkillDetail` 必须返回一致的多源作用域摘要。
 - TypeScript 契约必须与 Rust 序列化字段完全一致（camelCase）。
-- 本阶段（P6D-B）只建立持久化与数据契约，不完成 Skills 界面重设计。
+- P6D-B 只建立持久化与数据契约，不完成 Skills 界面重设计。
+
+## 能力分类与浏览模型（P6D-C）
+
+### 设计原则
+
+- 能力分类必须基于用户想完成的任务，不能基于来源应用、提供者名称、路径或技术实现细节。
+- 来源、提供者、工具兼容性、路径、作用域和状态只能作为次要信息或次要筛选，不能取代能力作为首要分组。
+- 分类必须有确定性的顺序、可预测的未知状态，并且不对弱信号假装确定。
+
+### 正式能力分类
+
+技能库使用 9 个正式能力分类和 1 个明确的未知分类，顺序固定如下：
+
+1. **前端与界面**（`frontend-ui`）：Web、小程序/移动端 UI、前端框架、组件、布局与样式实现。
+2. **通用代码开发**（`coding`）：通用编程、算法、语言级开发与日常实现辅助。
+3. **代码审查与重构**（`code-review`）：代码审查、重构、lint、类型检查、AST 操作与 codemod。
+4. **测试与质量**（`testing-qa`）：单元测试、集成测试、浏览器测试、E2E、截图、回归验证与质量检查。
+5. **文档与写作**（`docs-writing`）：文档、Markdown、知识库、RAG 内容、写作、编辑与润色。
+6. **数据与自动化**（`data-automation`）：数据处理、表格、CSV、SQL、JSON、自动化、脚本、构建、流水线与 CI/CD。
+7. **研究与分析**（`research-analysis`）：研究、调研、综合、总结、比较、方法论与分析工作。
+8. **安全与治理**（`security-governance`）：安全审查、隐私、风险、策略、治理、依赖安全与护栏。
+9. **设计与视觉**（`design-visual`）：视觉设计、主题、设计系统、Figma、图像生成、动画、动效与视觉打磨。
+10. **尚未分类**（`unknown`）：没有足够可靠的能力证据，暂时无法归入稳定分类。
+
+已移除的旧分类包括：`automation-scripts`、`data-spreadsheets`、`browser-debug`、`mcp-integrations`、`project-governance`、`local-system`、`other`。
+
+### 分类证据规则
+
+- 允许使用的证据：`displayName`、`originalName`、`shortPurpose`、`usageText`、`tags`、`capabilities` 以及 Skill 条目上其他明确的商品描述字段。
+- 禁止使用的证据：`sourceLabel`、`sourceKindLabel`、`primaryPathHint`、项目标签、`scopeSummary`、`availableInTools`、提供者名称（Codex、Claude、Cursor、Agents、MCP 等） merely because they are providers。
+- 提供者名称只有在构成实际能力短语的一部分、且同时存在其他非提供者能力信号时，才能作为辅助证据；单独的提供者名称必须导致 `unknown`。
+- 弱通用词（如 tool、helper、project、AI、local、path、service）不能单独决定分类。
+- 每个 Skill 必须有且只有一个主分类；最多保留两个次级分类标签。
+- 分类置信度为 `high`、`medium`、`low` 或 `unknown`；低于最小证据阈值的 Skill 必须归入 `unknown`。
+- 平局时按固定分类顺序打破，禁止依赖对象迭代顺序。
+
+### 作用域浏览成员语义
+
+技能页提供两个独立维度：作用域与能力。作用域浏览使用 `scopeSummary` 中的显式证据，禁止重新从路径、来源或标签推断。
+
+- **全部技能**（`all`）：包含所有 Skill，每个 Skill 只出现一次。
+- **全局技能**（`global`）：包含 `hasGlobalSource === true` 的 Skill，包括 `globalOnly` 和 `mixed`。
+- **项目技能**（`project`）：包含 `projects.length > 0` 的 Skill，包括 `projectOnly` 和 `mixed`。
+- **范围未整理**（`unknown`）：只包含 `classification === "unknown"` 的 Skill；`mixed` Skill 即使 `hasUnknownSource === true` 也不得放入此作用域。
+
+`mixed` Skill 同时属于全局和项目两个视图；其 `hasUnknownSource` 保留为次要事实，但不改变作用域归属。
+
+### 项目选择器
+
+- 项目选项从所有 Skill 的 `scopeSummary.projects` 聚合而来。
+- 去重必须基于稳定的 `projectId`，禁止仅按 `projectLabel` 合并。
+- 选项按 `projectLabel` 排序，`projectLabel` 相同时按 `projectId` 排序；相同标签但不同 ID 的项目必须作为独立选项显示。
+- 使用 `projectId` 作为选择值，使用 `projectLabel` 作为显示文本；禁止将路径或 ID 渲染为项目身份。
+- 项目选择器仅在“项目技能”作用域下显示；没有已登记项目时显示禁用状态并提示“暂无已登记项目”。
+
+### 能力与作用域的组合
+
+- 默认能力选择为“全部能力”。
+- 选择“全部能力”时，结果按固定分类顺序分组显示。
+- 选择单个能力时，只显示该能力的 Skill。
+- “尚未分类”始终排在最后。
+- 分类计数在作用域、项目、搜索、状态、来源筛选之后、能力筛选之前计算。
+- 搜索覆盖名称、原始名称、用途、使用说明、标签、能力、可用工具和 `sourceLabel`（仅作为可搜索的次要来源），但搜索不改变能力分类。
+- 排序规则：先按状态等级（可用优先），再按显示名称的本地化顺序，最后按稳定 ID。
+
+### 次要筛选
+
+- 状态筛选和来源筛选必须置于“更多筛选”区域，不能和能力/作用域选择器争夺视觉注意力。
+- 禁止将来源或提供者作为首要分组；禁止创建来源卡片 rail 或提供者分区。
+
+### 选择清除与持久化
+
+- 切换作用域、项目或能力时，必须清除当前选中的 Skill 详情。
+- 搜索和次要筛选只有在当前选中的 Skill 仍然可见时才可保留选择，否则清除。
+- 使用 `sessionStorage` 持久化 `aios.skills.scope`、`aios.skills.project` 和 `aios.skills.capability`；非法或缺失值必须安全回退，禁止持久化路径或来源派生的项目身份。
+
+### 空状态
+
+- 没有 Skill：`还没有找到 AI 技能` / `开始查找后，这里会显示技能名称、用途和能力分类。`
+- 全局作用域为空：`还没有明确归为全局的技能` / `只有经过显式范围确认的技能才会显示在这里。`
+- 项目作用域无已登记项目：`还没有已登记的项目技能` / `只有明确归入项目的技能才会显示在这里。`
+- 选中项目为空：`这个项目下还没有技能` / `选择其他项目，或查看全部技能。`
+- 范围未整理为空：`没有范围未整理的技能` / `当前技能都已有明确的全局或项目范围。`
+- 能力分类为空：`这个能力分类下没有技能` / `选择其他能力分类，或清除搜索和筛选。`
+- 搜索无结果：`没有匹配结果` / `换一个关键词，或清除筛选后再试。`
+
+### 阶段边界
+
+- P6D-C 建立能力分类、浏览模型与选择器行为，不完成行、检查器、响应式与视觉重设计。
+- P6D-D 负责 Skill 行、详情检查器、响应式布局与最终视觉验收。

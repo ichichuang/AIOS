@@ -31,7 +31,12 @@ export async function load(url, context, nextLoad) {
       loader: url.endsWith(".tsx") ? "tsx" : "ts",
       format: "esm",
       target: "es2022",
-      jsx: "automatic"
+      jsx: "automatic",
+      define: {
+        "import.meta.env.DEV": "false",
+        "import.meta.env.PROD": "true",
+        "import.meta.env.SSR": "true"
+      }
     });
     return { format: "module", shortCircuit: true, source: result.code };
   }

@@ -1,25 +1,20 @@
-import { getResourceDisplay, type ResourceDisplay } from "../i18n/resourceText";
+import type { ResourceDisplay } from "../i18n/resourceText";
 import type { AiosResource } from "../types/inventory";
 import type { SkillListItem } from "./skillLibrary";
-import { buildSkillDisplayEnrichment, getSkillQualitySearchText } from "./skillDisplayEnrichment";
-import { getSkillMetadataSearchText } from "./skillDiscoveryMetadata";
 
 export type SkillCapabilityCategoryKey =
   | "frontend-ui"
   | "coding"
   | "code-review"
+  | "testing-qa"
   | "docs-writing"
-  | "automation-scripts"
-  | "data-spreadsheets"
-  | "browser-debug"
-  | "mcp-integrations"
-  | "project-governance"
-  | "design-visual"
+  | "data-automation"
   | "research-analysis"
-  | "local-system"
-  | "other";
+  | "security-governance"
+  | "design-visual"
+  | "unknown";
 
-export type SkillCapabilityConfidence = "high" | "medium" | "low";
+export type SkillCapabilityConfidence = "high" | "medium" | "low" | "unknown";
 
 export interface SkillCapabilityCategory {
   key: SkillCapabilityCategoryKey;
@@ -43,17 +38,26 @@ interface ScoredCategory {
   evidenceKeywords: string[];
 }
 
-interface CandidateText {
+interface CapabilityCandidate {
   identity: string;
   description: string;
-  type: string;
+  explicit: string;
 }
+
+const UNKNOWN_CATEGORY: SkillCapabilityCategory = {
+  key: "unknown",
+  title: "尚未分类",
+  summary: "没有足够可靠的能力证据，暂时无法归入稳定分类。",
+  priority: 1000,
+  keywordRules: [],
+  patternRules: []
+};
 
 export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
   {
     key: "frontend-ui",
     title: "前端与界面",
-    summary: "前端框架、组件、布局、样式、Web 界面以及小程序/移动端 UI 实现。",
+    summary: "Web、小程序/移动端 UI、前端框架、组件、布局与样式实现。",
     priority: 10,
     keywordRules: [
       "frontend",
@@ -62,8 +66,10 @@ export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
       "vue",
       "react",
       "component",
+      "components",
       "css",
       "unocss",
+      "tailwind",
       "layout",
       "web",
       "browser-ui",
@@ -75,19 +81,22 @@ export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
       "mobile",
       "taro",
       "uniapp",
+      "html",
+      "dom",
       "前端",
       "界面",
       "组件",
       "布局",
       "小程序",
-      "移动端"
+      "移动端",
+      "样式"
     ],
     patternRules: [/front[\s_-]?end/i, /browser[\s_-]?ui/i, /mini[\s_-]?program/i, /wechat[\s_-]?mini/i, /\bwx\b/i]
   },
   {
     key: "coding",
     title: "通用代码开发",
-    summary: "通用编程、代码实现、语言工具与日常开发辅助。",
+    summary: "通用编程、算法、语言级开发与日常实现辅助。",
     priority: 20,
     keywordRules: [
       "coding",
@@ -95,6 +104,9 @@ export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
       "developer",
       "dev",
       "programming",
+      "programmer",
+      "implementation",
+      "algorithm",
       "typescript",
       "javascript",
       "python",
@@ -102,41 +114,90 @@ export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
       "rust",
       "java",
       "node",
+      "sdk",
+      "api",
+      "shell",
+      "cli",
       "代码开发",
       "通用代码",
       "开发",
-      "编程"
+      "编程",
+      "实现",
+      "算法",
+      "语言"
     ],
     patternRules: []
   },
   {
     key: "code-review",
     title: "代码审查与重构",
-    summary: "代码符号、类型检查、结构化改写、lint、审查与重构。",
+    summary: "代码审查、重构、lint、类型检查、AST 操作与代码改写。",
     priority: 30,
     keywordRules: [
       "review",
       "refactor",
+      "refactoring",
       "code-review",
       "codemod",
       "ast",
       "grep",
       "symbol",
       "lint",
+      "linter",
       "typecheck",
+      "type-check",
       "audit",
+      "code-quality",
       "代码审查",
       "重构",
       "符号",
-      "审查"
+      "审查",
+      "改写",
+      "质量"
     ],
-    patternRules: [/type[\s_-]?check/i, /code[\s_-]?review/i, /health[\s_-]?scan/i]
+    patternRules: [/type[\s_-]?check/i, /code[\s_-]?review/i, /health[\s_-]?scan/i, /ast[\s_-]?operation/i]
+  },
+  {
+    key: "testing-qa",
+    title: "测试与质量",
+    summary: "单元测试、集成测试、浏览器测试、E2E、截图、回归验证与质量检查。",
+    priority: 40,
+    keywordRules: [
+      "playwright",
+      "browser",
+      "screenshot",
+      "e2e",
+      "end-to-end",
+      "visual-test",
+      "visual-testing",
+      "qa",
+      "quality",
+      "smoke",
+      "smoke-test",
+      "chrome",
+      "debug",
+      "testing",
+      "test",
+      "tests",
+      "unit-test",
+      "integration-test",
+      "regression",
+      "verification",
+      "浏览器",
+      "截图",
+      "测试",
+      "验证",
+      "调试",
+      "回归",
+      "质量"
+    ],
+    patternRules: [/visual[\s_-]?test/i, /\be2e\b/i, /unit[\s_-]?test/i, /integration[\s_-]?test/i, /smoke[\s_-]?test/i]
   },
   {
     key: "docs-writing",
     title: "文档与写作",
-    summary: "文档、Markdown、知识库、Obsidian、RAG、Context7 查询与文字写作。",
-    priority: 40,
+    summary: "文档、Markdown、知识库、RAG、文字写作、编辑与润色。",
+    priority: 50,
     keywordRules: [
       "docs",
       "documentation",
@@ -145,246 +206,263 @@ export const SKILL_CAPABILITY_CATEGORIES: readonly SkillCapabilityCategory[] = [
       "wiki",
       "obsidian",
       "knowledge",
+      "knowledge-base",
       "rag",
       "context7",
       "writing",
       "writer",
       "copy",
+      "copywriting",
+      "editing",
+      "polish",
       "文档",
       "知识库",
       "写作",
       "撰写",
-      "润色"
+      "润色",
+      "编辑"
     ],
-    patternRules: [/doc(?:s|umentation)?/i]
+    patternRules: [/doc(?:s|umentation)?/i, /knowledge[\s_-]?base/i, /rag[\s_-]?content/i]
   },
   {
-    key: "automation-scripts",
-    title: "自动化与脚本",
-    summary: "自动化、脚本、构建、校验、生成器、清单与报告产物。",
-    priority: 50,
+    key: "data-automation",
+    title: "数据与自动化",
+    summary: "数据处理、表格、CSV、SQL、JSON、自动化、脚本、构建、流水线与 CI/CD。",
+    priority: 60,
     keywordRules: [
       "automation",
+      "automate",
       "script",
+      "scripts",
       "schedule",
       "build",
-      "validate",
+      "pipeline",
+      "ci",
+      "cd",
+      "cicd",
+      "ci/cd",
       "generator",
       "inventory",
       "report",
-      "ci",
-      "cd",
-      "自动化",
-      "脚本",
-      "构建",
-      "清单",
-      "报告"
-    ],
-    patternRules: [/validat(?:e|or)/i]
-  },
-  {
-    key: "data-spreadsheets",
-    title: "数据与表格",
-    summary: "数据、表格、CSV、Excel、数据库、SQL、JSON 与数据分析处理。",
-    priority: 55,
-    keywordRules: [
       "data",
       "spreadsheet",
       "csv",
       "excel",
       "table",
+      "tables",
       "database",
       "sql",
       "pandas",
       "json",
       "analytics",
+      "processing",
+      "etl",
+      "自动化",
+      "脚本",
+      "构建",
+      "清单",
+      "报告",
       "数据",
       "表格",
-      "电子表格"
+      "电子表格",
+      "流水线"
+    ],
+    patternRules: [/ci[\s/_-]?cd/i, /data[\s_-]?processing/i, /etl[\s_-]?pipeline/i]
+  },
+  {
+    key: "research-analysis",
+    title: "研究与分析",
+    summary: "研究、调查、综合、总结、对比、方法论与分析工作。",
+    priority: 70,
+    keywordRules: [
+      "research",
+      "analysis",
+      "analyze",
+      "analyse",
+      "summarize",
+      "summary",
+      "synthesis",
+      "synthesize",
+      "investigate",
+      "investigation",
+      "persona",
+      "perspective",
+      "methodology",
+      "compare",
+      "comparison",
+      "benchmark",
+      "研究",
+      "分析",
+      "综合",
+      "调研",
+      "总结",
+      "对比",
+      "方法论",
+      "视角"
     ],
     patternRules: []
   },
   {
-    key: "browser-debug",
-    title: "浏览器与调试",
-    summary: "Playwright、Chrome、E2E、截图、视觉测试、浏览器验证与调试。",
-    priority: 60,
+    key: "security-governance",
+    title: "安全与治理",
+    summary: "安全审查、隐私、风险、策略、治理、依赖安全与防护边界。",
+    priority: 80,
     keywordRules: [
-      "playwright",
-      "browser",
-      "screenshot",
-      "e2e",
-      "visual-test",
-      "qa",
-      "smoke",
-      "chrome",
-      "debug",
-      "testing",
-      "浏览器",
-      "截图",
-      "测试",
-      "验证",
-      "调试"
-    ],
-    patternRules: [/visual[\s_-]?test/i, /\be2e\b/i]
-  },
-  {
-    key: "mcp-integrations",
-    title: "MCP 与工具集成",
-    summary: "Agent、MCP、Codex、Claude、Serena、Context7、LLM 与工具路由。",
-    priority: 65,
-    keywordRules: [
-      "agent",
-      "agents",
-      "mcp",
-      "codex",
-      "claude",
-      "serena",
-      "context7",
-      "tool-router",
-      "llm",
-      "ai",
-      "MCP",
-      "Agent",
-      "工具集成",
-      "工具路由"
-    ],
-    patternRules: [/tool[\s_-]?router/i]
-  },
-  {
-    key: "project-governance",
-    title: "项目治理与安全",
-    summary: "仓库结构、架构边界、依赖、包、安全审计、策略治理与风险。",
-    priority: 70,
-    keywordRules: [
+      "security",
+      "secure",
+      "privacy",
+      "risk",
+      "policy",
+      "policies",
+      "governance",
+      "audit",
+      "guardrail",
+      "guardrails",
+      "secret",
+      "secrets",
+      "credential",
+      "credentials",
+      "dependency",
+      "dependencies",
+      "package",
+      "packages",
       "repo",
       "repository",
       "architecture",
-      "package",
       "monorepo",
       "workspace",
-      "dependency",
-      "security",
-      "policy",
-      "governance",
-      "audit",
-      "risk",
       "safety",
-      "secret",
-      "credential",
-      "guardrail",
-      "仓库",
-      "架构",
-      "项目",
-      "依赖",
       "安全",
       "治理",
       "审计",
-      "风险"
+      "风险",
+      "策略",
+      "依赖",
+      "仓库",
+      "架构",
+      "隐私"
     ],
-    patternRules: [/large[\s_-]?repo/i, /guard[\s_-]?rail/i]
+    patternRules: [/guard[\s_-]?rail/i, /large[\s_-]?repo/i, /dependency[\s_-]?audit/i, /security[\s_-]?review/i]
   },
   {
     key: "design-visual",
     title: "设计与视觉",
-    summary: "视觉设计、主题美化、Material 风格、图像生成与界面品味。",
-    priority: 80,
+    summary: "视觉设计、主题、设计系统、图像生成、动画、动效与界面品味。",
+    priority: 90,
     keywordRules: [
       "design",
+      "design-system",
       "polish",
       "visual",
       "theme",
+      "themes",
       "material",
       "figma",
       "imagegen",
+      "image-generation",
       "style",
       "taste",
       "animation",
       "motion",
       "gsap",
+      "icon",
+      "icons",
+      "illustration",
       "设计",
       "美化",
       "视觉",
       "主题",
-      "动效"
+      "动效",
+      "动画",
+      "图像"
     ],
-    patternRules: [/design[\s_-]?system/i]
+    patternRules: [/design[\s_-]?system/i, /image[\s_-]?gen/i, /visual[\s_-]?design/i]
   },
-  {
-    key: "research-analysis",
-    title: "研究与分析",
-    summary: "研究、分析、综合、人物视角、方法论与知识整理。",
-    priority: 90,
-    keywordRules: [
-      "research",
-      "analysis",
-      "analyze",
-      "summarize",
-      "summary",
-      "investigate",
-      "persona",
-      "perspective",
-      "方法论",
-      "研究",
-      "分析",
-      "综合",
-      "调研"
-    ],
-    patternRules: []
-  },
-  {
-    key: "local-system",
-    title: "本地系统与环境",
-    summary: "本地路径、Shell、文件系统、Mac、运行时、CLI 与系统工具。",
-    priority: 100,
-    keywordRules: [
-      "local",
-      "shell",
-      "filesystem",
-      "mac",
-      "path",
-      "runtime",
-      "system",
-      "cli",
-      "本地",
-      "系统",
-      "工具",
-      "路径"
-    ],
-    patternRules: [/file[\s_-]?system/i]
-  },
-  {
-    key: "other",
-    title: "其他",
-    summary: "未命中稳定能力规则的本地技能元数据。",
-    priority: 999,
-    keywordRules: [],
-    patternRules: []
-  }
+  UNKNOWN_CATEGORY
 ] as const;
 
-const OTHER_CATEGORY = SKILL_CAPABILITY_CATEGORIES.find((category) => category.key === "other")!;
-
-const COMPILED_KEYWORD_RULES = new Map<SkillCapabilityCategoryKey, readonly RegExp[]>(
-  SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, category.keywordRules.map((keyword) => compileKeyword(keyword))])
+const CATEGORY_BY_KEY = new Map<SkillCapabilityCategoryKey, SkillCapabilityCategory>(
+  SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, category])
 );
 
-export function classifySkillCapability(resource: AiosResource, display: ResourceDisplay = getResourceDisplay(resource)): SkillCapabilityClassification {
-  return classifyFromCandidateText(buildCandidateText(resource, display));
-}
+const COMPILED_KEYWORD_RULES = new Map<SkillCapabilityCategoryKey, readonly RegExp[]>(
+  SKILL_CAPABILITY_CATEGORIES.filter((category) => category.key !== "unknown").map((category) => [
+    category.key,
+    category.keywordRules.map((keyword) => compileKeyword(keyword))
+  ])
+);
 
-export function classifySkillListItem(item: SkillListItem): SkillCapabilityClassification {
-  const identity = [item.displayName, item.originalName, ...item.aliases, item.sourceLabel, item.sourceKindLabel].join(" ");
-  const description = [item.shortPurpose, item.usageText ?? "", ...item.tags, ...item.capabilities].join(" ");
-  const type = [item.sourceKindLabel, ...item.availableInTools].join(" ");
-  return classifyFromCandidateText({
-    identity: normalizeText(identity),
-    description: normalizeText(description),
-    type: normalizeText(type)
+const WEAK_SIGNALS = new Set<string>([
+  "tool",
+  "tools",
+  "helper",
+  "helpers",
+  "utility",
+  "utilities",
+  "ai",
+  "artificial intelligence",
+  "service",
+  "services",
+  "skill",
+  "skills",
+  "plugin",
+  "plugins",
+  "extension",
+  "app",
+  "application",
+  "local",
+  "global",
+  "project",
+  "projects",
+  "path",
+  "paths",
+  "runtime",
+  "registry",
+  "manual",
+  "generic",
+  "general",
+  "common",
+  "misc",
+  "other",
+  "unknown"
+]);
+
+const IDENTITY_WEIGHT = 1;
+const DESCRIPTION_WEIGHT = 2;
+const EXPLICIT_WEIGHT = 4;
+const MIN_CLASSIFICATION_SCORE = 2;
+const MIN_SECONDARY_SCORE = 3;
+const MAX_SECONDARY_CATEGORIES = 2;
+
+export function classifySkillCapability(resource: AiosResource, _display?: ResourceDisplay): SkillCapabilityClassification {
+  const metadata = resource.metadata;
+  const aliases = metadata && Array.isArray(metadata.aliases) ? (metadata.aliases as string[]).filter((item): item is string => typeof item === "string") : [];
+  const tags = metadata && Array.isArray(metadata.tags) ? (metadata.tags as string[]).filter((item): item is string => typeof item === "string") : [];
+  const capabilities = metadata && Array.isArray(metadata.capabilities) ? (metadata.capabilities as string[]).filter((item): item is string => typeof item === "string") : [];
+  const whenToUse = metadata && typeof metadata.whenToUse === "string" ? (metadata.whenToUse as string) : "";
+
+  return classifyFromCandidate({
+    identity: normalizeText(stripPathLikeSegments([resource.name, ...aliases].join(" "))),
+    description: normalizeText(stripPathLikeSegments([resource.description, whenToUse, ...tags, ...capabilities].join(" "))),
+    explicit: normalizeText([...tags, ...capabilities].join(" "))
   });
 }
 
-export function buildSkillCapabilityClassificationMap(resources: readonly AiosResource[], displayById?: ReadonlyMap<string, ResourceDisplay>): Map<string, SkillCapabilityClassification> {
+export function classifySkillListItem(item: SkillListItem): SkillCapabilityClassification {
+  const aliases = Array.isArray(item.aliases) ? item.aliases : [];
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  const capabilities = Array.isArray(item.capabilities) ? item.capabilities : [];
+  return classifyFromCandidate({
+    identity: normalizeText([item.displayName, item.originalName, ...aliases].join(" ")),
+    description: normalizeText([item.shortPurpose, item.usageText ?? "", ...tags, ...capabilities].join(" ")),
+    explicit: normalizeText([...tags, ...capabilities].join(" "))
+  });
+}
+
+export function buildSkillCapabilityClassificationMap(
+  resources: readonly AiosResource[],
+  displayById?: ReadonlyMap<string, ResourceDisplay>
+): Map<string, SkillCapabilityClassification> {
   return new Map(resources.map((resource) => [resource.id, classifySkillCapability(resource, displayById?.get(resource.id))]));
 }
 
@@ -404,40 +482,57 @@ export function buildSkillCapabilitySearchTextMap(classificationById: ReadonlyMa
 }
 
 export function getSkillCapabilityConfidenceLabel(confidence: SkillCapabilityConfidence): string {
-  if (confidence === "high") return "高";
-  if (confidence === "medium") return "中";
-  return "低";
+  switch (confidence) {
+    case "high":
+      return "高";
+    case "medium":
+      return "中";
+    case "low":
+      return "低";
+    case "unknown":
+    default:
+      return "未分类";
+  }
 }
 
-function classifyFromCandidateText(candidateText: CandidateText): SkillCapabilityClassification {
-  const scoredCategories = SKILL_CAPABILITY_CATEGORIES.filter((category) => category.key !== "other")
-    .map((category) => scoreCategory(category, candidateText))
-    .filter((score) => score.score > 0)
+function classifyFromCandidate(candidate: CapabilityCandidate): SkillCapabilityClassification {
+  const scoredCategories = SKILL_CAPABILITY_CATEGORIES.filter((category) => category.key !== "unknown")
+    .map((category) => scoreCategory(category, candidate))
+    .filter((score) => score.score > 0 && hasNonWeakEvidence(score))
     .sort(compareScoredCategories);
 
-  const primaryScore = scoredCategories[0] ?? { category: OTHER_CATEGORY, score: 0, evidenceKeywords: [] };
+  if (scoredCategories.length === 0 || (scoredCategories[0]?.score ?? 0) < MIN_CLASSIFICATION_SCORE) {
+    return {
+      primaryCategory: UNKNOWN_CATEGORY,
+      secondaryCategories: [],
+      confidence: "unknown",
+      evidenceKeywords: []
+    };
+  }
+
+  const primary = scoredCategories[0];
   const secondaryCategories = scoredCategories
     .slice(1)
-    .filter((score) => score.score >= 3)
-    .slice(0, 3)
+    .filter((score) => score.score >= MIN_SECONDARY_SCORE)
+    .slice(0, MAX_SECONDARY_CATEGORIES)
     .map((score) => score.category);
 
   return {
-    primaryCategory: primaryScore.category,
+    primaryCategory: primary.category,
     secondaryCategories,
-    confidence: getConfidence(primaryScore.score, primaryScore.evidenceKeywords.length),
-    evidenceKeywords: primaryScore.evidenceKeywords.slice(0, 6)
+    confidence: deriveConfidence(primary.score, primary.evidenceKeywords.length),
+    evidenceKeywords: primary.evidenceKeywords.slice(0, 6)
   };
 }
 
-function scoreCategory(category: SkillCapabilityCategory, candidateText: CandidateText): ScoredCategory {
+function scoreCategory(category: SkillCapabilityCategory, candidate: CapabilityCandidate): ScoredCategory {
   const keywordPatterns = COMPILED_KEYWORD_RULES.get(category.key) ?? [];
   const evidence = new Set<string>();
   let score = 0;
 
   category.keywordRules.forEach((keyword, index) => {
     const pattern = keywordPatterns[index];
-    const fieldScore = getFieldScore(pattern, candidateText);
+    const fieldScore = Math.max(getFieldScore(pattern, candidate.identity, IDENTITY_WEIGHT), getFieldScore(pattern, candidate.description, DESCRIPTION_WEIGHT), getFieldScore(pattern, candidate.explicit, EXPLICIT_WEIGHT));
     if (fieldScore > 0) {
       score += fieldScore;
       evidence.add(keyword);
@@ -445,21 +540,17 @@ function scoreCategory(category: SkillCapabilityCategory, candidateText: Candida
   });
 
   for (const pattern of category.patternRules) {
-    const fieldScore = getFieldScore(pattern, candidateText);
+    const fieldScore = Math.max(getFieldScore(pattern, candidate.identity, IDENTITY_WEIGHT), getFieldScore(pattern, candidate.description, DESCRIPTION_WEIGHT), getFieldScore(pattern, candidate.explicit, EXPLICIT_WEIGHT));
     if (fieldScore > 0) score += fieldScore;
   }
 
   return { category, score, evidenceKeywords: [...evidence] };
 }
 
-function getFieldScore(pattern: RegExp, candidateText: CandidateText): number {
+function getFieldScore(pattern: RegExp, text: string, weight: number): number {
+  if (!text) return 0;
   pattern.lastIndex = 0;
-  if (pattern.test(candidateText.identity)) return 3;
-  pattern.lastIndex = 0;
-  if (pattern.test(candidateText.description)) return 2;
-  pattern.lastIndex = 0;
-  if (pattern.test(candidateText.type)) return 1;
-  return 0;
+  return pattern.test(text) ? weight : 0;
 }
 
 function compareScoredCategories(left: ScoredCategory, right: ScoredCategory): number {
@@ -467,29 +558,23 @@ function compareScoredCategories(left: ScoredCategory, right: ScoredCategory): n
   return left.category.priority - right.category.priority;
 }
 
-function getConfidence(score: number, evidenceCount: number): SkillCapabilityConfidence {
-  if (score >= 6 || evidenceCount >= 3) return "high";
-  if (score >= 3 || evidenceCount >= 1) return "medium";
-  return "low";
+function hasNonWeakEvidence(score: ScoredCategory): boolean {
+  return score.evidenceKeywords.some((keyword) => !WEAK_SIGNALS.has(keyword.toLowerCase()));
 }
 
-function buildCandidateText(resource: AiosResource, display: ResourceDisplay): CandidateText {
-  const enrichment = buildSkillDisplayEnrichment(resource, display);
-  return {
-    identity: normalizeText([resource.name, getPathSignal(resource.path), display.zhName, enrichment.displayNameZh, display.zhCategory, display.zhCapability, getSkillMetadataSearchText(resource)].join(" ")),
-    description: normalizeText([resource.description, display.zhDescription, enrichment.displayDescriptionZh, getSkillQualitySearchText(enrichment), getSkillMetadataSearchText(resource)].join(" ")),
-    type: normalizeText([resource.toolType, resource.capabilityType].join(" "))
-  };
-}
-
-function getPathSignal(path: string | undefined): string {
-  if (!path) return "";
-  const segments = path.split(/[\\/]+/).filter(Boolean);
-  return segments.slice(-2).join(" ");
+function deriveConfidence(score: number, evidenceCount: number): SkillCapabilityConfidence {
+  if (score >= 7 || evidenceCount >= 3) return "high";
+  if (score >= 4 || evidenceCount >= 2) return "medium";
+  if (score >= MIN_CLASSIFICATION_SCORE || evidenceCount >= 1) return "low";
+  return "unknown";
 }
 
 function normalizeText(value: string): string {
   return value.toLowerCase();
+}
+
+function stripPathLikeSegments(value: string): string {
+  return value.replace(/(?:[a-z]:[\\/]|(?:\\|\/))(?:[^\s\"']*[\\/])?[^\s\"']*/gi, " ");
 }
 
 function compileKeyword(keyword: string): RegExp {

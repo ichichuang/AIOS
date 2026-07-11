@@ -1,8 +1,7 @@
-import { Alert, Box, Chip, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Alert, Box, Chip, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import { memo, useCallback, useEffect, useMemo, useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactElement } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
-import { zhCN } from "../../i18n/zh-CN";
 import { markAiosPerf } from "../../lib/perf";
 import { productVirtualListHeight, shouldShowProductRowsMismatchDiagnostic } from "../../lib/productListRendering";
 import {
@@ -13,6 +12,21 @@ import {
 } from "../../lib/skillCapabilityClassifier";
 import { buildSkillDisplayEnrichment } from "../../lib/skillDisplayEnrichment";
 import { buildSkillIdentityRows, filterSkillIdentityRows, type SkillIdentityRow } from "../../lib/skillIdentityModel";
+import {
+  buildSkillBrowseView,
+  getSkillBrowseEmptyStateCopy,
+  normalizeSkillBrowseFilters,
+  readPersistedSkillCapability,
+  readPersistedSkillProject,
+  readPersistedSkillScope,
+  type SkillBrowseEmptyReason,
+  type SkillCapabilityFilter,
+  type SkillProjectFilterValue,
+  type SkillScopeFilter,
+  writePersistedSkillCapability,
+  writePersistedSkillProject,
+  writePersistedSkillScope
+} from "../../lib/skillBrowseModel";
 import {
   fallbackSkillUsageText,
   filterSkillLibraryItems,
@@ -46,6 +60,8 @@ interface ProductSkillGroup {
 
 const ROW_HEIGHT = 108;
 const SOURCE_FILTER_ALL = "all";
+const ALL_PROJECTS_VALUE: SkillProjectFilterValue = "allProjects";
+const ALL_CAPABILITY_VALUE: SkillCapabilityFilter = "all";
 const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "needsAttention", label: "需补全" }
@@ -58,19 +74,52 @@ export const SkillsModule = memo(function SkillsModule({
   selectedId,
   skillCapabilityById,
   skillLibrary,
+  initialScope,
+  initialShowMoreFilters,
   onClearSelection,
   onQueryChange,
   onSelect
-}: AiosModuleProps) {
+}: AiosModuleProps & { initialScope?: SkillScopeFilter; initialShowMoreFilters?: boolean }) {
+  // Legacy fallback state (unchanged visual contract for non-product resources).
   const [libraryTab, setLibraryTab] = useState<SkillLibraryTab>("groups");
-  const [statusFilterMode, setStatusFilterMode] = useState<SkillStatusFilter>("all");
+  const [legacyStatusFilterMode, setLegacyStatusFilterMode] = useState<SkillStatusFilter>("all");
+
+  // Product browsing state.
+  const [scope, setScope] = useState<SkillScopeFilter>(initialScope ?? "all");
+  const [projectId, setProjectId] = useState<SkillProjectFilterValue>(ALL_PROJECTS_VALUE);
+  const [capability, setCapability] = useState<SkillCapabilityFilter>(ALL_CAPABILITY_VALUE);
+  const [productStatusFilterMode, setProductStatusFilterMode] = useState<SkillStatusFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_FILTER_ALL);
+  const [showMoreFilters, setShowMoreFilters] = useState(initialShowMoreFilters ?? false);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
+
   const normalizedQuery = query.trim();
   const useProductLibrary = skillLibrary.summary !== null;
 
+  // Load persisted selections once.
+  useEffect(() => {
+    const persistedScope = readPersistedSkillScope();
+    const persistedProject = readPersistedSkillProject();
+    const persistedCapability = readPersistedSkillCapability();
+    if (persistedScope) setScope(persistedScope);
+    if (persistedProject) setProjectId(persistedProject);
+    if (persistedCapability) setCapability(persistedCapability);
+  }, []);
+
+  // Persist valid selections.
+  useEffect(() => {
+    writePersistedSkillScope(scope);
+  }, [scope]);
+  useEffect(() => {
+    writePersistedSkillProject(projectId);
+  }, [projectId]);
+  useEffect(() => {
+    writePersistedSkillCapability(capability);
+  }, [capability]);
+
+  // Legacy path data transformations.
   const capabilitySearchTextById = useMemo(() => buildSkillCapabilitySearchTextMap(skillCapabilityById), [skillCapabilityById]);
   const skillRows = useMemo(() => buildSkillIdentityRows(resources), [resources]);
   const enrichmentByRowId = useMemo(
@@ -91,15 +140,15 @@ export const SkillsModule = memo(function SkillsModule({
         groups.map((group) => [
           group.key,
           filterSkillIdentityRows(group.rows, query, { displayById, capabilitySearchTextById }).filter((row) =>
-            shouldIncludeQualityRow(row, statusFilterMode, enrichmentByRowId)
+            shouldIncludeQualityRow(row, legacyStatusFilterMode, enrichmentByRowId)
           )
         ])
       ),
-    [capabilitySearchTextById, displayById, enrichmentByRowId, groups, statusFilterMode, query]
+    [capabilitySearchTextById, displayById, enrichmentByRowId, groups, legacyStatusFilterMode, query]
   );
   const defaultGroupKey = groups[0]?.key ?? null;
   const queryActive = normalizedQuery.length > 0;
-  const fallbackStatusFilterActive = statusFilterMode !== "all";
+  const fallbackStatusFilterActive = legacyStatusFilterMode !== "all";
   const firstMatchingGroupKey =
     queryActive || fallbackStatusFilterActive
       ? groups.find((group) => (filteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null
@@ -128,80 +177,127 @@ export const SkillsModule = memo(function SkillsModule({
     return renderedGroup ? filteredRowsByGroupKey.get(renderedGroup.key) ?? [] : [];
   }, [filteredRowsByGroupKey, libraryTab, queryActive, queryResultRows, renderedGroup]);
 
+  // Product path data transformations.
   const productCapabilityById = useMemo(
     () => new Map(skillLibrary.items.map((item) => [item.id, classifySkillListItem(item)])),
     [skillLibrary.items]
   );
-  const productGroups = useMemo(() => groupSkillLibraryItemsByCapability(skillLibrary.items, productCapabilityById), [skillLibrary.items, productCapabilityById]);
   const productSourceOptions = useMemo(() => uniqueSourceLabels(skillLibrary.items), [skillLibrary.items]);
-  const sourceFilterActive = sourceFilter !== SOURCE_FILTER_ALL;
-  const productFilteredRowsByGroupKey = useMemo(
+  const availableProjectIds = useMemo(
+    () => new Set(skillLibrary.items.flatMap((item) => item.scopeSummary.projects.map((project) => project.projectId))),
+    [skillLibrary.items]
+  );
+  const availableCapabilityKeys = useMemo(
+    () => new Set(SKILL_CAPABILITY_CATEGORIES.map((category) => category.key)),
+    []
+  );
+
+  const productFilters = useMemo(
     () =>
-      new Map(
-        productGroups.map((group) => [
-          group.key,
-          filterSkillLibraryItems(group.rows, query, statusFilterMode).filter(
-            (item) => !sourceFilterActive || item.sourceLabel === sourceFilter
-          )
-        ])
+      normalizeSkillBrowseFilters(
+        {
+          scope,
+          projectId,
+          capability,
+          query: normalizedQuery,
+          status: productStatusFilterMode,
+          source: sourceFilter
+        },
+        availableProjectIds,
+        availableCapabilityKeys
       ),
-    [productGroups, query, sourceFilter, sourceFilterActive, statusFilterMode]
-  );
-  const productDefaultGroupKey = productGroups[0]?.key ?? null;
-  const productStatusFilterActive = statusFilterMode !== "all";
-  const productFirstMatchingGroupKey =
-    queryActive || productStatusFilterActive || sourceFilterActive
-      ? productGroups.find((group) => (productFilteredRowsByGroupKey.get(group.key)?.length ?? 0) > 0)?.key ?? null
-      : null;
-  const productActiveKey = getValidGroupKey(productGroups, activeGroupKey) ?? productFirstMatchingGroupKey ?? productDefaultGroupKey;
-  const productRenderedKey = getValidGroupKey(productGroups, renderedGroupKey) ?? productActiveKey;
-  const productRenderedGroup = productGroups.find((group) => group.key === productRenderedKey) ?? productGroups[0] ?? null;
-  const productQueryResultRows = useMemo(() => uniqueSkillLibraryItems([...productFilteredRowsByGroupKey.values()].flat()), [productFilteredRowsByGroupKey]);
-  const productActiveGroup = queryActive
-    ? {
-        key: "search-results",
-        title: "搜索结果",
-        summary: "跨当前技能分组显示所有匹配的技能。",
-        rows: skillLibrary.items
-      }
-    : libraryTab === "all"
-      ? {
-          key: "all-skills",
-          title: "全部技能",
-          summary: "按当前筛选条件显示所有技能。",
-          rows: skillLibrary.items
-        }
-      : productRenderedGroup;
-  const productVisibleRows = useMemo(() => {
-    if (queryActive || libraryTab === "all") return productQueryResultRows;
-    return productRenderedGroup ? productFilteredRowsByGroupKey.get(productRenderedGroup.key) ?? [] : [];
-  }, [libraryTab, productFilteredRowsByGroupKey, productQueryResultRows, productRenderedGroup, queryActive]);
-  const productVisibleListHeight = productVirtualListHeight(productVisibleRows.length, ROW_HEIGHT);
-  const productRowsMismatch = shouldShowProductRowsMismatchDiagnostic({
-    summaryCount: skillLibrary.summary?.counts.dedupedSkillCount ?? 0,
-    rowCount: productVisibleRows.length,
-    query,
-    statusFilterActive: productStatusFilterActive || sourceFilterActive,
-    loading: skillLibrary.loading,
-    error: skillLibrary.error
-  });
-
-  const libraryTabOptions = useMemo(
-    () => [
-      { value: "groups", label: "分类浏览", count: groups.length },
-      { value: "all", label: "全部技能", count: queryResultRows.length }
-    ],
-    [groups.length, queryResultRows.length]
-  );
-  const productLibraryTabOptions = useMemo(
-    () => [
-      { value: "groups", label: "分类浏览", count: productGroups.length },
-      { value: "all", label: "全部技能", count: productQueryResultRows.length }
-    ],
-    [productGroups.length, productQueryResultRows.length]
+    [scope, projectId, capability, normalizedQuery, productStatusFilterMode, sourceFilter, availableProjectIds, availableCapabilityKeys]
   );
 
-  const handleLibraryTabChange = useCallback(
+  // Reset project selection if the selected project no longer exists.
+  useEffect(() => {
+    if (productFilters.projectId !== projectId) {
+      setProjectId(productFilters.projectId);
+    }
+  }, [productFilters.projectId, projectId]);
+
+  const browseView = useMemo(
+    () => buildSkillBrowseView(skillLibrary.items, productFilters, productCapabilityById),
+    [skillLibrary.items, productFilters, productCapabilityById]
+  );
+
+  // Clear selection when scope, project, or capability changes.
+  const handleScopeChange = useCallback(
+    (nextScope: SkillScopeFilter) => {
+      if (nextScope === scope) return;
+      markAiosPerf("skills-scope-request", { scope: nextScope });
+      setScope(nextScope);
+      setProjectId(ALL_PROJECTS_VALUE);
+      setCapability(ALL_CAPABILITY_VALUE);
+      setActiveGroupKey(null);
+      setRenderedGroupKey(null);
+      onClearSelection();
+    },
+    [scope, onClearSelection]
+  );
+
+  const handleProjectChange = useCallback(
+    (nextProjectId: SkillProjectFilterValue) => {
+      if (nextProjectId === projectId) return;
+      markAiosPerf("skills-project-request", { projectId: nextProjectId });
+      setProjectId(nextProjectId);
+      setCapability(ALL_CAPABILITY_VALUE);
+      setActiveGroupKey(null);
+      setRenderedGroupKey(null);
+      onClearSelection();
+    },
+    [projectId, onClearSelection]
+  );
+
+  const handleCapabilityChange = useCallback(
+    (nextCapability: string) => {
+      if (nextCapability === capability) return;
+      markAiosPerf("skills-capability-request", { capability: nextCapability });
+      setCapability(nextCapability as SkillCapabilityFilter);
+      setActiveGroupKey(null);
+      setRenderedGroupKey(null);
+      onClearSelection();
+      startGroupTransition(() => {
+        setRenderedGroupKey(null);
+      });
+    },
+    [capability, onClearSelection, startGroupTransition]
+  );
+
+  const handleProductStatusFilterChange = useCallback(
+    (_event: MouseEvent<HTMLElement>, nextMode: SkillStatusFilter | null) => {
+      if (!nextMode || nextMode === productStatusFilterMode) return;
+      markAiosPerf("skills-status-filter-request", { mode: nextMode });
+      setProductStatusFilterMode(nextMode);
+    },
+    [productStatusFilterMode]
+  );
+
+  const handleSourceFilterChange = useCallback(
+    (_event: MouseEvent<HTMLElement>, nextSource: string | null) => {
+      if (!nextSource || nextSource === sourceFilter) return;
+      markAiosPerf("skills-source-filter-request", { source: nextSource });
+      setSourceFilter(nextSource);
+    },
+    [sourceFilter]
+  );
+
+  const handleClearSearch = useCallback(() => {
+    onQueryChange?.("");
+  }, [onQueryChange]);
+
+  const handleResetFilters = useCallback(() => {
+    setScope("all");
+    setProjectId(ALL_PROJECTS_VALUE);
+    setCapability(ALL_CAPABILITY_VALUE);
+    setProductStatusFilterMode("all");
+    setSourceFilter(SOURCE_FILTER_ALL);
+    setActiveGroupKey(null);
+    setRenderedGroupKey(null);
+    onClearSelection();
+  }, [onClearSelection]);
+
+  const handleLegacyLibraryTabChange = useCallback(
     (nextValue: string) => {
       const nextTab = nextValue as SkillLibraryTab;
       if (nextTab === libraryTab) return;
@@ -212,35 +308,21 @@ export const SkillsModule = memo(function SkillsModule({
     [libraryTab, onClearSelection]
   );
 
-  const handleQualityFilterChange = useCallback(
+  const handleLegacyQualityFilterChange = useCallback(
     (_event: MouseEvent<HTMLElement>, nextMode: SkillStatusFilter | null) => {
-      if (!nextMode || nextMode === statusFilterMode) return;
+      if (!nextMode || nextMode === legacyStatusFilterMode) return;
       markAiosPerf("skills-quality-filter-request", { mode: nextMode });
-      setStatusFilterMode(nextMode);
+      setLegacyStatusFilterMode(nextMode);
       setActiveGroupKey(null);
       onClearSelection();
       startGroupTransition(() => {
         setRenderedGroupKey(null);
       });
     },
-    [onClearSelection, statusFilterMode, startGroupTransition]
+    [legacyStatusFilterMode, onClearSelection, startGroupTransition]
   );
 
-  const handleSourceFilterChange = useCallback(
-    (_event: MouseEvent<HTMLElement>, nextSource: string | null) => {
-      if (!nextSource || nextSource === sourceFilter) return;
-      markAiosPerf("skills-source-filter-request", { source: nextSource });
-      setSourceFilter(nextSource);
-      setActiveGroupKey(null);
-      onClearSelection();
-      startGroupTransition(() => {
-        setRenderedGroupKey(null);
-      });
-    },
-    [onClearSelection, sourceFilter, startGroupTransition]
-  );
-
-  const handleGroupChange = useCallback(
+  const handleLegacyGroupChange = useCallback(
     (key: string) => {
       markAiosPerf("skills-group-request", { group: key, mode: "capability" });
       setActiveGroupKey(key);
@@ -252,34 +334,12 @@ export const SkillsModule = memo(function SkillsModule({
     [onClearSelection, startGroupTransition]
   );
 
-  const handleClearSearch = useCallback(() => {
-    onQueryChange?.("");
-  }, [onQueryChange]);
-
-  const handleResetFilters = useCallback(() => {
-    setStatusFilterMode("all");
-    setSourceFilter(SOURCE_FILTER_ALL);
-    setActiveGroupKey(null);
-    setRenderedGroupKey(null);
-    onClearSelection();
-  }, [onClearSelection]);
-
-  const effectiveRenderedKey = useProductLibrary ? productRenderedKey : renderedKey;
-  const effectiveVisibleRowsCount = useProductLibrary ? productVisibleRows.length : visibleRows.length;
-  const effectiveTotalRowsCount = useProductLibrary ? (skillLibrary.summary?.counts.dedupedSkillCount ?? productVisibleRows.length) : visibleRows.length;
-
+  // Clear selection if the selected Skill disappears due to search/status/source.
   useEffect(() => {
-    markAiosPerf("skills-rendered", {
-      group: effectiveRenderedKey ?? "empty",
-      mode: "capability",
-      sourceView: useProductLibrary ? "skill-library-product" : "merged",
-      statusFilter: statusFilterMode,
-      sourceFilter: useProductLibrary ? sourceFilter : "n/a",
-      visible: effectiveVisibleRowsCount,
-      total: useProductLibrary ? skillLibrary.items.length : skillRows.length,
-      query: normalizedQuery ? "filtered" : "empty"
-    });
-  }, [effectiveRenderedKey, effectiveVisibleRowsCount, normalizedQuery, skillLibrary.items.length, skillRows.length, sourceFilter, statusFilterMode, useProductLibrary]);
+    if (!selectedId || !useProductLibrary) return;
+    const stillVisible = browseView.groups.some((group) => group.rows.some((item) => item.id === selectedId));
+    if (!stillVisible) onClearSelection();
+  }, [browseView.groups, onClearSelection, selectedId, useProductLibrary]);
 
   useEffect(() => {
     if (!normalizedQuery) return;
@@ -287,23 +347,26 @@ export const SkillsModule = memo(function SkillsModule({
     setRenderedGroupKey(null);
   }, [normalizedQuery]);
 
-  const categoryRailOptions = useMemo(
-    () =>
-      groups.map((group) => ({
-        value: group.key,
-        label: group.title,
-        count: filteredRowsByGroupKey.get(group.key)?.length ?? 0
-      })),
-    [filteredRowsByGroupKey, groups]
-  );
-  const productCategoryRailOptions = useMemo(
-    () =>
-      productGroups.map((group) => ({
-        value: group.key,
-        label: group.title,
-        count: productFilteredRowsByGroupKey.get(group.key)?.length ?? 0
-      })),
-    [productFilteredRowsByGroupKey, productGroups]
+  const productSkillListShell = (
+    <Box className="compact-skill-list-shell" data-aios-internal-scroll="true">
+      {browseView.groups.length === 0 ? (
+        <SkillBrowseEmptyState reason={browseView.emptyReason} onClearSearch={handleClearSearch} onResetFilters={handleResetFilters} />
+      ) : (
+        <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVirtualListHeight(browseView.totalCount, ROW_HEIGHT) }}>
+          {browseView.groups.flatMap((group) =>
+            group.rows.map((item) => (
+              <ProductSkillStaticRow
+                key={item.id}
+                item={item}
+                categoryLabel={productCapabilityById.get(item.id)?.primaryCategory.title}
+                selectedId={selectedId}
+                onSelect={onSelect}
+              />
+            ))
+          )}
+        </Box>
+      )}
+    </Box>
   );
 
   const skillListShell = (
@@ -319,75 +382,187 @@ export const SkillsModule = memo(function SkillsModule({
       )}
     </Box>
   );
-  const productSkillListShell = (
-    <Box className="compact-skill-list-shell" data-aios-internal-scroll="true">
-      {productRowsMismatch ? (
-        <Alert className="product-row-diagnostic" severity="warning" variant="outlined">
-          <Typography component="strong">统计显示已有技能，但当前列表没有可显示行。</Typography>
-          <Typography color="text.secondary" variant="body2">
-            请刷新本地记录或重新完成一次查找；AIOS Desktop 不会读取技能正文。
-          </Typography>
-        </Alert>
-      ) : productVisibleRows.length === 0 ? (
-        <SkillListEmptyState query={query} statusFilterActive={productStatusFilterActive || sourceFilterActive} onClearSearch={handleClearSearch} onResetFilters={handleResetFilters} />
-      ) : (
-        <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVisibleListHeight }}>
-          {productVisibleRows.map((item) => (
-            <ProductSkillStaticRow
-              key={item.id}
-              item={item}
-              categoryLabel={productCapabilityById.get(item.id)?.primaryCategory.title}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          ))}
-        </Box>
-      )}
-    </Box>
+
+  const libraryTabOptions = useMemo(
+    () => [
+      { value: "groups", label: "分类浏览", count: groups.length },
+      { value: "all", label: "全部技能", count: queryResultRows.length }
+    ],
+    [groups.length, queryResultRows.length]
   );
-  const effectiveLibraryTabOptions = useProductLibrary ? productLibraryTabOptions : libraryTabOptions;
-  const effectiveCategoryRailOptions = useProductLibrary ? productCategoryRailOptions : categoryRailOptions;
-  const effectiveStatusFilterOptions = useProductLibrary ? skillStatusFilterOptions : fallbackSkillStatusFilterOptions;
-  const effectiveActiveKey = useProductLibrary ? productActiveKey : activeKey;
-  const effectiveActiveGroup = useProductLibrary ? productActiveGroup : activeGroup;
-  const effectiveGroupsLength = useProductLibrary ? productGroups.length : groups.length;
-  const effectiveSkillListShell = useProductLibrary ? productSkillListShell : skillListShell;
+
+  const categoryRailOptions = useMemo(
+    () =>
+      groups.map((group) => ({
+        value: group.key,
+        label: group.title,
+        count: filteredRowsByGroupKey.get(group.key)?.length ?? 0
+      })),
+    [filteredRowsByGroupKey, groups]
+  );
+
+  const effectiveRenderedKey = renderedKey;
+  const effectiveVisibleRowsCount = useProductLibrary ? browseView.totalCount : visibleRows.length;
+  const effectiveTotalRowsCount = useProductLibrary
+    ? skillLibrary.summary?.counts.dedupedSkillCount ?? browseView.totalCount
+    : visibleRows.length;
+
+  useEffect(() => {
+    markAiosPerf("skills-rendered", {
+      scope: useProductLibrary ? scope : "legacy",
+      projectId: useProductLibrary ? projectId : "n/a",
+      capability: useProductLibrary ? capability : "n/a",
+      sourceView: useProductLibrary ? "skill-library-product" : "merged",
+      statusFilter: useProductLibrary ? productStatusFilterMode : legacyStatusFilterMode,
+      sourceFilter: useProductLibrary ? sourceFilter : "n/a",
+      visible: effectiveVisibleRowsCount,
+      total: useProductLibrary ? skillLibrary.items.length : skillRows.length,
+      query: normalizedQuery ? "filtered" : "empty"
+    });
+  }, [
+    browseView.totalCount,
+    capability,
+    effectiveVisibleRowsCount,
+    legacyStatusFilterMode,
+    normalizedQuery,
+    productStatusFilterMode,
+    projectId,
+    scope,
+    skillLibrary.items.length,
+    skillRows.length,
+    sourceFilter,
+    useProductLibrary
+  ]);
+
+  if (useProductLibrary) {
+    const projectSelectorVisible = scope === "project";
+    const hasProjectOptions = browseView.projectOptions.length > 1;
+
+    return (
+      <AiosModuleFrame
+        className="skills-module"
+        contentClassName="skills-module-scroll"
+        view="skills"
+        summary="按任务和能力浏览已整理的 AI 技能。"
+        count={effectiveTotalRowsCount}
+        ariaLabel={moduleAriaLabel("skills")}
+        motionKey={`skills:product:${scope}:${projectId}:${capability}:${productStatusFilterMode}:${sourceFilter}:${browseView.totalCount}:${normalizedQuery ? "query" : "all"}`}
+        disableHoverMotion
+      >
+        <Box className="skill-library-toolbar" data-aios-layout-fixed>
+          <Box className="skill-filter-row">
+            <Box className="skill-filter-primary-controls">
+              <AiosSegmentedSwitcher ariaLabel="技能范围" options={browseView.scopeOptions} value={scope} onChange={(value) => handleScopeChange(value as SkillScopeFilter)} />
+              {projectSelectorVisible && hasProjectOptions && (
+                <FormControl size="small" className="skill-project-selector">
+                  <InputLabel id="skills-project-selector-label">项目</InputLabel>
+                  <Select
+                    labelId="skills-project-selector-label"
+                    value={projectId}
+                    label="项目"
+                    onChange={(event) => handleProjectChange(event.target.value as SkillProjectFilterValue)}
+                  >
+                    {browseView.projectOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              {projectSelectorVisible && !hasProjectOptions && (
+                <FormControl size="small" className="skill-project-selector" disabled>
+                  <InputLabel id="skills-project-selector-label">项目</InputLabel>
+                  <Select labelId="skills-project-selector-label" value={ALL_PROJECTS_VALUE} label="项目">
+                    <MenuItem value={ALL_PROJECTS_VALUE}>暂无已登记项目</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+            </Box>
+            <Box className="skill-filter-secondary-controls">
+              <AiosSegmentedSwitcher
+                ariaLabel="更多筛选"
+                options={[{ value: "more", label: "更多筛选" }]}
+                value={showMoreFilters ? "more" : ""}
+                onChange={(value) => setShowMoreFilters(value === "more")}
+              />
+            </Box>
+          </Box>
+          {showMoreFilters && (
+            <Box className="skill-filter-more-row">
+              <ToggleButtonGroup aria-label="状态筛选" className="skill-filter-toggle" exclusive size="small" value={productStatusFilterMode} onChange={handleProductStatusFilterChange}>
+                {skillStatusFilterOptions.map((option) => (
+                  <ToggleButton key={option.value} value={option.value}>
+                    {option.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              {productSourceOptions.length > 1 && (
+                <ToggleButtonGroup aria-label="来源筛选" className="skill-filter-toggle skill-filter-source-controls" exclusive size="small" value={sourceFilter} onChange={handleSourceFilterChange}>
+                  <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
+                  {productSourceOptions.map((source) => (
+                    <ToggleButton key={source} value={source}>
+                      {source}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+              )}
+            </Box>
+          )}
+          <Box className="skill-filter-search-state">
+            <SearchRounded fontSize="small" />
+            <Typography color="text.secondary" variant="body2" noWrap>
+              {normalizedQuery ? `当前搜索：${normalizedQuery}` : "使用顶部搜索框筛选技能名称和用途。"}
+            </Typography>
+          </Box>
+        </Box>
+        {browseView.categoryOptions.length > 1 ? (
+          <Box className="aios-two-pane" data-aios-motion-surface>
+            <AiosSectionRail ariaLabel="能力分类" options={browseView.categoryOptions} value={capability} onChange={handleCapabilityChange} disableItemHover />
+            <SkillListPanel
+              count={browseView.totalCount}
+              summary={getActiveGroupSummary(browseView.groups)}
+              title={getActiveGroupTitle(browseView.groups, capability)}
+            >
+              {productSkillListShell}
+            </SkillListPanel>
+          </Box>
+        ) : (
+          <SkillListPanel
+            count={browseView.totalCount}
+            summary={getActiveGroupSummary(browseView.groups)}
+            title={getActiveGroupTitle(browseView.groups, capability)}
+          >
+            {productSkillListShell}
+          </SkillListPanel>
+        )}
+      </AiosModuleFrame>
+    );
+  }
 
   return (
     <AiosModuleFrame
       className="skills-module"
       contentClassName="skills-module-scroll"
       view="skills"
-      summary={zhCN.moduleSummaries.skills}
+      summary={moduleEmptyStateCopy("skills").body}
       count={effectiveTotalRowsCount}
       ariaLabel={moduleAriaLabel("skills")}
-      motionKey={`skills:capability:${libraryTab}:${statusFilterMode}:${sourceFilter}:${effectiveRenderedKey ?? "none"}:${effectiveVisibleRowsCount}:${normalizedQuery ? "query" : "all"}`}
+      motionKey={`skills:legacy:${libraryTab}:${legacyStatusFilterMode}:${effectiveRenderedKey ?? "none"}:${effectiveVisibleRowsCount}:${normalizedQuery ? "query" : "all"}`}
       disableHoverMotion
     >
       <Box className="skill-library-toolbar" data-aios-layout-fixed>
         <Box className="skill-filter-row">
           <Box className="skill-filter-primary-controls">
-            <AiosSegmentedSwitcher ariaLabel="技能浏览方式" options={effectiveLibraryTabOptions} value={libraryTab} onChange={handleLibraryTabChange} />
-            <ToggleButtonGroup aria-label="技能筛选" className="skill-filter-toggle" exclusive size="small" value={statusFilterMode} onChange={handleQualityFilterChange}>
-              {effectiveStatusFilterOptions.map((option) => (
+            <AiosSegmentedSwitcher ariaLabel="技能浏览方式" options={libraryTabOptions} value={libraryTab} onChange={handleLegacyLibraryTabChange} />
+            <ToggleButtonGroup aria-label="技能筛选" className="skill-filter-toggle" exclusive size="small" value={legacyStatusFilterMode} onChange={handleLegacyQualityFilterChange}>
+              {fallbackSkillStatusFilterOptions.map((option) => (
                 <ToggleButton key={option.value} value={option.value}>
                   {option.label}
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
           </Box>
-          {useProductLibrary && productSourceOptions.length > 1 && (
-            <Box className="skill-filter-source-controls">
-              <ToggleButtonGroup aria-label="来源筛选" className="skill-filter-toggle skill-source-filter" exclusive size="small" value={sourceFilter} onChange={handleSourceFilterChange}>
-                <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
-                {productSourceOptions.map((source) => (
-                  <ToggleButton key={source} value={source}>
-                    {source}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Box>
-          )}
         </Box>
         <Box className="skill-filter-search-state">
           <SearchRounded fontSize="small" />
@@ -396,22 +571,16 @@ export const SkillsModule = memo(function SkillsModule({
           </Typography>
         </Box>
       </Box>
-      {libraryTab === "groups" && effectiveGroupsLength > 0 ? (
+      {libraryTab === "groups" && groups.length > 0 ? (
         <Box className="aios-two-pane" data-aios-motion-surface>
-          <AiosSectionRail
-            ariaLabel="技能分类"
-            options={effectiveCategoryRailOptions}
-            value={effectiveActiveKey ?? ""}
-            onChange={handleGroupChange}
-            disableItemHover
-          />
-          <SkillListPanel count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
-            {effectiveSkillListShell}
+          <AiosSectionRail ariaLabel="技能分类" options={categoryRailOptions} value={activeKey ?? ""} onChange={handleLegacyGroupChange} disableItemHover />
+          <SkillListPanel count={effectiveVisibleRowsCount} summary={activeGroup?.summary || "探索本地只读技能元数据。"} title={activeGroup?.title ?? "技能库"}>
+            {skillListShell}
           </SkillListPanel>
         </Box>
       ) : (
-        <SkillListPanel count={effectiveVisibleRowsCount} summary={effectiveActiveGroup?.summary || "探索本地只读技能元数据。"} title={effectiveActiveGroup?.title ?? "技能库"}>
-          {effectiveSkillListShell}
+        <SkillListPanel count={effectiveVisibleRowsCount} summary={activeGroup?.summary || "探索本地只读技能元数据。"} title={activeGroup?.title ?? "技能库"}>
+          {skillListShell}
         </SkillListPanel>
       )}
     </AiosModuleFrame>
@@ -474,6 +643,28 @@ function SkillListEmptyState({
   );
 }
 
+function SkillBrowseEmptyState({
+  reason,
+  onClearSearch,
+  onResetFilters
+}: {
+  reason: SkillBrowseEmptyReason;
+  onClearSearch?: () => void;
+  onResetFilters?: () => void;
+}) {
+  const copy = getSkillBrowseEmptyStateCopy(reason);
+  return (
+    <ModuleEmptyState
+      title={copy.title}
+      body={copy.body}
+      hints={[
+        ...(onClearSearch ? ["可清除搜索恢复全部列表。"] : []),
+        ...(onResetFilters ? ["可重置筛选查看所有状态。"] : [])
+      ]}
+    />
+  );
+}
+
 function ProductSkillStaticRow({
   item,
   categoryLabel,
@@ -496,6 +687,17 @@ function ProductSkillStaticRow({
   );
 }
 
+function getActiveGroupTitle(groups: ProductSkillGroup[], capability: SkillCapabilityFilter): string {
+  if (capability === "all") return "全部能力";
+  return groups.find((group) => group.key === capability)?.title ?? "技能库";
+}
+
+function getActiveGroupSummary(groups: ProductSkillGroup[]): string {
+  if (groups.length === 0) return "当前筛选条件下没有可显示的技能。";
+  if (groups.length === 1) return groups[0]?.summary ?? "";
+  return `按能力分类显示 ${groups.length} 个分组。`;
+}
+
 function groupSkillRowsByCapability(
   rows: SkillIdentityRow[],
   skillCapabilityById: ReadonlyMap<string, { primaryCategory: { key: SkillCapabilityCategoryKey } }>
@@ -503,8 +705,8 @@ function groupSkillRowsByCapability(
   const rowsByCategory = new Map<SkillCapabilityCategoryKey, SkillIdentityRow[]>(SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, []]));
 
   for (const row of rows) {
-    const categoryKey = skillCapabilityById.get(row.primaryResource.id)?.primaryCategory.key ?? "other";
-    const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("other");
+    const categoryKey = skillCapabilityById.get(row.primaryResource.id)?.primaryCategory.key ?? "unknown";
+    const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("unknown");
     categoryRows?.push(row);
   }
 
@@ -523,8 +725,8 @@ function groupSkillLibraryItemsByCapability(
   const rowsByCategory = new Map<SkillCapabilityCategoryKey, SkillListItem[]>(SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, []]));
 
   for (const item of items) {
-    const categoryKey = capabilityById.get(item.id)?.primaryCategory.key ?? "other";
-    const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("other");
+    const categoryKey = capabilityById.get(item.id)?.primaryCategory.key ?? "unknown";
+    const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("unknown");
     categoryRows?.push(item);
   }
 
@@ -546,15 +748,6 @@ function shouldIncludeQualityRow(row: SkillIdentityRow, mode: SkillStatusFilter,
 }
 
 function uniqueRows(rows: SkillIdentityRow[]): SkillIdentityRow[] {
-  const seen = new Set<string>();
-  return rows.filter((row) => {
-    if (seen.has(row.id)) return false;
-    seen.add(row.id);
-    return true;
-  });
-}
-
-function uniqueSkillLibraryItems(rows: SkillListItem[]): SkillListItem[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
     if (seen.has(row.id)) return false;
