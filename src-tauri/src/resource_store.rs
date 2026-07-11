@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
 
 const DATABASE_FILE_NAME: &str = "aios-resource-library.sqlite3";
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 const DEFAULT_RESOURCE_QUERY_LIMIT: usize = 100;
 const MAX_RESOURCE_QUERY_LIMIT: usize = 500;
 const MAX_SKILL_PRODUCT_METADATA_ARRAY_ITEMS: usize = 20;
@@ -131,6 +131,10 @@ pub struct PersistScanSourceInput {
     pub profile_id: String,
     pub source_kind: String,
     pub project_label: Option<String>,
+    pub scope_kind: Option<String>,
+    pub project_id: Option<String>,
+    pub scope_source: Option<String>,
+    pub scope_confirmed: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -459,6 +463,11 @@ pub struct ResourceCorpusResource {
     pub source_kind: Option<String>,
     pub scan_source_enabled: Option<bool>,
     pub project_label: Option<String>,
+    pub scope_kind: Option<String>,
+    pub scope_project_id: Option<String>,
+    pub scope_project_label: Option<String>,
+    pub scope_source: Option<String>,
+    pub scope_confirmed: Option<bool>,
     pub root_display_path: Option<String>,
     pub profile_id: Option<String>,
     pub scan_job_id: Option<String>,
@@ -563,6 +572,7 @@ pub struct SkillListItem {
     pub source_count: u64,
     pub updated_at: Option<String>,
     pub last_seen_at: Option<String>,
+    pub scope_summary: SkillScopeSummary,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -601,6 +611,60 @@ pub struct SkillUsageSummary {
     pub usage_known: bool,
     pub usage_text: String,
     pub available_in_tools: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SkillScopeKind {
+    Global,
+    Project,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SkillScopeClassification {
+    GlobalOnly,
+    ProjectOnly,
+    Mixed,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SkillScopeSource {
+    UserConfig,
+    BuiltinProfile,
+    LegacyMigration,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillProjectRef {
+    pub project_id: String,
+    pub project_label: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillScopeEvidence {
+    pub source_id: String,
+    pub scope_kind: SkillScopeKind,
+    pub project_id: Option<String>,
+    pub project_label: Option<String>,
+    pub scope_source: SkillScopeSource,
+    pub scope_confirmed: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillScopeSummary {
+    pub classification: SkillScopeClassification,
+    pub has_global_source: bool,
+    pub projects: Vec<SkillProjectRef>,
+    pub has_unknown_source: bool,
+    pub evidence: Vec<SkillScopeEvidence>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -772,6 +836,10 @@ pub struct UpdateScanSourceInput {
     pub profile_id: Option<String>,
     pub project_label: Option<String>,
     pub enabled: Option<bool>,
+    pub scope_kind: Option<String>,
+    pub project_id: Option<String>,
+    pub scope_source: Option<String>,
+    pub scope_confirmed: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -784,6 +852,10 @@ pub struct UpsertScanSourceInput {
     pub source_kind: String,
     pub project_label: Option<String>,
     pub enabled: bool,
+    pub scope_kind: Option<String>,
+    pub project_id: Option<String>,
+    pub scope_source: Option<String>,
+    pub scope_confirmed: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -796,6 +868,108 @@ pub struct StoredScanSource {
     pub source_kind: String,
     pub project_label: Option<String>,
     pub enabled: bool,
+    pub scope_kind: Option<String>,
+    pub scope_project_id: Option<String>,
+    pub scope_source: Option<String>,
+    pub scope_confirmed: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRecord {
+    pub id: String,
+    pub label: String,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PersistProjectInput {
+    pub id: String,
+    pub label: String,
+}
+
+fn project_label_for_id(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<Option<String>, ResourceStoreError> {
+    conn.query_row(
+        "SELECT label FROM projects WHERE id = ?1",
+        params![project_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(ResourceStoreError::from)
+}
+
+fn project_exists(conn: &Connection, project_id: &str) -> Result<bool, ResourceStoreError> {
+    Ok(project_label_for_id(conn, project_id)?.is_some())
+}
+
+fn upsert_project_tx(
+    conn: &Connection,
+    project_id: &str,
+    label: &str,
+    now: u64,
+) -> Result<(), ResourceStoreError> {
+    let existing_created_at = conn
+        .query_row(
+            "SELECT created_at FROM projects WHERE id = ?1",
+            params![project_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+        .map(i64_to_u64)
+        .unwrap_or(now);
+    conn.execute(
+        "INSERT INTO projects (id, label, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET
+            label = excluded.label,
+            updated_at = excluded.updated_at",
+        params![
+            project_id,
+            label,
+            u64_to_i64(existing_created_at),
+            u64_to_i64(now),
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn upsert_project_for_path(
+    db_path: &Path,
+    input: PersistProjectInput,
+) -> Result<ProjectRecord, ResourceStoreError> {
+    let project_id = normalized_required_text("项目 ID", &input.id)?;
+    let label = normalized_required_text("项目显示名称", &input.label)?;
+    let mut conn = open_initialized_connection(db_path)?;
+    let tx = conn.transaction()?;
+    let now = current_time_ms();
+    upsert_project_tx(&tx, &project_id, &label, now)?;
+    tx.commit()?;
+    Ok(ProjectRecord {
+        id: project_id,
+        label,
+        created_at_ms: now,
+        updated_at_ms: now,
+    })
+}
+
+pub fn list_projects_for_path(db_path: &Path) -> Result<Vec<ProjectRecord>, ResourceStoreError> {
+    let conn = open_initialized_connection(db_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT id, label, created_at, updated_at FROM projects ORDER BY label ASC, id ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(ProjectRecord {
+            id: row.get(0)?,
+            label: row.get(1)?,
+            created_at_ms: i64_to_u64(row.get(2)?),
+            updated_at_ms: i64_to_u64(row.get(3)?),
+        })
+    })?;
+    collect_rows(rows)
 }
 
 #[tauri::command]
@@ -803,6 +977,21 @@ pub fn get_resource_store_status(
     state: State<'_, ResourceStoreState>,
 ) -> Result<ResourceStoreStatus, ResourceStoreCommandError> {
     store_status_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn upsert_project(
+    state: State<'_, ResourceStoreState>,
+    input: PersistProjectInput,
+) -> Result<ProjectRecord, ResourceStoreCommandError> {
+    upsert_project_for_path(&state.db_path, input).map_err(ResourceStoreCommandError::from)
+}
+
+#[tauri::command]
+pub fn list_projects(
+    state: State<'_, ResourceStoreState>,
+) -> Result<Vec<ProjectRecord>, ResourceStoreCommandError> {
+    list_projects_for_path(&state.db_path).map_err(ResourceStoreCommandError::from)
 }
 
 #[tauri::command]
@@ -998,6 +1187,7 @@ pub fn initialize_database(db_path: &Path) -> Result<(), ResourceStoreError> {
     migrate_v2(&conn)?;
     migrate_v3(&conn)?;
     migrate_v4(&conn)?;
+    migrate_v5(&conn)?;
     Ok(())
 }
 
@@ -1017,6 +1207,14 @@ pub fn upsert_scan_source_for_path(
     let now = current_time_ms();
     let source_id = scan_source_id_for_input(&tx, input.id.as_deref(), &input)?;
     let project_label = normalized_optional_text(input.project_label.as_deref());
+    let (scope_kind, scope_project_id, scope_source, scope_confirmed) =
+        source_scope_params_from_input(
+            &tx,
+            input.scope_kind.as_deref(),
+            input.project_id.as_deref(),
+            input.scope_source.as_deref(),
+            input.scope_confirmed,
+        )?;
 
     upsert_scan_source_tx(
         &tx,
@@ -1030,8 +1228,12 @@ pub fn upsert_scan_source_for_path(
         input.enabled,
         now,
         None,
+        Some(&scope_kind),
+        scope_project_id.as_deref(),
+        Some(scope_source_label(&scope_source)),
+        scope_confirmed,
     )?;
-    upsert_project_scope_tx(
+    upsert_legacy_project_scope_tx(
         &tx,
         &input.source_kind,
         &input.root_path,
@@ -1063,6 +1265,19 @@ pub fn update_scan_source_for_path(
     let enabled = input.enabled.unwrap_or(existing.enabled);
     let now = current_time_ms();
 
+    let scope_params: Option<(String, Option<String>, SkillScopeSource, bool)> =
+        if input.scope_kind.is_some() {
+            Some(source_scope_params_from_input(
+                &tx,
+                input.scope_kind.as_deref(),
+                input.project_id.as_deref(),
+                input.scope_source.as_deref(),
+                input.scope_confirmed,
+            )?)
+        } else {
+            None
+        };
+
     validate_source_input(
         &display_name,
         &existing.root_path,
@@ -1082,8 +1297,17 @@ pub fn update_scan_source_for_path(
         enabled,
         now,
         None,
+        scope_params.as_ref().map(|params| params.0.as_str()),
+        scope_params.as_ref().and_then(|params| params.1.as_deref()),
+        scope_params
+            .as_ref()
+            .map(|params| scope_source_label(&params.2)),
+        scope_params
+            .as_ref()
+            .map(|params| params.3)
+            .unwrap_or(existing.scope_confirmed),
     )?;
-    upsert_project_scope_tx(
+    upsert_legacy_project_scope_tx(
         &tx,
         &existing.source_kind,
         &existing.root_path,
@@ -1142,6 +1366,14 @@ pub fn persist_scan_job_for_path(
     )?;
     let source_id = scan_source_id_for_persist_input(&tx, &input.source)?;
     let project_label = normalized_optional_text(input.source.project_label.as_deref());
+    let (scope_kind, scope_project_id, scope_source, scope_confirmed) =
+        source_scope_params_from_input(
+            &tx,
+            input.source.scope_kind.as_deref(),
+            input.source.project_id.as_deref(),
+            input.source.scope_source.as_deref(),
+            input.source.scope_confirmed,
+        )?;
 
     tx.execute("DELETE FROM scan_jobs WHERE id = ?1", params![input.id])?;
     upsert_scan_source_tx(
@@ -1156,8 +1388,12 @@ pub fn persist_scan_job_for_path(
         true,
         now,
         Some(&input.id),
+        Some(&scope_kind),
+        scope_project_id.as_deref(),
+        Some(scope_source_label(&scope_source)),
+        scope_confirmed,
     )?;
-    upsert_project_scope_tx(
+    upsert_legacy_project_scope_tx(
         &tx,
         &input.source.source_kind,
         &input.source.root_path,
@@ -3501,6 +3737,112 @@ fn skill_library_counts(groups: &[SkillLibraryGroup]) -> SkillLibraryCounts {
     counts
 }
 
+fn scope_kind_from_text(value: Option<&str>) -> SkillScopeKind {
+    match value.map(str::trim).unwrap_or("").to_lowercase().as_str() {
+        "global" => SkillScopeKind::Global,
+        "project" => SkillScopeKind::Project,
+        _ => SkillScopeKind::Unknown,
+    }
+}
+
+fn candidate_scope_evidence(candidate: &SkillCandidate) -> SkillScopeEvidence {
+    let scope_kind = scope_kind_from_text(candidate.resource.scope_kind.as_deref());
+    let raw_scope_source = normalized_scope_source(candidate.resource.scope_source.as_deref());
+    let scope_confirmed = candidate.resource.scope_confirmed.unwrap_or(false);
+    let effective_confirmed = validated_scope_confirmed(&raw_scope_source, scope_confirmed);
+    let effective_scope_kind = if effective_confirmed {
+        scope_kind
+    } else {
+        SkillScopeKind::Unknown
+    };
+    let scope_source = if effective_confirmed {
+        raw_scope_source
+    } else {
+        SkillScopeSource::LegacyMigration
+    };
+    SkillScopeEvidence {
+        source_id: candidate
+            .resource
+            .scan_source_id
+            .clone()
+            .unwrap_or_else(|| candidate.resource.id.clone()),
+        scope_kind: effective_scope_kind.clone(),
+        project_id: candidate.resource.scope_project_id.clone(),
+        project_label: candidate
+            .resource
+            .scope_project_label
+            .clone()
+            .or_else(|| candidate.resource.scope_project_id.clone()),
+        scope_source,
+        scope_confirmed: effective_confirmed,
+    }
+}
+
+fn skill_scope_summary_for_group(group: &SkillLibraryGroup) -> SkillScopeSummary {
+    let mut evidence_by_source: HashMap<String, SkillScopeEvidence> = HashMap::new();
+    let mut project_refs: Vec<SkillProjectRef> = Vec::new();
+    let mut has_global = false;
+    let mut has_unknown = false;
+
+    for candidate in &group.candidates {
+        let evidence = candidate_scope_evidence(candidate);
+        evidence_by_source
+            .entry(evidence.source_id.clone())
+            .or_insert_with(|| evidence.clone());
+
+        match evidence.scope_kind {
+            SkillScopeKind::Global => has_global = true,
+            SkillScopeKind::Project => {
+                if let Some(project_id) = &evidence.project_id {
+                    if !project_refs
+                        .iter()
+                        .any(|project| project.project_id == *project_id)
+                    {
+                        project_refs.push(SkillProjectRef {
+                            project_id: project_id.clone(),
+                            project_label: evidence
+                                .project_label
+                                .clone()
+                                .filter(|label| !label.is_empty())
+                                .unwrap_or_else(|| project_id.clone()),
+                        });
+                    }
+                } else {
+                    has_unknown = true;
+                }
+            }
+            SkillScopeKind::Unknown => has_unknown = true,
+        }
+    }
+
+    project_refs.sort_by(|left, right| {
+        left.project_label
+            .cmp(&right.project_label)
+            .then_with(|| left.project_id.cmp(&right.project_id))
+    });
+
+    let mut evidence: Vec<SkillScopeEvidence> = evidence_by_source.into_values().collect();
+    evidence.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+
+    let classification = if has_global && project_refs.is_empty() && !has_unknown {
+        SkillScopeClassification::GlobalOnly
+    } else if !has_global && !project_refs.is_empty() && !has_unknown && project_refs.len() == 1 {
+        SkillScopeClassification::ProjectOnly
+    } else if !has_global && project_refs.is_empty() && has_unknown {
+        SkillScopeClassification::Unknown
+    } else {
+        SkillScopeClassification::Mixed
+    };
+
+    SkillScopeSummary {
+        classification,
+        has_global_source: has_global,
+        projects: project_refs,
+        has_unknown_source: has_unknown,
+        evidence,
+    }
+}
+
 fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
     let primary = select_primary_skill_candidate(group);
     let available_in_tools = merged_available_tools(group);
@@ -3512,6 +3854,7 @@ fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
     ));
     let short_purpose = skill_short_purpose(primary, &manifest_metadata);
     let attention_reasons = attention_reasons_for_group(group);
+    let scope_summary = skill_scope_summary_for_group(group);
 
     SkillListItem {
         id: group.id.clone(),
@@ -3539,6 +3882,7 @@ fn skill_list_item_for_group(group: &SkillLibraryGroup) -> SkillListItem {
             .scan_job_finished_at_ms
             .or(primary.resource.scan_job_started_at_ms)
             .map(|value| value.to_string()),
+        scope_summary,
     }
 }
 
@@ -4461,6 +4805,7 @@ fn open_initialized_connection(db_path: &Path) -> Result<Connection, ResourceSto
     migrate_v2(&conn)?;
     migrate_v3(&conn)?;
     migrate_v4(&conn)?;
+    migrate_v5(&conn)?;
     Ok(conn)
 }
 
@@ -4650,6 +4995,40 @@ fn migrate_v4(conn: &Connection) -> Result<(), ResourceStoreError> {
     }
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+        params![4_i64, u64_to_i64(current_time_ms())],
+    )?;
+    Ok(())
+}
+
+fn migrate_v5(conn: &Connection) -> Result<(), ResourceStoreError> {
+    if !column_exists(conn, "scan_sources", "scope_kind")? {
+        conn.execute("ALTER TABLE scan_sources ADD COLUMN scope_kind TEXT", [])?;
+    }
+    if !column_exists(conn, "scan_sources", "project_id")? {
+        conn.execute("ALTER TABLE scan_sources ADD COLUMN project_id TEXT", [])?;
+    }
+    if !column_exists(conn, "scan_sources", "scope_source")? {
+        conn.execute("ALTER TABLE scan_sources ADD COLUMN scope_source TEXT", [])?;
+    }
+    if !column_exists(conn, "scan_sources", "scope_confirmed")? {
+        conn.execute(
+            "ALTER TABLE scan_sources ADD COLUMN scope_confirmed INTEGER",
+            [],
+        )?;
+    }
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_projects_label ON projects(label);
+        ",
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
         params![SCHEMA_VERSION, u64_to_i64(current_time_ms())],
     )?;
     Ok(())
@@ -4719,6 +5098,10 @@ fn upsert_scan_source_tx(
     enabled: bool,
     now: u64,
     last_scan_job_id: Option<&str>,
+    scope_kind: Option<&str>,
+    scope_project_id: Option<&str>,
+    scope_source: Option<&str>,
+    scope_confirmed: bool,
 ) -> Result<(), ResourceStoreError> {
     let existing_created_at = conn
         .query_row(
@@ -4732,8 +5115,9 @@ fn upsert_scan_source_tx(
     conn.execute(
         "INSERT INTO scan_sources (
             id, display_name, root_path, root_display_path, profile_id, source_kind,
-            project_label, enabled, created_at, updated_at, last_scan_job_id
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            project_label, enabled, created_at, updated_at, last_scan_job_id,
+            scope_kind, project_id, scope_source, scope_confirmed
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
         ON CONFLICT(id) DO UPDATE SET
             display_name = excluded.display_name,
             root_path = excluded.root_path,
@@ -4743,7 +5127,14 @@ fn upsert_scan_source_tx(
             project_label = excluded.project_label,
             enabled = excluded.enabled,
             updated_at = excluded.updated_at,
-            last_scan_job_id = COALESCE(excluded.last_scan_job_id, scan_sources.last_scan_job_id)",
+            last_scan_job_id = COALESCE(excluded.last_scan_job_id, scan_sources.last_scan_job_id),
+            scope_kind = COALESCE(excluded.scope_kind, scan_sources.scope_kind),
+            project_id = CASE
+                WHEN excluded.scope_kind IS NOT NULL AND excluded.project_id IS NULL THEN NULL
+                ELSE COALESCE(excluded.project_id, scan_sources.project_id)
+            END,
+            scope_source = COALESCE(excluded.scope_source, scan_sources.scope_source),
+            scope_confirmed = COALESCE(excluded.scope_confirmed, scan_sources.scope_confirmed)",
         params![
             source_id,
             display_name,
@@ -4756,12 +5147,20 @@ fn upsert_scan_source_tx(
             u64_to_i64(existing_created_at),
             u64_to_i64(now),
             last_scan_job_id,
+            scope_kind,
+            scope_project_id,
+            scope_source,
+            bool_to_i64(scope_confirmed),
         ],
     )?;
     Ok(())
 }
 
-fn upsert_project_scope_tx(
+/// Legacy resource-corpus scope maintenance. This function derives a project_scope id from
+/// source_kind + root_path and must never be used as evidence for the product-level Skill scope
+/// contract introduced in P6D-B. Skill scope evidence must come only from the explicit `projects`
+/// table and `scan_sources.scope_kind/project_id/scope_source/scope_confirmed` fields.
+fn upsert_legacy_project_scope_tx(
     conn: &Connection,
     source_kind: &str,
     root_path: &str,
@@ -4843,7 +5242,7 @@ fn stored_scan_source_by_id(
 ) -> Result<Option<StoredScanSource>, ResourceStoreError> {
     conn.query_row(
         "SELECT id, display_name, root_path, root_display_path, profile_id, source_kind,
-            project_label, enabled
+            project_label, enabled, scope_kind, project_id, scope_source, scope_confirmed
         FROM scan_sources
         WHERE id = ?1",
         params![source_id],
@@ -4857,6 +5256,13 @@ fn stored_scan_source_by_id(
                 source_kind: row.get(5)?,
                 project_label: row.get(6)?,
                 enabled: int_to_bool(row.get(7)?),
+                scope_kind: row.get(8)?,
+                scope_project_id: row.get(9)?,
+                scope_source: row.get(10)?,
+                scope_confirmed: row
+                    .get::<_, Option<i64>>(11)?
+                    .map(|value| value != 0)
+                    .unwrap_or(false),
             })
         },
     )
@@ -5079,7 +5485,8 @@ fn corpus_resource_base_sql() -> String {
         r.id, r.stable_key, r.name, r.resource_kind, r.description, r.primary_type,
         r.risk_level, r.boundary_labels_json, r.product_metadata_json, r.updated_at,
         l.id, l.scan_source_id, s.display_name, s.source_kind, s.enabled,
-        s.project_label, s.root_display_path, s.profile_id,
+        s.project_label, s.scope_kind, s.project_id AS scope_project_id, p.label AS scope_project_label,
+        s.scope_source, s.scope_confirmed, s.root_display_path, s.profile_id,
         l.scan_job_id, j.status, j.started_at, j.finished_at,
         l.relative_path, l.display_path, l.extension, l.entry_type,
         l.size_bytes, l.modified_at, l.classification_reason,
@@ -5094,7 +5501,8 @@ fn corpus_resource_base_sql() -> String {
         LIMIT 1
     )
     LEFT JOIN scan_sources s ON s.id = l.scan_source_id
-    LEFT JOIN scan_jobs j ON j.id = l.scan_job_id"
+    LEFT JOIN scan_jobs j ON j.id = l.scan_job_id
+    LEFT JOIN projects p ON p.id = s.project_id"
         .to_string()
 }
 
@@ -5141,20 +5549,25 @@ fn row_to_corpus_resource(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceC
         source_kind: row.get(13)?,
         scan_source_enabled: row.get::<_, Option<i64>>(14)?.map(int_to_bool),
         project_label: row.get(15)?,
-        root_display_path: row.get(16)?,
-        profile_id: row.get(17)?,
-        scan_job_id: row.get(18)?,
-        scan_job_status: row.get(19)?,
-        scan_job_started_at_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64),
-        scan_job_finished_at_ms: row.get::<_, Option<i64>>(21)?.map(i64_to_u64),
-        relative_path: row.get(22)?,
-        display_path: row.get(23)?,
-        extension: row.get(24)?,
-        entry_type: row.get(25)?,
-        size_bytes: row.get::<_, Option<i64>>(26)?.map(i64_to_u64),
-        modified_at_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64),
-        classification_reason: row.get(28)?,
-        sensitive_path_redacted: int_to_bool(row.get(29)?),
+        scope_kind: row.get(16)?,
+        scope_project_id: row.get(17)?,
+        scope_project_label: row.get(18)?,
+        scope_source: row.get(19)?,
+        scope_confirmed: row.get::<_, Option<i64>>(20)?.map(|value| value != 0),
+        root_display_path: row.get(21)?,
+        profile_id: row.get(22)?,
+        scan_job_id: row.get(23)?,
+        scan_job_status: row.get(24)?,
+        scan_job_started_at_ms: row.get::<_, Option<i64>>(25)?.map(i64_to_u64),
+        scan_job_finished_at_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64),
+        relative_path: row.get(27)?,
+        display_path: row.get(28)?,
+        extension: row.get(29)?,
+        entry_type: row.get(30)?,
+        size_bytes: row.get::<_, Option<i64>>(31)?.map(i64_to_u64),
+        modified_at_ms: row.get::<_, Option<i64>>(32)?.map(i64_to_u64),
+        classification_reason: row.get(33)?,
+        sensitive_path_redacted: int_to_bool(row.get(34)?),
         product_metadata: parse_resource_product_metadata_json(&product_metadata_json),
     })
 }
@@ -5606,6 +6019,103 @@ fn validate_source_input(
     Ok(())
 }
 
+fn normalized_scope_kind(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn validate_source_scope(
+    conn: &Connection,
+    scope_kind: &str,
+    project_id: Option<&str>,
+) -> Result<(), ResourceStoreError> {
+    match scope_kind {
+        "global" => {
+            if project_id.is_some() {
+                return Err(ResourceStoreError::InvalidInput(
+                    "全局作用域不能指定项目 ID。".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        "project" => {
+            let project_id = project_id.ok_or_else(|| {
+                ResourceStoreError::InvalidInput("项目作用域必须提供项目 ID。".to_string())
+            })?;
+            if !project_exists(conn, project_id)? {
+                return Err(ResourceStoreError::InvalidInput(format!(
+                    "项目 ID {} 不存在。",
+                    project_id
+                )));
+            }
+            Ok(())
+        }
+        "unknown" => {
+            if project_id.is_some() {
+                return Err(ResourceStoreError::InvalidInput(
+                    "未整理作用域不能指定项目 ID。".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(ResourceStoreError::InvalidInput(format!(
+            "不支持的作用域类型：{}。",
+            scope_kind
+        ))),
+    }
+}
+
+fn scope_source_label(source: &SkillScopeSource) -> &'static str {
+    match source {
+        SkillScopeSource::UserConfig => "user-config",
+        SkillScopeSource::BuiltinProfile => "builtin-profile",
+        SkillScopeSource::LegacyMigration => "legacy-migration",
+        SkillScopeSource::Unknown => "unknown",
+    }
+}
+
+fn normalized_scope_source(value: Option<&str>) -> SkillScopeSource {
+    match value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase())
+        .as_deref()
+    {
+        Some("userconfig") | Some("user-config") => SkillScopeSource::UserConfig,
+        Some("builtinprofile") | Some("builtin-profile") => SkillScopeSource::BuiltinProfile,
+        Some("legacymigration") | Some("legacy-migration") => SkillScopeSource::LegacyMigration,
+        Some("unknown") => SkillScopeSource::Unknown,
+        Some(_) => SkillScopeSource::LegacyMigration,
+        None => SkillScopeSource::UserConfig,
+    }
+}
+
+fn validated_scope_confirmed(scope_source: &SkillScopeSource, requested_confirmed: bool) -> bool {
+    match scope_source {
+        SkillScopeSource::UserConfig | SkillScopeSource::BuiltinProfile => requested_confirmed,
+        SkillScopeSource::LegacyMigration | SkillScopeSource::Unknown => false,
+    }
+}
+
+fn source_scope_params_from_input(
+    conn: &Connection,
+    scope_kind: Option<&str>,
+    project_id: Option<&str>,
+    scope_source: Option<&str>,
+    scope_confirmed: Option<bool>,
+) -> Result<(String, Option<String>, SkillScopeSource, bool), ResourceStoreError> {
+    let scope_kind = normalized_scope_kind(scope_kind);
+    let project_id = normalized_optional_text(project_id);
+    validate_source_scope(conn, &scope_kind, project_id.as_deref())?;
+    let scope_source = normalized_scope_source(scope_source);
+    let requested_confirmed = scope_confirmed.unwrap_or(false);
+    let scope_confirmed = validated_scope_confirmed(&scope_source, requested_confirmed);
+    Ok((scope_kind, project_id, scope_source, scope_confirmed))
+}
+
 fn normalized_required_text(label: &str, value: &str) -> Result<String, ResourceStoreError> {
     normalized_optional_text(Some(value))
         .ok_or_else(|| ResourceStoreError::InvalidInput(format!("{label}不能为空。")))
@@ -5878,19 +6388,21 @@ mod tests {
         get_scan_source_resource_map_for_path, get_skill_detail_for_path,
         get_skill_library_summary_for_path, initialize_database,
         list_enabled_stored_scan_sources_for_path, list_mcp_service_items_for_path,
-        list_persisted_resources_for_path, list_project_scopes_for_path,
+        list_persisted_resources_for_path, list_project_scopes_for_path, list_projects_for_path,
         list_resource_corpus_scopes_for_path, list_resources_by_kind_for_path,
         list_resources_by_scope_for_path, list_scan_jobs_for_path, list_scan_sources_for_path,
-        list_skill_library_items_for_path, persist_scan_job_for_path, remove_scan_source_for_path,
-        set_app_setting_for_path, store_status_for_path, update_scan_source_for_path,
-        upsert_scan_source_for_path, McpServiceStatus, PersistMcpConfigMetadataInput,
-        PersistMcpConfigServiceMetadataInput, PersistScanErrorInput, PersistScanJobInput,
-        PersistScanResourceInput, PersistScanSkipInput, PersistScanSourceInput,
-        PersistSkillManifestMetadataInput, ResourceCorpusQuery, ResourceStoreError, SkillStatus,
-        UpdateScanSourceInput, UpsertScanSourceInput,
+        list_skill_library_items_for_path, open_initialized_connection, persist_scan_job_for_path,
+        remove_scan_source_for_path, set_app_setting_for_path, store_status_for_path,
+        update_scan_source_for_path, upsert_project_for_path, upsert_scan_source_for_path,
+        McpServiceStatus, PersistMcpConfigMetadataInput, PersistMcpConfigServiceMetadataInput,
+        PersistProjectInput, PersistScanErrorInput, PersistScanJobInput, PersistScanResourceInput,
+        PersistScanSkipInput, PersistScanSourceInput, PersistSkillManifestMetadataInput,
+        ResourceCorpusQuery, ResourceStoreError, SkillScopeClassification, SkillScopeSource,
+        SkillStatus, UpdateScanSourceInput, UpsertScanSourceInput,
     };
+    use rusqlite::{params, OptionalExtension};
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -5905,7 +6417,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 4);
+        assert_eq!(status.schema_version, 5);
         assert_eq!(status.resource_count, 0);
         assert!(status.metadata_only);
         assert!(!status.content_storage_enabled);
@@ -6069,7 +6581,7 @@ mod tests {
 
         let status = store_status_for_path(&db_path).expect("status should still load");
         assert!(status.database_ready);
-        assert_eq!(status.schema_version, 4);
+        assert_eq!(status.schema_version, 5);
 
         cleanup_db(db_path);
     }
@@ -6114,6 +6626,10 @@ mod tests {
                 profile_id: Some("skills-prompts-workspace".to_string()),
                 project_label: Some("Workspace B".to_string()),
                 enabled: Some(false),
+                scope_kind: None,
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
             },
         )
         .expect("source should update");
@@ -8617,6 +9133,10 @@ mod tests {
             profile_id: "skills-prompts-workspace".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8629,6 +9149,10 @@ mod tests {
             profile_id: "ai-toolchain".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8641,6 +9165,10 @@ mod tests {
             profile_id: "skills-prompts-workspace".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8653,6 +9181,10 @@ mod tests {
             profile_id: "ai-toolchain".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8665,6 +9197,10 @@ mod tests {
             profile_id: "skills-prompts-workspace".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8677,6 +9213,10 @@ mod tests {
             profile_id: "custom-folder".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8689,6 +9229,10 @@ mod tests {
             profile_id: "ai-toolchain".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8701,6 +9245,10 @@ mod tests {
             profile_id: "project-root".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: Some("Project Alpha".to_string()),
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8713,6 +9261,10 @@ mod tests {
             profile_id: "project-root".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: Some("Project Alpha".to_string()),
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8725,6 +9277,10 @@ mod tests {
             profile_id: "custom-folder".to_string(),
             source_kind: "unknown".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8737,6 +9293,10 @@ mod tests {
             profile_id: "ai-toolchain".to_string(),
             source_kind: "unknown".to_string(),
             project_label: None,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8870,6 +9430,10 @@ mod tests {
             profile_id: "custom-folder".to_string(),
             source_kind: "custom-directory".to_string(),
             project_label: Some("Fixture Project".to_string()),
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
     }
 
@@ -8883,7 +9447,57 @@ mod tests {
             source_kind: "custom-directory".to_string(),
             project_label: Some("Workspace A".to_string()),
             enabled,
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         }
+    }
+
+    fn explicit_global_source() -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some("source-global-skills".to_string()),
+            display_name: "Global Skills".to_string(),
+            root_path: "/Users/example/global-skills".to_string(),
+            root_display_path: "~/global-skills".to_string(),
+            profile_id: "skills-prompts-workspace".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+            scope_kind: Some("global".to_string()),
+            project_id: None,
+            scope_source: Some("user-config".to_string()),
+            scope_confirmed: Some(true),
+        }
+    }
+
+    fn explicit_project_source(project_id: &str) -> PersistScanSourceInput {
+        PersistScanSourceInput {
+            id: Some(format!("source-project-{project_id}")),
+            display_name: format!("Project {project_id}"),
+            root_path: format!("/Users/example/{project_id}"),
+            root_display_path: format!("~/{project_id}"),
+            profile_id: "project-root".to_string(),
+            source_kind: "custom-directory".to_string(),
+            project_label: None,
+            scope_kind: Some("project".to_string()),
+            project_id: Some(project_id.to_string()),
+            scope_source: Some("user-config".to_string()),
+            scope_confirmed: Some(true),
+        }
+    }
+
+    fn skill_resource_named(name: &str, relative_path: &str) -> PersistScanResourceInput {
+        skill_resource(
+            name,
+            "skill",
+            relative_path,
+            relative_path,
+            "路径或文件名匹配技能资源。",
+            "low",
+            1_725_000_000_000,
+            false,
+            vec!["metadata-only"],
+        )
     }
 
     fn temp_db_path(name: &str) -> PathBuf {
@@ -8896,6 +9510,1237 @@ mod tests {
             .join("aios-resource-store-tests")
             .join(format!("{name}-{now}-{counter}"))
             .join("resource-store.sqlite3")
+    }
+
+    #[test]
+    fn migration_defaults_existing_scan_source_scope_to_unknown() {
+        let db_path = temp_db_path("migration-scope-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(&db_path, sample_completed_job("job-1", 1))
+            .expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(!items[0].scope_summary.has_global_source);
+        assert!(items[0].scope_summary.projects.is_empty());
+        assert!(items[0].scope_summary.has_unknown_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn legacy_project_label_alone_does_not_classify_project_scope() {
+        let db_path = temp_db_path("legacy-project-label-alone");
+        initialize_database(&db_path).expect("migration should succeed");
+        persist_scan_job_for_path(&db_path, sample_completed_job("job-1", 1))
+            .expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(items[0].scope_summary.projects.is_empty());
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn source_kind_alone_does_not_classify_global_scope() {
+        let db_path = temp_db_path("source-kind-not-scope");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut job = sample_completed_job("job-1", 1);
+        job.source.source_kind = "global".to_string();
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn path_text_does_not_affect_scope_classification() {
+        let db_path = temp_db_path("path-text-not-scope");
+        initialize_database(&db_path).expect("migration should succeed");
+        let paths = [
+            "/Users/example/Codex/skills",
+            "/Users/example/Claude/skills",
+            "/Users/example/project-alpha/skills",
+            "/Users/example/global/skills",
+        ];
+        for (index, path) in paths.iter().enumerate() {
+            let mut source = sample_source();
+            source.id = Some(format!("source-{index}"));
+            source.root_path = path.to_string();
+            source.root_display_path = path.to_string();
+            let job = skill_library_job(
+                &format!("job-{index}"),
+                index as u64 + 1,
+                source,
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            );
+            persist_scan_job_for_path(&db_path, job).expect("job should persist");
+        }
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn migration_is_additive_and_preserves_existing_records() {
+        let db_path = temp_db_path("migration-additive");
+        initialize_database(&db_path).expect("first migration should succeed");
+        persist_scan_job_for_path(&db_path, sample_completed_job("job-1", 1))
+            .expect("job should persist");
+        initialize_database(&db_path).expect("second migration should be safe");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn explicit_global_source_produces_global_only_classification() {
+        let db_path = temp_db_path("explicit-global");
+        initialize_database(&db_path).expect("migration should succeed");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            explicit_global_source(),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::GlobalOnly
+        );
+        assert!(items[0].scope_summary.has_global_source);
+        assert!(!items[0].scope_summary.has_unknown_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn explicit_project_source_requires_project_id() {
+        let db_path = temp_db_path("project-scope-no-id");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_project_source("project-alpha");
+        source.project_id = None;
+        let job = skill_library_job("job-1", 1, source, vec![]);
+
+        let error = persist_scan_job_for_path(&db_path, job)
+            .expect_err("should reject project scope without project ID");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn explicit_project_source_exposes_confirmed_project_label() {
+        let db_path = temp_db_path("explicit-project-label");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            explicit_project_source("project-alpha"),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::ProjectOnly
+        );
+        assert_eq!(items[0].scope_summary.projects.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_id,
+            "project-alpha"
+        );
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_label,
+            "Alpha Project"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn custom_directory_without_explicit_scope_remains_unknown() {
+        let db_path = temp_db_path("custom-dir-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            codex_source(),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn built_in_profile_without_explicit_scope_metadata_remains_unknown() {
+        let db_path = temp_db_path("builtin-profile-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = sample_source();
+        source.profile_id = "project-root".to_string();
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn global_scope_with_project_id_is_rejected() {
+        let db_path = temp_db_path("global-with-project-id");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_global_source();
+        source.project_id = Some("project-alpha".to_string());
+        let job = skill_library_job("job-1", 1, source, vec![]);
+
+        let error = persist_scan_job_for_path(&db_path, job)
+            .expect_err("should reject global scope with project ID");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unknown_scope_with_project_id_is_rejected() {
+        let db_path = temp_db_path("unknown-with-project-id");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_global_source();
+        source.scope_kind = Some("unknown".to_string());
+        source.project_id = Some("project-alpha".to_string());
+        let job = skill_library_job("job-1", 1, source, vec![]);
+
+        let error = persist_scan_job_for_path(&db_path, job)
+            .expect_err("should reject unknown scope with project ID");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unknown_project_id_is_rejected() {
+        let db_path = temp_db_path("unknown-project-id");
+        initialize_database(&db_path).expect("migration should succeed");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            explicit_project_source("missing-project"),
+            vec![],
+        );
+
+        let error =
+            persist_scan_job_for_path(&db_path, job).expect_err("should reject unknown project ID");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn project_label_is_not_generated_from_path() {
+        let db_path = temp_db_path("path-not-project-label");
+        initialize_database(&db_path).expect("migration should succeed");
+        let job = skill_library_job("job-1", 1, explicit_project_source("project-alpha"), vec![]);
+        persist_scan_job_for_path(&db_path, job)
+            .expect_err("should reject project without registered label");
+
+        let projects = list_projects_for_path(&db_path).expect("projects should load");
+        assert!(projects.is_empty());
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn global_plus_project_produces_mixed_classification() {
+        let db_path = temp_db_path("mixed-global-project");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let global_job = skill_library_job(
+            "job-1",
+            1,
+            explicit_global_source(),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, global_job).expect("global job should persist");
+        let project_job = skill_library_job(
+            "job-2",
+            2,
+            explicit_project_source("project-alpha"),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, project_job).expect("project job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Mixed
+        );
+        assert!(items[0].scope_summary.has_global_source);
+        assert_eq!(items[0].scope_summary.projects.len(), 1);
+        assert!(!items[0].scope_summary.has_unknown_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn two_explicit_projects_preserve_both_references() {
+        let db_path = temp_db_path("two-projects");
+        initialize_database(&db_path).expect("migration should succeed");
+        for project_id in ["project-alpha", "project-beta"] {
+            upsert_project_for_path(
+                &db_path,
+                PersistProjectInput {
+                    id: project_id.to_string(),
+                    label: format!(
+                        "{} Project",
+                        project_id.replace("project-", "").to_uppercase()
+                    ),
+                },
+            )
+            .expect("project should be created");
+        }
+        for (index, project_id) in ["project-alpha", "project-beta"].iter().enumerate() {
+            let job = skill_library_job(
+                &format!("job-{index}"),
+                index as u64 + 1,
+                explicit_project_source(project_id),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            );
+            persist_scan_job_for_path(&db_path, job).expect("project job should persist");
+        }
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Mixed,
+            "a skill that belongs to more than one explicit project is mixed because it cannot be tied to a single project"
+        );
+        assert_eq!(items[0].scope_summary.projects.len(), 2);
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_id,
+            "project-alpha"
+        );
+        assert_eq!(
+            items[0].scope_summary.projects[1].project_id,
+            "project-beta"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn explicit_project_plus_unknown_preserves_both() {
+        let db_path = temp_db_path("project-plus-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let project_job = skill_library_job(
+            "job-1",
+            1,
+            explicit_project_source("project-alpha"),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, project_job).expect("project job should persist");
+        let unknown_job = skill_library_job(
+            "job-2",
+            2,
+            codex_source(),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, unknown_job).expect("unknown job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Mixed
+        );
+        assert_eq!(items[0].scope_summary.projects.len(), 1);
+        assert!(items[0].scope_summary.has_unknown_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unknown_sources_only_produce_unknown_classification() {
+        let db_path = temp_db_path("unknown-only");
+        initialize_database(&db_path).expect("migration should succeed");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            codex_source(),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(!items[0].scope_summary.has_global_source);
+        assert!(items[0].scope_summary.projects.is_empty());
+        assert!(items[0].scope_summary.has_unknown_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn duplicate_source_candidates_do_not_duplicate_project_refs() {
+        let db_path = temp_db_path("dedup-project-refs");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        for index in 0..2 {
+            let mut source = explicit_project_source("project-alpha");
+            source.id = Some(format!("source-project-alpha-{index}"));
+            source.root_path = format!("/Users/example/project-alpha-{index}");
+            let job = skill_library_job(
+                &format!("job-{index}"),
+                index as u64 + 1,
+                source,
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            );
+            persist_scan_job_for_path(&db_path, job).expect("job should persist");
+        }
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].scope_summary.projects.len(), 1);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn skill_detail_returns_same_scope_truth_as_list_item() {
+        let db_path = temp_db_path("detail-scope-consistency");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            explicit_project_source("project-alpha"),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        let item = items.into_iter().next().expect("item should exist");
+        let detail = get_skill_detail_for_path(&db_path, &item.id).expect("detail should load");
+        assert_eq!(
+            detail.item.scope_summary.classification,
+            SkillScopeClassification::ProjectOnly
+        );
+        assert_eq!(
+            detail.item.scope_summary.projects.len(),
+            item.scope_summary.projects.len()
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn scope_summary_serializes_in_camel_case() {
+        let db_path = temp_db_path("scope-camel-case");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let job = skill_library_job(
+            "job-1",
+            1,
+            explicit_project_source("project-alpha"),
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        let json = serde_json::to_string(&items[0]).expect("should serialize");
+        assert!(json.contains("scopeSummary"));
+        assert!(json.contains("hasGlobalSource"));
+        assert!(json.contains("hasUnknownSource"));
+        assert!(json.contains("projectId"));
+        assert!(json.contains("projectLabel"));
+        assert!(json.contains("classification"));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unconfirmed_explicit_scope_kind_treated_as_unknown() {
+        let db_path = temp_db_path("unconfirmed-scope-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let mut source = explicit_project_source("project-alpha");
+        source.scope_confirmed = Some(false);
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn project_creation_rejects_empty_id_and_label() {
+        let db_path = temp_db_path("project-empty-fields");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        let error = upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "".to_string(),
+                label: "Alpha".to_string(),
+            },
+        )
+        .expect_err("empty project ID should be rejected");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+
+        let error = upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "".to_string(),
+            },
+        )
+        .expect_err("empty project label should be rejected");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn project_id_remains_stable_when_label_renamed() {
+        let db_path = temp_db_path("project-rename");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Renamed Alpha".to_string(),
+            },
+        )
+        .expect("project should be renamed");
+
+        let projects = list_projects_for_path(&db_path).expect("projects should load");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].id, "project-alpha");
+        assert_eq!(projects[0].label, "Renamed Alpha");
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn duplicate_project_labels_do_not_merge_distinct_ids() {
+        let db_path = temp_db_path("project-duplicate-labels");
+        initialize_database(&db_path).expect("migration should succeed");
+        for id in ["project-alpha", "project-beta"] {
+            upsert_project_for_path(
+                &db_path,
+                PersistProjectInput {
+                    id: id.to_string(),
+                    label: "Shared Label".to_string(),
+                },
+            )
+            .expect("project should be created");
+        }
+
+        let projects = list_projects_for_path(&db_path).expect("projects should load");
+        assert_eq!(projects.len(), 2);
+        assert!(projects.iter().any(|project| project.id == "project-alpha"));
+        assert!(projects.iter().any(|project| project.id == "project-beta"));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn upsert_project_for_path_does_not_derive_from_path() {
+        // The function signature accepts explicit id and label only; this test documents
+        // that no path argument exists and the public command does not receive one.
+        let db_path = temp_db_path("project-no-path");
+        initialize_database(&db_path).expect("migration should succeed");
+        let project = upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-id".to_string(),
+                label: "Explicit Label".to_string(),
+            },
+        )
+        .expect("project should be created");
+        assert_eq!(project.id, "project-id");
+        assert_eq!(project.label, "Explicit Label");
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn legacy_path_derived_project_scope_does_not_create_confirmed_evidence() {
+        let db_path = temp_db_path("legacy-project-scope-no-evidence");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = sample_source();
+        source.project_label = Some("Legacy Project".to_string());
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(!items[0]
+            .scope_summary
+            .projects
+            .iter()
+            .any(|project| project.project_label == "Legacy Project"));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn omitted_scope_fields_preserve_existing_project_scope() {
+        let db_path = temp_db_path("update-preserves-scope");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        let source_id = sources[0].id.clone();
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: source_id,
+                display_name: Some("Renamed".to_string()),
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: None,
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
+            },
+        )
+        .expect("update should succeed");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::ProjectOnly
+        );
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_id,
+            "project-alpha"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn update_project_to_global_clears_project_id() {
+        let db_path = temp_db_path("update-project-to-global");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("global".to_string()),
+                project_id: None,
+                scope_source: Some("user-config".to_string()),
+                scope_confirmed: Some(true),
+            },
+        )
+        .expect("update should succeed");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::GlobalOnly
+        );
+        assert!(items[0].scope_summary.projects.is_empty());
+        assert_eq!(
+            scan_source_project_id(&db_path, &sources[0].id),
+            None,
+            "global scope must clear project_id"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn update_project_to_unknown_clears_project_id() {
+        let db_path = temp_db_path("update-project-to-unknown");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("unknown".to_string()),
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
+            },
+        )
+        .expect("update should succeed");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(items[0].scope_summary.projects.is_empty());
+        assert_eq!(
+            scan_source_project_id(&db_path, &sources[0].id),
+            None,
+            "unknown scope must clear project_id"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn update_project_a_to_project_b_replaces_project_id() {
+        let db_path = temp_db_path("update-project-a-to-b");
+        initialize_database(&db_path).expect("migration should succeed");
+        for id in ["project-alpha", "project-beta"] {
+            upsert_project_for_path(
+                &db_path,
+                PersistProjectInput {
+                    id: id.to_string(),
+                    label: format!("{id} label"),
+                },
+            )
+            .expect("project should be created");
+        }
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("project".to_string()),
+                project_id: Some("project-beta".to_string()),
+                scope_source: Some("user-config".to_string()),
+                scope_confirmed: Some(true),
+            },
+        )
+        .expect("update should succeed");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(items[0].scope_summary.projects.len(), 1);
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_id,
+            "project-beta"
+        );
+        assert_eq!(
+            scan_source_project_id(&db_path, &sources[0].id),
+            Some("project-beta".to_string()),
+            "project reassignment must replace project_id"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn invalid_scope_update_leaves_previous_state_unchanged() {
+        let db_path = temp_db_path("update-invalid-unchanged");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        let error = update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("project".to_string()),
+                project_id: Some("missing-project".to_string()),
+                scope_source: None,
+                scope_confirmed: None,
+            },
+        )
+        .expect_err("unknown project ID should be rejected");
+        assert!(matches!(error, ResourceStoreError::InvalidInput(_)));
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.projects[0].project_id,
+            "project-alpha"
+        );
+        assert_eq!(
+            scan_source_project_id(&db_path, &sources[0].id),
+            Some("project-alpha".to_string()),
+            "invalid update must leave project_id unchanged"
+        );
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn scope_assignment_does_not_create_scan_job() {
+        let db_path = temp_db_path("scope-no-scan-job");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let source = explicit_project_source("project-alpha");
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+
+        let jobs_before = list_scan_jobs_for_path(&db_path, Some(10)).expect("jobs should load");
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("global".to_string()),
+                project_id: None,
+                scope_source: Some("user-config".to_string()),
+                scope_confirmed: Some(true),
+            },
+        )
+        .expect("update should succeed");
+        let jobs_after = list_scan_jobs_for_path(&db_path, Some(10)).expect("jobs should load");
+
+        assert_eq!(jobs_before.len(), jobs_after.len());
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn legacy_migration_plus_confirmed_is_normalized_to_unconfirmed() {
+        let db_path = temp_db_path("legacy-confirmed-normalized");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_global_source();
+        source.scope_source = Some("legacy-migration".to_string());
+        source.scope_confirmed = Some(true);
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(items[0].scope_summary.evidence.iter().all(|evidence| {
+            !evidence.scope_confirmed
+                && matches!(evidence.scope_source, SkillScopeSource::LegacyMigration)
+        }));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unknown_scope_source_plus_confirmed_is_normalized_to_unconfirmed() {
+        let db_path = temp_db_path("unknown-source-confirmed-normalized");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_global_source();
+        source.scope_source = Some("unknown".to_string());
+        source.scope_confirmed = Some(true);
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(!items[0].scope_summary.has_global_source);
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn user_config_plus_confirmed_is_accepted() {
+        let db_path = temp_db_path("user-config-confirmed");
+        initialize_database(&db_path).expect("migration should succeed");
+        let mut source = explicit_global_source();
+        source.scope_source = Some("user-config".to_string());
+        source.scope_confirmed = Some(true);
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::GlobalOnly
+        );
+        assert!(items[0].scope_summary.evidence.iter().any(|evidence| {
+            evidence.scope_confirmed
+                && matches!(evidence.scope_source, SkillScopeSource::UserConfig)
+        }));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn unrecognized_scope_source_degrades_to_legacy_unconfirmed() {
+        let db_path = temp_db_path("unrecognized-scope-source");
+        initialize_database(&db_path).expect("migration should succeed");
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let mut source = explicit_project_source("project-alpha");
+        source.scope_source = Some("malicious-source".to_string());
+        source.scope_confirmed = Some(true);
+        let job = skill_library_job(
+            "job-1",
+            1,
+            source,
+            vec![skill_resource_named("writer", "writer/SKILL.md")],
+        );
+        persist_scan_job_for_path(&db_path, job).expect("job should persist");
+
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        assert!(items[0].scope_summary.evidence.iter().all(|evidence| {
+            !evidence.scope_confirmed
+                && matches!(evidence.scope_source, SkillScopeSource::LegacyMigration)
+        }));
+        cleanup_db(db_path);
+    }
+
+    #[test]
+    fn explicit_assignment_command_workflow() {
+        let db_path = temp_db_path("explicit-workflow");
+        initialize_database(&db_path).expect("migration should succeed");
+
+        // 1. Create project
+        upsert_project_for_path(
+            &db_path,
+            PersistProjectInput {
+                id: "project-alpha".to_string(),
+                label: "Alpha Project".to_string(),
+            },
+        )
+        .expect("project should be created");
+        let projects = list_projects_for_path(&db_path).expect("projects should load");
+        assert_eq!(projects.len(), 1);
+
+        // 2. Persist a source without explicit scope
+        let source = codex_source();
+        persist_scan_job_for_path(
+            &db_path,
+            skill_library_job(
+                "job-1",
+                1,
+                source.clone(),
+                vec![skill_resource_named("writer", "writer/SKILL.md")],
+            ),
+        )
+        .expect("job should persist");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+
+        // 3. Assign to project
+        let sources = list_scan_sources_for_path(&db_path).expect("sources should load");
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("project".to_string()),
+                project_id: Some("project-alpha".to_string()),
+                scope_source: Some("user-config".to_string()),
+                scope_confirmed: Some(true),
+            },
+        )
+        .expect("update should succeed");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::ProjectOnly
+        );
+        let detail = get_skill_detail_for_path(&db_path, &items[0].id).expect("detail should load");
+        assert_eq!(
+            detail.item.scope_summary.classification,
+            SkillScopeClassification::ProjectOnly
+        );
+
+        // 4. Change to global
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("global".to_string()),
+                project_id: None,
+                scope_source: Some("user-config".to_string()),
+                scope_confirmed: Some(true),
+            },
+        )
+        .expect("update should succeed");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::GlobalOnly
+        );
+
+        // 5. Clear to unknown
+        update_scan_source_for_path(
+            &db_path,
+            UpdateScanSourceInput {
+                id: sources[0].id.clone(),
+                display_name: None,
+                profile_id: None,
+                project_label: None,
+                enabled: None,
+                scope_kind: Some("unknown".to_string()),
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
+            },
+        )
+        .expect("update should succeed");
+        let items = list_skill_library_items_for_path(&db_path).expect("items should load");
+        assert_eq!(
+            items[0].scope_summary.classification,
+            SkillScopeClassification::Unknown
+        );
+        cleanup_db(db_path);
+    }
+
+    fn scan_source_project_id(db_path: &Path, source_id: &str) -> Option<String> {
+        let conn = open_initialized_connection(db_path).expect("connection should open");
+        conn.query_row(
+            "SELECT project_id FROM scan_sources WHERE id = ?1",
+            params![source_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .expect("query should succeed")
+        .flatten()
     }
 
     fn cleanup_db(db_path: PathBuf) {

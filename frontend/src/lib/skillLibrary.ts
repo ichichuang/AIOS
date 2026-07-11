@@ -34,6 +34,34 @@ export interface SkillAttentionReason {
   severity: string;
 }
 
+export type SkillScopeKind = "global" | "project" | "unknown";
+
+export type SkillScopeClassification = "globalOnly" | "projectOnly" | "mixed" | "unknown";
+
+export type SkillScopeSource = "userConfig" | "builtinProfile" | "legacyMigration" | "unknown";
+
+export interface SkillProjectRef {
+  projectId: string;
+  projectLabel: string;
+}
+
+export interface SkillScopeEvidence {
+  sourceId: string;
+  scopeKind: SkillScopeKind;
+  projectId: string | null;
+  projectLabel: string | null;
+  scopeSource: SkillScopeSource;
+  scopeConfirmed: boolean;
+}
+
+export interface SkillScopeSummary {
+  classification: SkillScopeClassification;
+  hasGlobalSource: boolean;
+  projects: SkillProjectRef[];
+  hasUnknownSource: boolean;
+  evidence: SkillScopeEvidence[];
+}
+
 export interface SkillListItem {
   id: string;
   displayName: string;
@@ -52,6 +80,7 @@ export interface SkillListItem {
   sourceCount: number;
   updatedAt: string | null;
   lastSeenAt: string | null;
+  scopeSummary: SkillScopeSummary;
 }
 
 export interface SkillSourceSummary {
@@ -166,6 +195,34 @@ export const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatu
   { value: "all", label: "全部" },
   { value: "needsAttention", label: "需要处理" }
 ];
+
+export function unknownSkillScopeSummary(): SkillScopeSummary {
+  return {
+    classification: "unknown",
+    hasGlobalSource: false,
+    projects: [],
+    hasUnknownSource: true,
+    evidence: []
+  };
+}
+
+export function skillScopeClassificationLabel(classification: SkillScopeClassification): string {
+  switch (classification) {
+    case "globalOnly":
+      return "全局";
+    case "projectOnly":
+      return "项目";
+    case "mixed":
+      return "混合";
+    case "unknown":
+    default:
+      return "范围未整理";
+  }
+}
+
+export function isSkillScopeKnown(summary: SkillScopeSummary): boolean {
+  return summary.classification !== "unknown";
+}
 
 export async function getSkillLibrarySummary(): Promise<SkillLibrarySummary | null> {
   if (!isTauriRuntimeAvailable()) return null;

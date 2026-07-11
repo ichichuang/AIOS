@@ -8,13 +8,17 @@ import {
   getSkillDetail,
   getSkillLibraryItemIdFromResource,
   getSkillLibrarySummary,
+  isSkillScopeKnown,
   listSkillLibraryItems,
   mapSkillListItemToResource,
   sanitizeSkillDetailLoadError,
+  skillScopeClassificationLabel,
   skillStatusFilterOptions,
+  unknownSkillScopeSummary,
   type SkillDetail,
   type SkillLibrarySummary,
   type SkillListItem,
+  type SkillScopeSummary,
   type SkillStatusFilter
 } from "./skillLibrary";
 import { productVirtualListHeight, shouldShowProductRowsMismatchDiagnostic } from "./productListRendering";
@@ -110,7 +114,8 @@ const item: SkillListItem = {
   primaryPathHint: "~/.codex/skills/writer/SKILL.md",
   sourceCount: 2,
   updatedAt: "2024-09-01T00:00:00.000Z",
-  lastSeenAt: "2024-09-01T00:00:01.000Z"
+  lastSeenAt: "2024-09-01T00:00:01.000Z",
+  scopeSummary: unknownSkillScopeSummary()
 };
 
 const mapped = mapSkillListItemToResource(item);
@@ -475,6 +480,113 @@ assert(stylesSource.includes(".aios-console-shell--skills.inspector-open .skill-
 assert(stylesSource.includes("flex-wrap: wrap"), "Skills toolbar controls must wrap as groups instead of squeezing labels");
 assert(stylesSource.includes("white-space: nowrap"), "Skills toolbar filter labels must stay on one line");
 assert(stylesSource.includes("overflow-x: auto"), "Skills toolbar filters must remain accessible when space is constrained");
+
+const projectScopeSummary: SkillScopeSummary = {
+  classification: "projectOnly",
+  hasGlobalSource: false,
+  projects: [{ projectId: "project-alpha", projectLabel: "Alpha Project" }],
+  hasUnknownSource: false,
+  evidence: [
+    {
+      sourceId: "source-project-alpha",
+      scopeKind: "project",
+      projectId: "project-alpha",
+      projectLabel: "Alpha Project",
+      scopeSource: "userConfig",
+      scopeConfirmed: true
+    }
+  ]
+};
+
+const globalScopeSummary: SkillScopeSummary = {
+  classification: "globalOnly",
+  hasGlobalSource: true,
+  projects: [],
+  hasUnknownSource: false,
+  evidence: [
+    {
+      sourceId: "source-global-skills",
+      scopeKind: "global",
+      projectId: null,
+      projectLabel: null,
+      scopeSource: "builtinProfile",
+      scopeConfirmed: true
+    }
+  ]
+};
+
+const mixedScopeSummary: SkillScopeSummary = {
+  classification: "mixed",
+  hasGlobalSource: true,
+  projects: [{ projectId: "project-alpha", projectLabel: "Alpha Project" }],
+  hasUnknownSource: true,
+  evidence: [
+    {
+      sourceId: "source-global-skills",
+      scopeKind: "global",
+      projectId: null,
+      projectLabel: null,
+      scopeSource: "builtinProfile",
+      scopeConfirmed: true
+    },
+    {
+      sourceId: "source-project-alpha",
+      scopeKind: "project",
+      projectId: "project-alpha",
+      projectLabel: "Alpha Project",
+      scopeSource: "userConfig",
+      scopeConfirmed: true
+    },
+    {
+      sourceId: "source-codex-skills",
+      scopeKind: "unknown",
+      projectId: null,
+      projectLabel: null,
+      scopeSource: "legacyMigration",
+      scopeConfirmed: false
+    }
+  ]
+};
+
+assert.equal(skillScopeClassificationLabel("globalOnly"), "全局");
+assert.equal(skillScopeClassificationLabel("projectOnly"), "项目");
+assert.equal(skillScopeClassificationLabel("mixed"), "混合");
+assert.equal(skillScopeClassificationLabel("unknown"), "范围未整理");
+
+assert.equal(isSkillScopeKnown(unknownSkillScopeSummary()), false);
+assert.equal(isSkillScopeKnown(projectScopeSummary), true);
+assert.equal(isSkillScopeKnown(globalScopeSummary), true);
+assert.equal(isSkillScopeKnown(mixedScopeSummary), true);
+
+assert.equal(projectScopeSummary.projects.length, 1);
+assert.equal(projectScopeSummary.projects[0]?.projectId, "project-alpha");
+assert.equal(projectScopeSummary.projects[0]?.projectLabel, "Alpha Project");
+
+assert.equal(mixedScopeSummary.hasGlobalSource, true);
+assert.equal(mixedScopeSummary.hasUnknownSource, true);
+assert.equal(mixedScopeSummary.projects.length, 1);
+
+const globalItem: SkillListItem = { ...item, id: "skill:global", scopeSummary: globalScopeSummary };
+const projectItem: SkillListItem = { ...item, id: "skill:project", scopeSummary: projectScopeSummary };
+const mixedItem: SkillListItem = { ...item, id: "skill:mixed", scopeSummary: mixedScopeSummary };
+const scopeItems = [globalItem, projectItem, mixedItem];
+assert.deepEqual(
+  scopeItems.map((row) => row.scopeSummary.classification),
+  ["globalOnly", "projectOnly", "mixed"],
+  "scope classification values must mirror Rust contract"
+);
+assert.deepEqual(
+  scopeItems.map((row) => row.scopeSummary.hasGlobalSource),
+  [true, false, true]
+);
+assert.deepEqual(
+  scopeItems.map((row) => row.scopeSummary.hasUnknownSource),
+  [false, false, true]
+);
+assert.deepEqual(
+  scopeItems.map((row) => row.scopeSummary.projects.map((project) => project.projectId)),
+  [[], ["project-alpha"], ["project-alpha"]]
+);
 
 console.log("skillLibrary client tests passed");
 

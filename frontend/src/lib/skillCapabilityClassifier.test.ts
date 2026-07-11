@@ -5,6 +5,7 @@ import {
   getSkillCapabilitySearchText,
   SKILL_CAPABILITY_CATEGORIES
 } from "./skillCapabilityClassifier.ts";
+import { unknownSkillScopeSummary } from "./skillLibrary.ts";
 import type { AiosResource } from "../types/inventory.ts";
 
 const REQUIRED_TAXONOMY_KEYS = [
@@ -98,7 +99,8 @@ const writer = classifySkillListItem({
   primaryPathHint: "~/.codex/skills/writer/SKILL.md",
   sourceCount: 1,
   updatedAt: "2024-09-01T00:00:00.000Z",
-  lastSeenAt: "2024-09-01T00:00:01.000Z"
+  lastSeenAt: "2024-09-01T00:00:01.000Z",
+  scopeSummary: unknownSkillScopeSummary()
 });
 assert.equal(writer.primaryCategory.key, "docs-writing");
 assert.match(getSkillCapabilitySearchText(writer), /文档与写作/);

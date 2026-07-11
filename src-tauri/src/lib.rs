@@ -15,6 +15,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             resource_store::get_resource_store_status,
+            resource_store::upsert_project,
+            resource_store::list_projects,
             resource_store::get_app_setting,
             resource_store::set_app_setting,
             resource_store::list_scan_sources,

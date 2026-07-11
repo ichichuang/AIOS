@@ -497,6 +497,10 @@ pub async fn add_scan_sources(
                 source_kind: CUSTOM_DIRECTORY_SOURCE_KIND.to_string(),
                 project_label: normalize_optional_label(project_label.as_deref()),
                 enabled: true,
+                scope_kind: None,
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
             },
         )
         .map_err(store_error_to_scan_error)
@@ -544,6 +548,10 @@ pub fn add_discovery_scan_sources(
                 project_label: normalize_optional_label(input.project_label.as_deref())
                     .or_else(|| Some(mode.default_project_label().to_string())),
                 enabled: true,
+                scope_kind: None,
+                project_id: None,
+                scope_source: None,
+                scope_confirmed: None,
             },
         )
         .map_err(store_error_to_scan_error)
@@ -1839,6 +1847,10 @@ fn scan_source_input(
         profile_id: profile.id.to_string(),
         source_kind: selected_root.source_kind.clone(),
         project_label: normalize_optional_label(project_label),
+        scope_kind: None,
+        project_id: None,
+        scope_source: None,
+        scope_confirmed: None,
     }
 }
 
@@ -2122,6 +2134,10 @@ fn persist_failed_batch_source_job(
             profile_id: source.profile_id.clone(),
             source_kind: source.source_kind.clone(),
             project_label: source.project_label.clone(),
+            scope_kind: None,
+            project_id: None,
+            scope_source: None,
+            scope_confirmed: None,
         },
         resources: Vec::new(),
         skips: Vec::new(),
