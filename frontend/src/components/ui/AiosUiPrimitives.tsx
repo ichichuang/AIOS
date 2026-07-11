@@ -28,6 +28,7 @@ export interface AiosTechnicalDetailRow {
   label: string;
   value: string | number;
   code?: boolean;
+  codeClassName?: string;
 }
 
 export function AiosBackHeader({ label, onBack }: { label: string; onBack: () => void }) {
@@ -252,6 +253,7 @@ export interface AiosSectionRailOption {
   value: string;
   label: string;
   count?: number;
+  icon?: ReactNode;
 }
 
 export function AiosSectionRail({
@@ -297,6 +299,7 @@ export function AiosSectionRail({
             {...(disableItemHover ? {} : { "data-aios-hover-card": "true", "data-aios-motion-surface": "true" })}
             onClick={handleClick(option.value)}
           >
+            {option.icon && <Box className="aios-section-rail-icon">{option.icon}</Box>}
             <Typography component="span">{option.label}</Typography>
             {typeof option.count === "number" && <Chip label={`${option.count} 项`} size="small" />}
           </ButtonBase>
@@ -538,6 +541,7 @@ interface AiosInspectorSectionProps {
   title: string;
   children: ReactNode;
   defaultExpanded?: boolean;
+  className?: string;
 }
 
 interface AiosInspectorEmptyGuideProps {
@@ -590,9 +594,9 @@ export function AiosInspectorUsagePanel({ title, summary, children }: AiosInspec
   );
 }
 
-export function AiosInspectorSection({ title, children, defaultExpanded = false }: AiosInspectorSectionProps) {
+export function AiosInspectorSection({ title, children, defaultExpanded = false, className }: AiosInspectorSectionProps) {
   return (
-    <Accordion className="aios-inspector-section" defaultExpanded={defaultExpanded} disableGutters elevation={0} variant="outlined">
+    <Accordion className={["aios-inspector-section", className].filter(Boolean).join(" ")} defaultExpanded={defaultExpanded} disableGutters elevation={0} variant="outlined">
       <AccordionSummary expandIcon={<ExpandMoreRounded />}>
         <Typography component="h3">{title}</Typography>
       </AccordionSummary>
@@ -612,7 +616,7 @@ export function AiosTechnicalDetails({ rows, children }: { rows?: AiosTechnicalD
                 {row.label}
               </Typography>
               {row.code ? (
-                <Box className="code-pill resource-meta-code" component="code" title={formatTechnicalDetailValue(row.value)}>
+                <Box className={["code-pill resource-meta-code", row.codeClassName].filter(Boolean).join(" ")} component="code" title={formatTechnicalDetailValue(row.value)}>
                   {formatTechnicalDetailValue(row.value)}
                 </Box>
               ) : (

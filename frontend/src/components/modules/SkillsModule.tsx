@@ -1,5 +1,16 @@
-import { Alert, Box, Chip, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Chip, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery, useTheme } from "@mui/material";
+import ArticleRounded from "@mui/icons-material/ArticleRounded";
+import BugReportRounded from "@mui/icons-material/BugReportRounded";
+import CodeRounded from "@mui/icons-material/CodeRounded";
+import DatasetRounded from "@mui/icons-material/DatasetRounded";
+import FilterListRounded from "@mui/icons-material/FilterListRounded";
+import FindInPageRounded from "@mui/icons-material/FindInPageRounded";
+import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
+import PaletteRounded from "@mui/icons-material/PaletteRounded";
+import PsychologyRounded from "@mui/icons-material/PsychologyRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
+import SecurityRounded from "@mui/icons-material/SecurityRounded";
+import WebRounded from "@mui/icons-material/WebRounded";
 import { memo, useCallback, useEffect, useMemo, useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactElement } from "react";
 import { getResourceDisplay } from "../../i18n/resourceText";
 import { markAiosPerf } from "../../lib/perf";
@@ -23,9 +34,9 @@ import {
   type SkillCapabilityFilter,
   type SkillProjectFilterValue,
   type SkillScopeFilter,
-  writePersistedSkillCapability,
+  writePersistedSkillScope,
   writePersistedSkillProject,
-  writePersistedSkillScope
+  writePersistedSkillCapability
 } from "../../lib/skillBrowseModel";
 import {
   fallbackSkillUsageText,
@@ -62,10 +73,24 @@ const ROW_HEIGHT = 108;
 const SOURCE_FILTER_ALL = "all";
 const ALL_PROJECTS_VALUE: SkillProjectFilterValue = "allProjects";
 const ALL_CAPABILITY_VALUE: SkillCapabilityFilter = "all";
+const NARROW_BREAKPOINT = 980;
 const fallbackSkillStatusFilterOptions: ReadonlyArray<{ value: SkillStatusFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "needsAttention", label: "需补全" }
 ];
+
+const CAPABILITY_ICONS: Record<SkillCapabilityCategoryKey, typeof WebRounded> = {
+  "frontend-ui": WebRounded,
+  coding: CodeRounded,
+  "code-review": FindInPageRounded,
+  "testing-qa": BugReportRounded,
+  "docs-writing": ArticleRounded,
+  "data-automation": DatasetRounded,
+  "research-analysis": PsychologyRounded,
+  "security-governance": SecurityRounded,
+  "design-visual": PaletteRounded,
+  unknown: HelpOutlineRounded
+};
 
 export const SkillsModule = memo(function SkillsModule({
   displayById,
@@ -94,6 +119,9 @@ export const SkillsModule = memo(function SkillsModule({
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const [renderedGroupKey, setRenderedGroupKey] = useState<string | null>(null);
   const [, startGroupTransition] = useTransition();
+
+  const theme = useTheme();
+  const isNarrow = useMediaQuery(`(max-width:${NARROW_BREAKPOINT}px)`);
 
   const normalizedQuery = query.trim();
   const useProductLibrary = skillLibrary.summary !== null;
@@ -133,7 +161,7 @@ export const SkillsModule = memo(function SkillsModule({
     [displayById, skillRows]
   );
 
-  const groups = useMemo(() => groupSkillRowsByCapability(skillRows, skillCapabilityById), [skillCapabilityById, skillRows]);
+  const groups = useMemo(() => groupSkillLibraryItemsByCapability(skillRows, skillCapabilityById), [skillCapabilityById, skillRows]);
   const filteredRowsByGroupKey = useMemo(
     () =>
       new Map(
@@ -337,7 +365,7 @@ export const SkillsModule = memo(function SkillsModule({
   // Clear selection if the selected Skill disappears due to search/status/source.
   useEffect(() => {
     if (!selectedId || !useProductLibrary) return;
-    const stillVisible = browseView.groups.some((group) => group.rows.some((item) => item.id === selectedId));
+    const stillVisible = browseView.groups.some((group) => group.rows.some((item) => `skill-library:${item.id}` === selectedId));
     if (!stillVisible) onClearSelection();
   }, [browseView.groups, onClearSelection, selectedId, useProductLibrary]);
 
@@ -347,23 +375,46 @@ export const SkillsModule = memo(function SkillsModule({
     setRenderedGroupKey(null);
   }, [normalizedQuery]);
 
+  const activeFilterCount =
+    (productStatusFilterMode !== "all" ? 1 : 0) + (sourceFilter !== SOURCE_FILTER_ALL ? 1 : 0);
+
   const productSkillListShell = (
-    <Box className="compact-skill-list-shell" data-aios-internal-scroll="true">
+    <Box className="skills-result-scroll" data-aios-internal-scroll="true" role="list">
       {browseView.groups.length === 0 ? (
         <SkillBrowseEmptyState reason={browseView.emptyReason} onClearSearch={handleClearSearch} onResetFilters={handleResetFilters} />
+      ) : capability === "all" ? (
+        browseView.groups.map((group) => (
+          <Box key={group.key} className="skills-group" data-skill-group={group.key}>
+            <Box className="skills-group-header">
+              <Typography className="skills-group-title" component="h4">
+                {group.title}
+              </Typography>
+              <Typography className="skills-group-count">{group.rows.length} 项</Typography>
+            </Box>
+            {group.summary && <Typography className="skills-group-description">{group.summary}</Typography>}
+            <Box className="skills-group-list">
+              {group.rows.map((item) => (
+                <ProductSkillStaticRow key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
+              ))}
+            </Box>
+          </Box>
+        ))
       ) : (
-        <Box className="compact-skill-static-list" role="list" style={{ maxHeight: productVirtualListHeight(browseView.totalCount, ROW_HEIGHT) }}>
-          {browseView.groups.flatMap((group) =>
-            group.rows.map((item) => (
-              <ProductSkillStaticRow
-                key={item.id}
-                item={item}
-                categoryLabel={productCapabilityById.get(item.id)?.primaryCategory.title}
-                selectedId={selectedId}
-                onSelect={onSelect}
-              />
-            ))
+        <Box className="skills-group" data-skill-group={browseView.groups[0]?.key}>
+          <Box className="skills-group-header">
+            <Typography className="skills-group-title" component="h4">
+              {browseView.groups[0]?.title ?? "技能"}
+            </Typography>
+            <Typography className="skills-group-count">{browseView.groups[0]?.rows.length ?? 0} 项</Typography>
+          </Box>
+          {browseView.groups[0]?.summary && (
+            <Typography className="skills-group-description">{browseView.groups[0].summary}</Typography>
           )}
+          <Box className="skills-group-list">
+            {browseView.groups[0]?.rows.map((item) => (
+              <ProductSkillStaticRow key={item.id} item={item} selectedId={selectedId} onSelect={onSelect} />
+            ))}
+          </Box>
         </Box>
       )}
     </Box>
@@ -437,24 +488,42 @@ export const SkillsModule = memo(function SkillsModule({
   if (useProductLibrary) {
     const projectSelectorVisible = scope === "project";
     const hasProjectOptions = browseView.projectOptions.length > 1;
+    const activeGroupTitle = getActiveGroupTitle(browseView.groups, capability);
+    const activeGroupSummary = getActiveGroupSummary(browseView.groups, capability);
 
     return (
-      <AiosModuleFrame
-        className="skills-module"
-        contentClassName="skills-module-scroll"
-        view="skills"
-        summary="按任务和能力浏览已整理的 AI 技能。"
-        count={effectiveTotalRowsCount}
-        ariaLabel={moduleAriaLabel("skills")}
-        motionKey={`skills:product:${scope}:${projectId}:${capability}:${productStatusFilterMode}:${sourceFilter}:${browseView.totalCount}:${normalizedQuery ? "query" : "all"}`}
-        disableHoverMotion
-      >
-        <Box className="skill-library-toolbar" data-aios-layout-fixed>
-          <Box className="skill-filter-row">
-            <Box className="skill-filter-primary-controls">
-              <AiosSegmentedSwitcher ariaLabel="技能范围" options={browseView.scopeOptions} value={scope} onChange={(value) => handleScopeChange(value as SkillScopeFilter)} />
-              {projectSelectorVisible && hasProjectOptions && (
-                <FormControl size="small" className="skill-project-selector">
+      <Box className="module-surface skills-module" aria-label={moduleAriaLabel("skills")} data-aios-motion-surface>
+        <Box className="skills-fixed-header" data-aios-layout-fixed>
+          <Box className="skills-page-header">
+            <Typography component="h2" className="skills-page-title">
+              技能
+            </Typography>
+            <Typography className="skills-page-description">
+              按任务和能力浏览已整理的 AI 技能，快速找到适合当前工作的技能。
+            </Typography>
+          </Box>
+          <Box className="skills-scope-tabs" role="tablist" aria-label="技能范围">
+            {browseView.scopeOptions.map((option) => {
+              const active = option.value === scope;
+              return (
+                <ButtonBase
+                  key={option.value}
+                  className={["skills-scope-tab", active ? "Mui-selected" : ""].filter(Boolean).join(" ")}
+                  role="tab"
+                  aria-selected={active}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => handleScopeChange(option.value as SkillScopeFilter)}
+                >
+                  <Typography component="span">{option.label}</Typography>
+                  <Chip label={`${option.count} 项`} size="small" variant={active ? "filled" : "outlined"} />
+                </ButtonBase>
+              );
+            })}
+          </Box>
+          {projectSelectorVisible && (
+            <Box className="skills-project-bar">
+              {hasProjectOptions ? (
+                <FormControl size="small" className="skills-project-select">
                   <InputLabel id="skills-project-selector-label">项目</InputLabel>
                   <Select
                     labelId="skills-project-selector-label"
@@ -469,9 +538,8 @@ export const SkillsModule = memo(function SkillsModule({
                     ))}
                   </Select>
                 </FormControl>
-              )}
-              {projectSelectorVisible && !hasProjectOptions && (
-                <FormControl size="small" className="skill-project-selector" disabled>
+              ) : (
+                <FormControl size="small" className="skills-project-select" disabled>
                   <InputLabel id="skills-project-selector-label">项目</InputLabel>
                   <Select labelId="skills-project-selector-label" value={ALL_PROJECTS_VALUE} label="项目">
                     <MenuItem value={ALL_PROJECTS_VALUE}>暂无已登记项目</MenuItem>
@@ -479,64 +547,81 @@ export const SkillsModule = memo(function SkillsModule({
                 </FormControl>
               )}
             </Box>
-            <Box className="skill-filter-secondary-controls">
-              <AiosSegmentedSwitcher
-                ariaLabel="更多筛选"
-                options={[{ value: "more", label: "更多筛选" }]}
-                value={showMoreFilters ? "more" : ""}
-                onChange={(value) => setShowMoreFilters(value === "more")}
-              />
-            </Box>
-          </Box>
-          {showMoreFilters && (
-            <Box className="skill-filter-more-row">
-              <ToggleButtonGroup aria-label="状态筛选" className="skill-filter-toggle" exclusive size="small" value={productStatusFilterMode} onChange={handleProductStatusFilterChange}>
-                {skillStatusFilterOptions.map((option) => (
-                  <ToggleButton key={option.value} value={option.value}>
-                    {option.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-              {productSourceOptions.length > 1 && (
-                <ToggleButtonGroup aria-label="来源筛选" className="skill-filter-toggle skill-filter-source-controls" exclusive size="small" value={sourceFilter} onChange={handleSourceFilterChange}>
-                  <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
-                  {productSourceOptions.map((source) => (
-                    <ToggleButton key={source} value={source}>
-                      {source}
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              )}
-            </Box>
           )}
-          <Box className="skill-filter-search-state">
-            <SearchRounded fontSize="small" />
-            <Typography color="text.secondary" variant="body2" noWrap>
-              {normalizedQuery ? `当前搜索：${normalizedQuery}` : "使用顶部搜索框筛选技能名称和用途。"}
-            </Typography>
+        </Box>
+        <Box className="module-scroll skills-module-scroll">
+          <Box className="skills-layout">
+            <CapabilityNavigation
+              ariaLabel="能力分类"
+              capability={capability}
+              isNarrow={isNarrow}
+              options={browseView.categoryOptions}
+              onChange={handleCapabilityChange}
+            />
+            <Box className="skills-result-panel">
+              <AiosSectionHeader
+                title={activeGroupTitle}
+                summary={activeGroupSummary}
+                count={browseView.totalCount}
+                action={
+                  <Button
+                    className="skills-more-filters-button"
+                    size="small"
+                    variant="outlined"
+                    startIcon={<FilterListRounded />}
+                    aria-expanded={showMoreFilters}
+                    aria-controls="skills-secondary-filters"
+                    onClick={() => setShowMoreFilters((prev) => !prev)}
+                  >
+                    {activeFilterCount > 0 ? `更多筛选 · ${activeFilterCount}` : "更多筛选"}
+                  </Button>
+                }
+              />
+              {showMoreFilters && (
+                <Box className="skills-filter-panel" id="skills-secondary-filters" role="region" aria-label="更多筛选">
+                  <Box className="skills-filter-panel-row">
+                    <ToggleButtonGroup
+                      aria-label="状态筛选"
+                      className="skill-filter-toggle"
+                      exclusive
+                      size="small"
+                      value={productStatusFilterMode}
+                      onChange={handleProductStatusFilterChange}
+                    >
+                      {skillStatusFilterOptions.map((option) => (
+                        <ToggleButton key={option.value} value={option.value}>
+                          {option.label}
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+                    {productSourceOptions.length > 1 && (
+                      <ToggleButtonGroup
+                        aria-label="来源筛选"
+                        className="skill-filter-toggle skill-filter-source-controls"
+                        exclusive
+                        size="small"
+                        value={sourceFilter}
+                        onChange={handleSourceFilterChange}
+                      >
+                        <ToggleButton value={SOURCE_FILTER_ALL}>全部来源</ToggleButton>
+                        {productSourceOptions.map((source) => (
+                          <ToggleButton key={source} value={source}>
+                            {source}
+                          </ToggleButton>
+                        ))}
+                      </ToggleButtonGroup>
+                    )}
+                    <Button className="skills-filter-reset" size="small" onClick={handleResetFilters}>
+                      重置筛选
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+              {productSkillListShell}
+            </Box>
           </Box>
         </Box>
-        {browseView.categoryOptions.length > 1 ? (
-          <Box className="aios-two-pane" data-aios-motion-surface>
-            <AiosSectionRail ariaLabel="能力分类" options={browseView.categoryOptions} value={capability} onChange={handleCapabilityChange} disableItemHover />
-            <SkillListPanel
-              count={browseView.totalCount}
-              summary={getActiveGroupSummary(browseView.groups)}
-              title={getActiveGroupTitle(browseView.groups, capability)}
-            >
-              {productSkillListShell}
-            </SkillListPanel>
-          </Box>
-        ) : (
-          <SkillListPanel
-            count={browseView.totalCount}
-            summary={getActiveGroupSummary(browseView.groups)}
-            title={getActiveGroupTitle(browseView.groups, capability)}
-          >
-            {productSkillListShell}
-          </SkillListPanel>
-        )}
-      </AiosModuleFrame>
+      </Box>
     );
   }
 
@@ -573,7 +658,7 @@ export const SkillsModule = memo(function SkillsModule({
       </Box>
       {libraryTab === "groups" && groups.length > 0 ? (
         <Box className="aios-two-pane" data-aios-motion-surface>
-          <AiosSectionRail ariaLabel="技能分类" options={categoryRailOptions} value={activeKey ?? ""} onChange={handleLegacyGroupChange} disableItemHover />
+          <AiosSectionRail ariaLabel="技能分类" options={categoryRailOptions} value={activeKey ?? ""} onChange={handleLegacyGroupChange} disableItemHover className="skills-capability-rail" />
           <SkillListPanel count={effectiveVisibleRowsCount} summary={activeGroup?.summary || "探索本地只读技能元数据。"} title={activeGroup?.title ?? "技能库"}>
             {skillListShell}
           </SkillListPanel>
@@ -587,9 +672,59 @@ export const SkillsModule = memo(function SkillsModule({
   );
 });
 
+function CapabilityNavigation({
+  ariaLabel,
+  capability,
+  isNarrow,
+  options,
+  onChange
+}: {
+  ariaLabel: string;
+  capability: SkillCapabilityFilter;
+  isNarrow: boolean;
+  options: Array<{ value: string; label: string; count: number; icon?: ReactElement }>;
+  onChange: (value: string) => void;
+}) {
+  const optionsWithIcons = useMemo(
+    () =>
+      options.map((option) => {
+        const key = option.value as SkillCapabilityCategoryKey | "all";
+        const Icon = key === "all" ? SearchRounded : CAPABILITY_ICONS[key as SkillCapabilityCategoryKey] ?? HelpOutlineRounded;
+        return { ...option, icon: <Icon fontSize="small" /> };
+      }),
+    [options]
+  );
+
+  if (isNarrow) {
+    return (
+      <FormControl size="small" className="skills-capability-select" fullWidth>
+        <InputLabel id="skills-capability-select-label">能力分类</InputLabel>
+        <Select
+          labelId="skills-capability-select-label"
+          value={capability}
+          label="能力分类"
+          onChange={(event) => onChange(event.target.value as string)}
+        >
+          {optionsWithIcons.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              <Box className="skill-capability-select-item">
+                {option.icon}
+                <Typography component="span">{option.label}</Typography>
+                <Chip label={`${option.count} 项`} size="small" variant="outlined" />
+              </Box>
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    );
+  }
+
+  return <AiosSectionRail ariaLabel={ariaLabel} options={optionsWithIcons} value={capability} onChange={onChange} disableItemHover className="skills-capability-rail" />;
+}
+
 function SkillListPanel({ children, count, summary, title }: { children: ReactElement; count: number; summary: string; title: string }) {
   return (
-    <Box className="skill-list-panel skill-list-accordion" data-aios-motion-surface data-motion="resource-card">
+    <Box className="skill-list-panel" data-aios-motion-surface>
       <AiosSectionHeader count={count} summary={summary} title={title} />
       {children}
     </Box>
@@ -667,20 +802,16 @@ function SkillBrowseEmptyState({
 
 function ProductSkillStaticRow({
   item,
-  categoryLabel,
   selectedId,
   onSelect
 }: {
   item: SkillListItem;
-  categoryLabel?: string;
   selectedId: string | null;
   onSelect: AiosModuleProps["onSelect"];
 }): ReactElement {
-  const resource = mapSkillListItemToResource(item);
   return (
     <ProductSkillRow
       item={item}
-      categoryLabel={categoryLabel}
       selectedId={selectedId}
       onSelect={(selectedResource, context) => onSelect(selectedResource, { ...context, skillListItem: item })}
     />
@@ -692,13 +823,13 @@ function getActiveGroupTitle(groups: ProductSkillGroup[], capability: SkillCapab
   return groups.find((group) => group.key === capability)?.title ?? "技能库";
 }
 
-function getActiveGroupSummary(groups: ProductSkillGroup[]): string {
+function getActiveGroupSummary(groups: ProductSkillGroup[], capability: SkillCapabilityFilter): string {
   if (groups.length === 0) return "当前筛选条件下没有可显示的技能。";
-  if (groups.length === 1) return groups[0]?.summary ?? "";
+  if (capability !== "all") return groups[0]?.summary ?? "";
   return `按能力分类显示 ${groups.length} 个分组。`;
 }
 
-function groupSkillRowsByCapability(
+function groupSkillLibraryItemsByCapability(
   rows: SkillIdentityRow[],
   skillCapabilityById: ReadonlyMap<string, { primaryCategory: { key: SkillCapabilityCategoryKey } }>
 ): SkillGroup[] {
@@ -708,26 +839,6 @@ function groupSkillRowsByCapability(
     const categoryKey = skillCapabilityById.get(row.primaryResource.id)?.primaryCategory.key ?? "unknown";
     const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("unknown");
     categoryRows?.push(row);
-  }
-
-  return SKILL_CAPABILITY_CATEGORIES.map((category) => ({
-    key: category.key,
-    title: category.title,
-    summary: category.summary,
-    rows: rowsByCategory.get(category.key) ?? []
-  })).filter((group) => group.rows.length > 0);
-}
-
-function groupSkillLibraryItemsByCapability(
-  items: SkillListItem[],
-  capabilityById: ReadonlyMap<string, { primaryCategory: { key: SkillCapabilityCategoryKey } }>
-): ProductSkillGroup[] {
-  const rowsByCategory = new Map<SkillCapabilityCategoryKey, SkillListItem[]>(SKILL_CAPABILITY_CATEGORIES.map((category) => [category.key, []]));
-
-  for (const item of items) {
-    const categoryKey = capabilityById.get(item.id)?.primaryCategory.key ?? "unknown";
-    const categoryRows = rowsByCategory.get(categoryKey) ?? rowsByCategory.get("unknown");
-    categoryRows?.push(item);
   }
 
   return SKILL_CAPABILITY_CATEGORIES.map((category) => ({

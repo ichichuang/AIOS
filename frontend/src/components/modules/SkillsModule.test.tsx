@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { fileURLToPath } from "node:url";
 import { fallbackResourceCorpusSummary, globalCorpusScope } from "../../lib/resourceCorpus";
 import type { SkillListItem, SkillLibraryModuleState, SkillLibrarySummary } from "../../lib/skillLibrary";
 import type { AiosModuleProps } from "./moduleUtils";
@@ -279,7 +281,7 @@ function assertNotContains(html: string, unexpected: string, message: string) {
 {
   const html = renderSkills(buildProps());
   assertContains(html, "技能", "Page must render the Skills title");
-  assertContains(html, "按任务和能力浏览已整理的 AI 技能。", "Page must explain the product purpose in plain language");
+  assertContains(html, "按任务和能力浏览已整理的 AI 技能，快速找到适合当前工作的技能。", "Page must explain the product purpose in plain language");
   assertContains(html, "还没有找到 AI 技能", "Empty state must use the honest no-skills title");
   assertContains(html, "开始查找后，这里会显示技能名称、用途和能力分类。", "Empty state must explain how skills will appear");
   assertNotContains(html, "scanner", "Empty state must not use scanner terminology");
@@ -358,7 +360,7 @@ function assertNotContains(html: string, unexpected: string, message: string) {
 
   const projectScopeHtml = renderSkills(buildProps({ skillLibrary, initialScope: "project" }));
   assertContains(projectScopeHtml, "全部项目", "Project selector must render in Project scope");
-  assertContains(projectScopeHtml, "项目", "Project selector must expose the project label");
+  assertContains(projectScopeHtml, "Alpha 项目", "Project selector must expose the project label");
   assertNotContains(projectScopeHtml, "proj-a", "Project selector must not expose the stable project ID as visible text");
 }
 
@@ -450,12 +452,45 @@ function assertNotContains(html: string, unexpected: string, message: string) {
   assertNotContains(html, "暂无已登记项目", "Project selector must not show the unavailable placeholder when projects exist");
 }
 
-// 12. Tabs are keyboard-accessible via role="tab".
+// 12. Scope tabs and capability controls are keyboard accessible.
 {
   const items = [buildSkill({ id: "kb", displayName: "键盘技能", capabilities: ["api"], scopeSummary: globalScopeSummary() })];
   const skillLibrary: SkillLibraryModuleState = { ...emptySkillLibrary, items };
   const html = renderSkills(buildProps({ skillLibrary }));
   assertContains(html, 'role="tab"', "Scope or capability controls must expose tab role for keyboard access");
+  assertContains(html, 'role="tablist"', "Scope or capability controls must expose tablist role for keyboard access");
 }
 
-console.log("SkillsModule P6C tests passed");
+// 13. Scope precedes capability and secondary filters in the rendered order.
+{
+  const items = [
+    buildSkill({ id: "scope-order-a", displayName: "范围排序技能 A", capabilities: ["api"], scopeSummary: globalScopeSummary(), sourceLabel: "Codex" }),
+    buildSkill({ id: "scope-order-b", displayName: "范围排序技能 B", capabilities: ["api"], scopeSummary: globalScopeSummary(), sourceLabel: "Claude" })
+  ];
+  const skillLibrary: SkillLibraryModuleState = { ...emptySkillLibrary, items };
+  const html = renderSkills(buildProps({ skillLibrary, initialShowMoreFilters: true }));
+  const scopeIndex = html.indexOf("全部技能");
+  const capabilityIndex = html.indexOf("全部能力");
+  const sourceFilterIndex = html.indexOf("来源筛选");
+  assert(scopeIndex >= 0 && capabilityIndex > scopeIndex, "Capability navigation must appear after scope tabs");
+  assert(scopeIndex >= 0 && sourceFilterIndex > scopeIndex, "Source filters must appear after scope tabs");
+}
+
+// 14. Selection clears when scope, project, or capability changes.
+{
+  const skillsModuleSource = readFileSync(fileURLToPath(new URL("./SkillsModule.tsx", import.meta.url)), "utf8");
+  assert(skillsModuleSource.includes("setScope(nextScope)"), "Scope change handler must update scope state");
+  assert(skillsModuleSource.includes("handleProjectChange"), "Project change handler must exist");
+  assert(skillsModuleSource.includes("handleCapabilityChange"), "Capability change handler must exist");
+  assert(skillsModuleSource.includes("onClearSelection()"), "Changing a primary browsing dimension must clear the current selection");
+}
+
+// 15. Result list owns its own scroll region.
+{
+  const items = [buildSkill({ id: "scroll-1", displayName: "滚动技能", capabilities: ["api"], scopeSummary: globalScopeSummary() })];
+  const skillLibrary: SkillLibraryModuleState = { ...emptySkillLibrary, items };
+  const html = renderSkills(buildProps({ skillLibrary }));
+  assertContains(html, 'data-aios-internal-scroll="true"', "Result area must declare internal scroll ownership");
+}
+
+console.log("SkillsModule P6D tests passed");
